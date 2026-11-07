@@ -20,5 +20,7 @@ export const MAINTENANCE_JOBS = {
   runNotifications: 'run-notifications',
   generateBillOccurrences: 'generate-bill-occurrences',
   extendBookingSeries: 'extend-booking-series',
+  /** Expurga conteúdo de mensagens e mídias mais antigas que organizations.retention_days. */
+  applyRetention: 'apply-retention',
 } as const;
 export type MaintenanceJobName = (typeof MAINTENANCE_JOBS)[keyof typeof MAINTENANCE_JOBS];

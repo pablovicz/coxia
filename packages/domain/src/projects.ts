@@ -599,6 +599,8 @@ export class ProjectService {
 
   async updateTask(organizationId: string, projectId: string, taskId: string, patch: TaskPatch, actor: Actor, tx?: Tx) {
     const run = async (t: Tx) => {
+      // Trava a linha: duas revisões simultâneas não passam ambas pela checagem de transição.
+      await t.$queryRaw`SELECT id FROM project_tasks WHERE id = ${taskId} FOR UPDATE`;
       const task = await t.projectTask.findFirst({ where: { id: taskId, projectId, organizationId } });
       if (!task) throw new DomainError('not_found', 'Tarefa não encontrada');
       if (patch.status && patch.status !== task.status && !TASK_TRANSITIONS[task.status].includes(patch.status)) {
@@ -634,6 +636,7 @@ export class ProjectService {
    */
   async reviewExpense(organizationId: string, projectId: string, expenseId: string, action: ExpenseAction, actor: Actor, now = new Date()) {
     return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM project_expenses WHERE id = ${expenseId} FOR UPDATE`;
       const e = await tx.projectExpense.findFirst({ where: { id: expenseId, projectId, organizationId } });
       if (!e) throw new DomainError('not_found', 'Lançamento não encontrado');
       const allowed: Record<ExpenseAction, ProjectExpenseStatus[]> = {
@@ -663,6 +666,7 @@ export class ProjectService {
   /** Revisão de sugestões sem entidade própria: decisão, pergunta, "terminei a tarefa". */
   async reviewEvent(organizationId: string, projectId: string, eventId: string, decision: 'confirm' | 'reject', actor: Actor) {
     return this.db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM project_events WHERE id = ${eventId} FOR UPDATE`;
       const ev = await tx.projectEvent.findFirst({ where: { id: eventId, projectId, organizationId }, include: { task: true, expense: true } });
       if (!ev) throw new DomainError('not_found', 'Sugestão não encontrada');
       if (ev.reviewStatus !== 'pending_review') throw new DomainError('validation', 'Esta sugestão já foi revisada');
@@ -711,6 +715,8 @@ export class ProjectService {
   async close(organizationId: string, projectId: string, actor: Actor, now = new Date()) {
     const org = await getOrganization(this.db, organizationId);
     return this.db.$transaction(async (tx) => {
+      // Encerrar pelo painel e pelo "SIM" ao mesmo tempo: só um gera o relatório.
+      await tx.$queryRaw`SELECT id FROM projects WHERE id = ${projectId} FOR UPDATE`;
       const p = await this.getProject(organizationId, projectId, tx);
       if (p.status === 'closed') throw new DomainError('validation', 'Este projeto já está encerrado');
       await tx.project.update({ where: { id: projectId }, data: { status: 'closed', closedAt: now, closedByPhone: actor.phone ?? null } });

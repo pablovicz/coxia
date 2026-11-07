@@ -20,6 +20,7 @@ export class MaintenanceScheduler implements OnApplicationBootstrap {
       [MAINTENANCE_JOBS.runNotifications, 60_000],
       [MAINTENANCE_JOBS.generateBillOccurrences, 6 * 60 * 60_000],
       [MAINTENANCE_JOBS.extendBookingSeries, 24 * 60 * 60_000],
+      [MAINTENANCE_JOBS.applyRetention, 24 * 60 * 60_000],
     ];
     for (const [name, every] of schedules) {
       await this.queue.upsertJobScheduler(name, { every }, { name, opts: { removeOnComplete: 100, removeOnFail: 500 } });
@@ -50,6 +51,8 @@ export class MaintenanceProcessor extends WorkerHost {
         return this.maintenance.generateBillOccurrences();
       case MAINTENANCE_JOBS.extendBookingSeries:
         return this.maintenance.extendBookingSeries();
+      case MAINTENANCE_JOBS.applyRetention:
+        return this.maintenance.applyRetention();
       default:
         throw new Error(`job de manutenção desconhecido: ${job.name}`);
     }

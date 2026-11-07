@@ -311,6 +311,8 @@ model Message {
   processingError   String?                 @map("processing_error")
   processedAt       DateTime?               @map("processed_at") @db.Timestamptz(6)
   traceId           String?                 @map("trace_id")
+  /// Conteúdo (texto, payload, mídia) expurgado pela rotina de retenção; a linha fica para dedupe e evidência.
+  redactedAt        DateTime?               @map("redacted_at") @db.Timestamptz(6)
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -725,7 +727,8 @@ model PaymentAttachment {
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   billOccurrence BillOccurrence @relation(fields: [billOccurrenceId], references: [id], onDelete: Cascade)
 
-  @@unique([billOccurrenceId, sha256])
+  /// O mesmo comprovante não quita duas contas (garantido pelo banco, também sob concorrência).
+  @@unique([organizationId, sha256])
   @@map("payment_attachments")
 }
 

@@ -12,6 +12,8 @@ export async function createApp(env: ApiEnv): Promise<NestExpressApplication> {
     rawBody: false,
   });
   app.useLogger(app.get(Logger));
+  // Atrás do proxy do Railway: req.ip é o cliente (limite de login por IP), não o proxy.
+  app.set('trust proxy', 1);
   app.use(helmet());
   app.useBodyParser('json', { limit: '1mb' });
   app.enableCors({

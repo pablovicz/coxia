@@ -36,6 +36,10 @@
       "@swc/core",
       "esbuild",
       "@nestjs/core"
-    ]
+    ],
+    "overrides": {
+      "multer@>=2.0.0 <2.5.0": "^2.5.0",
+      "effect@<3.20.0": "^3.20.0"
+    }
   }
 }

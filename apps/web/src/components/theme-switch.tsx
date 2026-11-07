@@ -22,7 +22,7 @@ export function ThemeSwitch({ className }: { className?: string }) {
           title={label}
           onClick={() => setPreference(value)}
           className={cn(
-            'grid size-9 place-items-center rounded-sm text-muted-foreground transition-colors',
+            'grid size-11 place-items-center rounded-sm text-muted-foreground transition-colors lg:size-9',
             preference === value && 'bg-muted text-foreground',
           )}
         >

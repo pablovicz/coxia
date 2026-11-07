@@ -6,8 +6,8 @@ import {
   formatShortDate,
   formatTimeRange,
   localDateOf,
-  stableHash,
 } from '@coxia/shared';
+import { trackAi } from './ai-tracking';
 import { BillingService, resolveBillHint } from './bills';
 import { BookingService, type Conflict } from './bookings';
 import { composeMorningBriefing, loadBriefingState } from './briefing';
@@ -83,18 +83,22 @@ export class CommandService {
       this.db.space.findMany({ where: { organizationId: org.id, active: true }, orderBy: { sortOrder: 'asc' } }),
       this.db.recurringBill.findMany({ where: { organizationId: org.id, active: true } }),
     ]);
-    const res = await this.interpreter.interpret(
-      {
-        organizationId: org.id,
-        timezone: org.timezone,
-        now: now.toISOString(),
-        text,
-        knownSpaces: spaces.map((s) => ({ id: s.id, name: s.name, aliases: s.aliases })),
-        knownBills: bills.map((b) => ({ id: b.id, name: b.name })),
-      },
-      `interpret:${ctx.messageId}`,
+    const { res } = await trackAi(
+      this.db,
+      { organizationId: org.id, operation: 'interpret_command', sourceMessageId: ctx.messageId, request: { text } },
+      () =>
+        this.interpreter.interpret(
+          {
+            organizationId: org.id,
+            timezone: org.timezone,
+            now: now.toISOString(),
+            text,
+            knownSpaces: spaces.map((s) => ({ id: s.id, name: s.name, aliases: s.aliases })),
+            knownBills: bills.map((b) => ({ id: b.id, name: b.name })),
+          },
+          `interpret:${ctx.messageId}`,
+        ),
     );
-    await this.recordAi(org.id, ctx.messageId, res, text);
 
     if (res.clarificationQuestion) return { reply: res.clarificationQuestion, action: 'clarify' };
     if (res.confidence < MIN_CONFIDENCE) return { reply: `Não tenho certeza do que você pediu. ${HELP}`, action: 'low_confidence' };
@@ -286,23 +290,6 @@ export class CommandService {
     }
   }
 
-  private async recordAi(organizationId: string, messageId: string, res: InterpretCommandResponse, text: string) {
-    await this.db.aiExecution.create({
-      data: {
-        organizationId,
-        operation: 'interpret_command',
-        status: 'succeeded',
-        model: res.meta.model,
-        promptVersion: res.meta.promptVersion,
-        parserVersion: res.meta.parserVersion,
-        inputTokens: res.meta.inputTokens,
-        outputTokens: res.meta.outputTokens,
-        latencyMs: res.meta.latencyMs,
-        requestHash: stableHash({ text }),
-        sourceMessageId: messageId,
-      },
-    });
-  }
 }
 
 function askWhichSpace(candidates: Array<{ name: string }>): string {

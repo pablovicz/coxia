@@ -1,4 +1,5 @@
 import type { BillOccurrenceStatus, Prisma } from '@coxia/database';
+import { isUniqueViolation } from '@coxia/database';
 import { competenceKey, dueDateForCompetence, type IsoDate, localDateOf, normalizeText, zonedToUtc } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError, fromIsoDate, getOrganization, toIsoDate } from './common';
 
@@ -259,10 +260,37 @@ export class BillingService {
    * Registra pagamento (total, parcial ou antecipado).
    * - Comprovante já usado (mesmo sha256) é rejeitado.
    * - Ocorrência já paga não aceita novo pagamento.
+   * - Concorrência: a linha da ocorrência é travada (FOR UPDATE) e tudo é lido e validado dentro
+   *   da transação. Sem isso, pagamentos simultâneos liam o mesmo "já pago" e um sobrescrevia o
+   *   outro (golden de concorrência da Etapa 4). O comprovante é único por organização no banco.
    */
   async registerPayment(organizationId: string, occurrenceId: string, input: PaymentInput, actor: Actor, now = new Date()) {
     const org = await getOrganization(this.db, organizationId);
-    const occ = await this.db.billOccurrence.findFirst({ where: { id: occurrenceId, organizationId }, include: occurrenceInclude });
+    try {
+      return await this.db.$transaction((tx) => this.registerPaymentLocked(tx, org.timezone, organizationId, occurrenceId, input, actor, now), {
+        maxWait: 10_000,
+        timeout: 15_000,
+      });
+    } catch (err) {
+      // Corrida entre dois envios do mesmo comprovante: o segundo perde no unique (organização, sha256).
+      if (input.proof?.sha256 && isUniqueViolation(err)) {
+        throw new DomainError('conflict', 'Este comprovante já foi registrado', { code: 'duplicate_receipt' });
+      }
+      throw err;
+    }
+  }
+
+  private async registerPaymentLocked(
+    tx: Prisma.TransactionClient,
+    timezone: string,
+    organizationId: string,
+    occurrenceId: string,
+    input: PaymentInput,
+    actor: Actor,
+    now: Date,
+  ) {
+    await tx.$queryRaw`SELECT id FROM bill_occurrences WHERE id = ${occurrenceId} AND organization_id = ${organizationId} FOR UPDATE`;
+    const occ = await tx.billOccurrence.findFirst({ where: { id: occurrenceId, organizationId }, include: occurrenceInclude });
     if (!occ) throw new DomainError('not_found', 'Conta não encontrada');
     if (occ.status === 'cancelled') throw new DomainError('validation', 'Esta conta está cancelada');
     if (occ.status === 'paid') {
@@ -275,7 +303,7 @@ export class BillingService {
     if (!Number.isInteger(amount) || amount <= 0) throw new DomainError('validation', 'Valor pago inválido');
 
     if (input.proof?.sha256) {
-      const dup = await this.db.paymentAttachment.findFirst({
+      const dup = await tx.paymentAttachment.findFirst({
         where: { organizationId, sha256: input.proof.sha256 },
         include: { billOccurrence: { include: { recurringBill: true } } },
       });
@@ -292,39 +320,37 @@ export class BillingService {
     const expected = occ.expectedAmountCents ?? amount;
     const paid = occ.paidAmountCents + amount;
     const status = statusAfterPayment(expected, paid);
-    const paidOn = input.paidOn ?? localDateOf(now, org.timezone);
+    const paidOn = input.paidOn ?? localDateOf(now, timezone);
 
-    return this.db.$transaction(async (tx) => {
-      await tx.paymentAttachment.create({
-        data: {
-          organizationId,
-          billOccurrenceId: occ.id,
-          amountCents: amount,
-          paidOn: fromIsoDate(paidOn),
-          sha256: input.proof?.sha256 ?? null,
-          storageKey: input.proof?.storageKey ?? null,
-          messageAttachmentId: input.proof?.messageAttachmentId ?? null,
-        },
-      });
-      const updated = await tx.billOccurrence.update({
-        where: { id: occ.id },
-        data: {
-          expectedAmountCents: expected,
-          paidAmountCents: paid,
-          status,
-          paidAt: status === 'paid' ? zonedToUtc(paidOn, '12:00', org.timezone) : occ.paidAt,
-          confirmedByPhone: actor.phone ?? occ.confirmedByPhone,
-          sourceMessageId: actor.sourceMessageId ?? occ.sourceMessageId,
-          notes: input.notes ?? occ.notes,
-        },
-        include: occurrenceInclude,
-      });
-      await audit(tx, organizationId, actor, 'bill.payment', 'bill_occurrence', occ.id, {
-        before: { status: occ.status, paidAmountCents: occ.paidAmountCents },
-        after: { status, paidAmountCents: paid, amountCents: amount, paidOn },
-      });
-      return { occurrence: updated, amountCents: amount, remainingCents: Math.max(expected - paid, 0) };
+    await tx.paymentAttachment.create({
+      data: {
+        organizationId,
+        billOccurrenceId: occ.id,
+        amountCents: amount,
+        paidOn: fromIsoDate(paidOn),
+        sha256: input.proof?.sha256 ?? null,
+        storageKey: input.proof?.storageKey ?? null,
+        messageAttachmentId: input.proof?.messageAttachmentId ?? null,
+      },
     });
+    const updated = await tx.billOccurrence.update({
+      where: { id: occ.id },
+      data: {
+        expectedAmountCents: expected,
+        paidAmountCents: paid,
+        status,
+        paidAt: status === 'paid' ? zonedToUtc(paidOn, '12:00', timezone) : occ.paidAt,
+        confirmedByPhone: actor.phone ?? occ.confirmedByPhone,
+        sourceMessageId: actor.sourceMessageId ?? occ.sourceMessageId,
+        notes: input.notes ?? occ.notes,
+      },
+      include: occurrenceInclude,
+    });
+    await audit(tx, organizationId, actor, 'bill.payment', 'bill_occurrence', occ.id, {
+      before: { status: occ.status, paidAmountCents: occ.paidAmountCents },
+      after: { status, paidAmountCents: paid, amountCents: amount, paidOn },
+    });
+    return { occurrence: updated, amountCents: amount, remainingCents: Math.max(expected - paid, 0) };
   }
 
   /** "energia", "conta de luz", "aluguel" → conta. */

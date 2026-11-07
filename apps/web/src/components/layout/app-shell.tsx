@@ -85,7 +85,19 @@ export function AppShell() {
       <div className="flex min-h-dvh min-w-0 flex-col">
         <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/90 px-4 py-3 backdrop-blur lg:hidden">
           <Brand />
-          <ThemeSwitch />
+          <div className="flex items-center gap-2">
+            <ThemeSwitch />
+            {/* No celular, Configurações (e "Sair") ficam fora da navegação inferior: atalho aqui. */}
+            <NavLink
+              to="/configuracoes"
+              aria-label="Configurações"
+              className={({ isActive }) =>
+                cn('grid size-11 place-items-center rounded-md text-muted-foreground hover:bg-muted', isActive && 'bg-muted text-primary')
+              }
+            >
+              <Settings size={20} strokeWidth={1.75} aria-hidden />
+            </NavLink>
+          </div>
         </header>
         <main className="mx-auto w-full max-w-[1320px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
           <Outlet />

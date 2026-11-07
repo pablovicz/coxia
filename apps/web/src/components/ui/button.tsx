@@ -17,7 +17,8 @@ export const buttonVariants = cva(
       },
       size: {
         default: '',
-        sm: 'min-h-9 px-3 text-[13px]',
+        // 44px no celular (alvo de toque), compacto a partir do desktop.
+        sm: 'min-h-11 px-3 text-[13px] lg:min-h-9',
         icon: 'size-11 px-0',
       },
     },

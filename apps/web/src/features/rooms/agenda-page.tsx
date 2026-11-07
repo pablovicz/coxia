@@ -88,7 +88,7 @@ export function AgendaPage() {
               role="radio"
               aria-checked={room === s.id}
               onClick={() => setRoom(s.id)}
-              className={cn('min-h-9 whitespace-nowrap rounded-sm px-3 text-sm font-medium text-muted-foreground', room === s.id && 'bg-muted text-foreground')}
+              className={cn('min-h-11 whitespace-nowrap rounded-sm px-3 text-sm font-medium text-muted-foreground lg:min-h-9', room === s.id && 'bg-muted text-foreground')}
             >
               {s.name}
             </button>

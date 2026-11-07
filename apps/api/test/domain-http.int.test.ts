@@ -231,3 +231,75 @@ describe('projetos', () => {
     await http().get(`/projects/${randomUUID()}`).set(as('viewer')).expect(404);
   });
 });
+
+describe('segurança (Etapa 4)', () => {
+  it('papel e vínculo vêm do banco: rebaixar ou remover vale na hora, sem esperar o token expirar', async () => {
+    const staffMember = await prisma.organizationMember.findFirstOrThrow({ where: { organizationId: orgId, role: 'staff' } });
+    await prisma.organizationMember.update({ where: { id: staffMember.id }, data: { role: 'viewer' } });
+    await http().post('/bookings').set(as('staff')).send({ spaceId, startAt: `${year}-03-06T08:00:00-03:00`, endAt: `${year}-03-06T09:00:00-03:00` }).expect(403);
+    await prisma.organizationMember.update({ where: { id: staffMember.id }, data: { role: 'staff' } });
+
+    const email = `temp-${randomUUID()}@coxia.test`;
+    emails.push(email);
+    const u = await prisma.user.create({ data: { email, name: 'Temporária', passwordHash: await bcrypt.hash('senha-forte-123', 4) } });
+    const m = await prisma.organizationMember.create({ data: { organizationId: orgId, userId: u.id, role: 'admin' } });
+    const token = (await http().post('/auth/login').send({ email, password: 'senha-forte-123' }).expect(200)).body.accessToken as string;
+    await http().get('/auth/me').set({ authorization: `Bearer ${token}` }).expect(200);
+    await prisma.organizationMember.delete({ where: { id: m.id } });
+    await http().get('/auth/me').set({ authorization: `Bearer ${token}` }).expect(401);
+  });
+
+  it('login: a 6ª tentativa errada seguida é bloqueada com 429, mesmo com a senha certa', async () => {
+    const email = emails[2]!; // viewer
+    for (let i = 0; i < 5; i++) await http().post('/auth/login').send({ email, password: `errada-${i}` }).expect(401);
+    const blocked = await http().post('/auth/login').send({ email, password: 'senha-forte-123' }).expect(429);
+    expect(blocked.body.retryAfterSeconds).toBeGreaterThan(0);
+  });
+});
+
+describe('operação (Etapa 4)', () => {
+  it('visão de saúde só para administração; reprocessa mensagem com falha e entrega do dead-letter', async () => {
+    await http().get('/ops/overview').set(as('staff')).expect(403);
+    const instance = await prisma.whatsappInstance.create({
+      data: { organizationId: orgId, provider: 'fake', externalInstanceId: randomUUID(), connected: false, lastCheckedAt: new Date(), lastError: 'sessão expirada' },
+    });
+    const conv = await prisma.conversation.create({ data: { organizationId: orgId, instanceId: instance.id, externalChatId: `5511${Date.now()}`, isGroup: false } });
+    const failed = await prisma.message.create({
+      data: {
+        organizationId: orgId,
+        conversationId: conv.id,
+        direction: 'inbound',
+        provider: 'fake',
+        dedupeKey: `ops:${randomUUID()}`,
+        kind: 'text',
+        text: 'oi',
+        sentAt: new Date(),
+        processingStatus: 'failed',
+        processingError: 'IA indisponível',
+      },
+    });
+    const dead = await prisma.notificationDelivery.create({
+      data: { organizationId: orgId, recipient: '5511900000000', text: 'aviso', idempotencyKey: `ops:${randomUUID()}`, status: 'dead', attempts: 5, lastError: 'HTTP 400' },
+    });
+    await prisma.aiExecution.create({ data: { organizationId: orgId, operation: 'interpret_command', status: 'failed', requestHash: 'h', error: 'network: timeout' } });
+
+    const overview = await http().get('/ops/overview').set(as('owner')).expect(200);
+    expect(overview.body.whatsapp).toEqual([expect.objectContaining({ provider: 'fake', connected: false, lastError: 'sessão expirada' })]);
+    expect(overview.body.inbound.last24h.failed).toBe(1);
+    expect(overview.body.outbox.byStatus.dead).toBe(1);
+    expect(overview.body.ai).toEqual([expect.objectContaining({ operation: 'interpret_command', calls: 1, failures: 1 })]);
+
+    const list = await http().get('/ops/messages/failed').set(as('owner')).expect(200);
+    expect(list.body.map((m: { id: string }) => m.id)).toEqual([failed.id]);
+    await http().post(`/ops/messages/${failed.id}/retry`).set(as('owner')).expect(202);
+    // Voltou ao fluxo (um worker rodando pode já tê-la pego).
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: failed.id } })).processingStatus).not.toBe('failed');
+    await http().post(`/ops/messages/${failed.id}/retry`).set(as('owner')).expect(422);
+
+    await http().post(`/ops/deliveries/${dead.id}/retry`).set(as('owner')).expect(202);
+    const back = await prisma.notificationDelivery.findUniqueOrThrow({ where: { id: dead.id } });
+    expect([back.status, back.attempts, back.lastError]).toEqual(['pending', 0, null]);
+    await http().post(`/ops/deliveries/${dead.id}/retry`).set(as('owner')).expect(404);
+    expect(await prisma.auditEvent.count({ where: { organizationId: orgId, action: { in: ['ops.message_retry', 'ops.delivery_retry'] } } })).toBe(2);
+  });
+});

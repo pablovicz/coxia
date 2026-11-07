@@ -3,10 +3,10 @@ import { AppShell } from '@/components/layout/app-shell';
 import { Skeleton } from '@/components/ui/input';
 import { LoginPage } from '@/features/auth/login-page';
 import { HomePage } from '@/features/dashboard/home-page';
-import { SettingsPage } from '@/features/placeholder-pages';
 import { ProjectDetailPage } from '@/features/projects/project-detail-page';
 import { ProjectsPage } from '@/features/projects/projects-page';
 import { BillsPage } from '@/features/reminders/bills-page';
+import { SettingsPage } from '@/features/settings/settings-page';
 import { AgendaPage } from '@/features/rooms/agenda-page';
 import { useAuth } from '@/providers/auth-provider';
 

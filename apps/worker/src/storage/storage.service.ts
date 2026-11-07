@@ -1,4 +1,4 @@
-import { GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Inject, Injectable } from '@nestjs/common';
 import { WORKER_ENV, type WorkerEnv } from '../env';
@@ -28,6 +28,11 @@ export class StorageService {
     await this.s3.send(
       new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType ?? 'application/octet-stream' }),
     );
+  }
+
+  /** Remove o objeto (rotina de retenção). Apagar algo que não existe não é erro no S3. */
+  async delete(key: string): Promise<void> {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   signedGetUrl(key: string, ttlSeconds = this.ttl): Promise<string> {

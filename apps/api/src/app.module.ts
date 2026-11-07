@@ -11,6 +11,7 @@ import { redactUrl, REDACTED_PATHS } from './common/log-redaction';
 import { API_ENV, type ApiEnv } from './config/env';
 import { HealthModule } from './health/health.controller';
 import { IdempotencyInterceptor } from './idempotency/idempotency';
+import { OpsModule } from './ops/ops.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PrismaModule } from './prisma/prisma.service';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
@@ -56,6 +57,7 @@ export class AppModule {
         OrganizationModule,
         DomainModule,
         DomainHttpModule,
+        OpsModule,
       ],
       providers: [{ provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor }],
     };

@@ -5,7 +5,23 @@
 
 Planejamento completo em [docs/PLANO_MVP.md](docs/PLANO_MVP.md) · identidade visual em [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 
-## Estado atual — Etapas 1, 2 e 3
+## Estado atual — Etapas 1 a 4
+
+O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [docs/PILOTO.md](docs/PILOTO.md).
+
+### Etapa 4 — estabilização
+
+| Entregue | Onde |
+|---|---|
+| Testes de concorrência com Postgres real; corrigidos: pagamentos simultâneos que se sobrescreviam, conta quitada várias vezes, mesmo comprovante em duas contas, revisões/encerramento duplicados | `packages/domain/test/concurrency.int.test.ts` |
+| Outbox pausa com o WhatsApp desconectado (sem gastar tentativas) e retoma sozinho; quedas e retornos auditados | `apps/worker/src/maintenance` |
+| Toda chamada à IA registrada (sucesso e falha, tokens, latência); mensagens presas em `processing` voltam à fila | `packages/domain/src/ai-tracking.ts` |
+| Tela de operação (admin): conexão, filas, atraso, envios, IA por operação, reprocessar falhas e dead-letter | `apps/api/src/ops`, `apps/web/src/features/settings` |
+| Retenção diária: apaga texto, payload, transcrição e mídia antigos; guarda comprovantes | `MaintenanceService.applyRetention` |
+| Segurança: papel conferido no banco a cada requisição (revogação imediata), limite de tentativas de login, overrides de dependências vulneráveis | `apps/api/src/auth` |
+| Celular: alvos de toque ≥ 44px verificados por teste, acesso a Configurações/Sair no cabeçalho | `apps/web` |
+
+Auditoria de dependências: `pnpm audit --prod` deixa um alerta aceito, `deepmerge-ts` (só no CLI do Prisma, que lê a configuração do próprio projeto; a correção é uma versão major incompatível). `pip-audit` do serviço de IA: sem alertas.
 
 ### Etapa 3 — projetos com IA (grupo do WhatsApp = workspace)
 
@@ -50,7 +66,7 @@ Política anti-spam: quem recebe o briefing matinal vê nele as contas e reserva
 | Docker Compose (dev com hot reload) e compose de teste isolado | `docker-compose*.yml` |
 | Railway IaC e CI | `.railway/railway.ts`, `.github/workflows/ci.yml` |
 
-**Ainda não implementado:** estabilização (Etapa 4), incluindo a rotina que aplica a retenção de mensagens e anexos (`organizations.retention_days`, já informada no aviso do grupo). Comandos e projetos usam a IA real só com `AI_PROVIDER=openai`; com `fixture` (padrão local) as respostas vêm de `tests/fixtures/ai`. A **Etapa 0** (validação com instância Z-API real) continua pendente: as fixtures em `tests/fixtures/zapi` foram montadas a partir da documentação e estão marcadas em `manifest.json` para substituição por payloads reais.
+Comandos e projetos usam a IA real só com `AI_PROVIDER=openai`; com `fixture` (padrão local) as respostas vêm de `tests/fixtures/ai`. A **Etapa 0** (validação com instância Z-API real) continua pendente: as fixtures em `tests/fixtures/zapi` foram montadas a partir da documentação e estão marcadas em `manifest.json` para substituição por payloads reais.
 
 ## Arquitetura
 

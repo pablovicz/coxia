@@ -27,20 +27,20 @@ export function MetricCard({
   value,
   caption,
   highlight,
-  money,
+  compact,
 }: {
   title: string;
   value: string;
   caption: string;
   highlight?: boolean;
-  /** Valor em reais: fonte menor no celular para "R$ 8.000,00" não quebrar em duas linhas. */
-  money?: boolean;
+  /** Valor longo ("R$ 8.000,00", "Desconectado"): fonte menor no celular para não quebrar nem vazar. */
+  compact?: boolean;
 }) {
   return (
     <Card className={cn('p-5', highlight && 'border-transparent bg-primary text-primary-foreground')}>
       <p className={cn('text-sm font-medium', highlight ? 'opacity-85' : 'text-muted-foreground')}>{title}</p>
       {/* leading-none por último: o tailwind-merge descarta o leading que vem antes de um tamanho de fonte. */}
-      <p className={cn('tabular mt-2 font-semibold tracking-tight', money ? 'whitespace-nowrap text-xl sm:text-[32px]' : 'text-[32px]', 'leading-none')}>{value}</p>
+      <p className={cn('tabular mt-2 font-semibold tracking-tight', compact ? 'whitespace-nowrap text-xl sm:text-[32px]' : 'text-[32px]', 'leading-none')}>{value}</p>
       <p className={cn('mt-2 text-[13px]', highlight ? 'opacity-85' : 'text-muted-foreground')}>{caption}</p>
     </Card>
   );

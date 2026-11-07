@@ -10,6 +10,7 @@ import type {
 import type { Prisma } from '@coxia/database';
 import { isUniqueViolation } from '@coxia/database';
 import { formatBRL, normalizeText, stableHash } from '@coxia/shared';
+import { trackAi } from './ai-tracking';
 import { type Actor, audit, type Db, DomainError, getOrganization, type Tx } from './common';
 import {
   composeBriefingConfirmation,
@@ -167,11 +168,15 @@ export class ProjectWorkspaceService {
   ): Promise<string | null> {
     if (!transcript.trim()) return null;
     const org = await getOrganization(this.db, ctx.organizationId);
-    const res = await this.ai.extractBriefing(
-      { organizationId: ctx.organizationId, projectId: project.id, timezone: org.timezone, now: now.toISOString(), transcript, sourceMessageId: ctx.messageId },
-      `briefing:${ctx.messageId}`,
+    const { res, executionId: exec } = await trackAi(
+      this.db,
+      { organizationId: ctx.organizationId, operation: 'extract_briefing', sourceMessageId: ctx.messageId, request: { transcript } },
+      () =>
+        this.ai.extractBriefing(
+          { organizationId: ctx.organizationId, projectId: project.id, timezone: org.timezone, now: now.toISOString(), transcript, sourceMessageId: ctx.messageId },
+          `briefing:${ctx.messageId}`,
+        ),
     );
-    const exec = await recordAiExecution(this.db, ctx.organizationId, 'extract_briefing', res.meta, { transcript }, ctx.messageId);
     const b = res.briefing;
     try {
       await this.db.$transaction(async (tx) => {
@@ -256,19 +261,23 @@ export class ProjectWorkspaceService {
       },
     ];
 
-    const res = await this.ai.extractProjectEvents(
-      {
-        organizationId: ctx.organizationId,
-        projectId,
-        projectTitle: title,
-        timezone: org.timezone,
-        now: now.toISOString(),
-        projectStateSummary: projectStateText(state),
-        messages,
-      },
-      `events:${ctx.messageId}`,
+    const { res, executionId: exec } = await trackAi(
+      this.db,
+      { organizationId: ctx.organizationId, operation: 'extract_project_events', sourceMessageId: ctx.messageId, request: { messages: messages.map((m) => m.id) } },
+      () =>
+        this.ai.extractProjectEvents(
+          {
+            organizationId: ctx.organizationId,
+            projectId,
+            projectTitle: title,
+            timezone: org.timezone,
+            now: now.toISOString(),
+            projectStateSummary: projectStateText(state),
+            messages,
+          },
+          `events:${ctx.messageId}`,
+        ),
     );
-    const exec = await recordAiExecution(this.db, ctx.organizationId, 'extract_project_events', res.meta, { messages: messages.map((m) => m.id) }, ctx.messageId);
 
     const replies: string[] = [];
     const actions: string[] = [];
@@ -531,31 +540,4 @@ function attachmentKind(kind: string | undefined | null): ContextMessage['attach
 
 function metaColumns(meta: AiExecutionMeta, aiExecutionId: string) {
   return { aiExecutionId, model: meta.model, promptVersion: meta.promptVersion, parserVersion: meta.parserVersion };
-}
-
-/** Registra custo e versões de cada chamada à IA (tokens, latência, prompt). */
-export async function recordAiExecution(
-  db: Db,
-  organizationId: string,
-  operation: string,
-  meta: AiExecutionMeta,
-  request: unknown,
-  sourceMessageId: string,
-): Promise<string> {
-  const exec = await db.aiExecution.create({
-    data: {
-      organizationId,
-      operation,
-      status: 'succeeded',
-      model: meta.model,
-      promptVersion: meta.promptVersion,
-      parserVersion: meta.parserVersion,
-      inputTokens: meta.inputTokens,
-      outputTokens: meta.outputTokens,
-      latencyMs: meta.latencyMs,
-      requestHash: stableHash(request),
-      sourceMessageId,
-    },
-  });
-  return exec.id;
 }

@@ -114,13 +114,13 @@ export function ProjectDetailPage() {
         <MetricCard highlight title="Tarefas abertas" value={String(openTasks.length)} caption={overdueCaption(openTasks, today)} />
         <MetricCard title="Para revisar" value={String(p.pendingReview)} caption={p.pendingReview ? 'Sugestões da Coxia' : 'Nada pendente'} />
         <MetricCard
-          money
+          compact
           title="Pago"
           value={formatBRL(p.totals.paidCents)}
           caption={p.totals.committedCents ? `+ ${formatBRL(p.totals.committedCents)} a pagar` : 'Com comprovante ou validado'}
         />
         <MetricCard
-          money
+          compact
           title="Orçamento"
           value={p.estimatedBudgetCents === null ? '—' : formatBRL(p.estimatedBudgetCents)}
           caption={p.estimatedBudgetCents ? `${Math.round((used / p.estimatedBudgetCents) * 100)}% comprometido` : 'Estimativa do briefing'}

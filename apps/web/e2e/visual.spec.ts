@@ -158,6 +158,39 @@ const PROJECT_XPO = {
   ],
   summaries: [],
 };
+const OPS = {
+  generatedAt: '2026-11-06T12:00:00Z',
+  whatsapp: [{ provider: 'zapi', connected: true, lastCheckedAt: '2026-11-06T11:58:00Z', lastConnectedAt: '2026-11-06T11:58:00Z', lastError: null }],
+  lastInboundAt: '2026-11-06T11:40:00Z',
+  inbound: { last24h: { received: 0, queued: 0, processing: 0, processed: 142, ignored: 31, failed: 1 }, oldestPendingSeconds: 0 },
+  outbox: { byStatus: { pending: 0, sending: 0, failed: 0, sent: 96, dead: 1 }, sentLast24h: 18, oldestPendingSeconds: 0 },
+  ai: [
+    { operation: 'extract_project_events', calls: 37, failures: 0, inputTokens: 41250, outputTokens: 6120, avgLatencyMs: 1830 },
+    { operation: 'interpret_command', calls: 12, failures: 1, inputTokens: 9800, outputTokens: 1410, avgLatencyMs: 1120 },
+    { operation: 'transcribe', calls: 4, failures: 0, inputTokens: 0, outputTokens: 0, avgLatencyMs: 2900 },
+  ],
+  retention: { days: 730, lastRunAt: '2026-11-06T06:00:00Z', result: { messages: 0, files: 0 } },
+};
+const OPS_DOWN = {
+  ...OPS,
+  whatsapp: [{ provider: 'zapi', connected: false, lastCheckedAt: '2026-11-06T11:58:00Z', lastConnectedAt: '2026-11-06T09:10:00Z', lastError: 'sessão desconectada do celular' }],
+  outbox: { byStatus: { pending: 4, sending: 0, failed: 0, sent: 96, dead: 0 }, sentLast24h: 12, oldestPendingSeconds: 2820 },
+};
+const FAILED_MESSAGES = [
+  {
+    id: 'fm1',
+    kind: 'audio',
+    senderName: 'Ana Admin',
+    senderPhone: '5511900000001',
+    receivedAt: '2026-11-06T10:12:00Z',
+    processingError: 'IA /v1/transcribe: upstream_timeout',
+    conversation: { isGroup: true, group: { name: 'PROJETO - XPO' } },
+  },
+];
+const DEAD_DELIVERIES = [
+  { id: 'dd1', recipient: '551190000', text: 'A conta de Internet vence amanhã (sáb, 07/11): R$ 149,90.', attempts: 5, lastError: 'HTTP 400 número inválido', updatedAt: '2026-11-06T09:00:00Z' },
+];
+
 const CLOSING_REPORT = [
   'Projeto *Sarau de Verão* encerrado em ter, 20/10.',
   '',
@@ -201,8 +234,8 @@ async function snap(page: Page, name: string, opts: { fullPage?: boolean } = {})
 
 type DataMode = 'ok' | 'empty' | 'error' | 'loading';
 
-async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; role?: string } = {}) {
-  const { authed = true, data = 'ok', role = 'owner' } = opts;
+async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; role?: string; opsDown?: boolean } = {}) {
+  const { authed = true, data = 'ok', role = 'owner', opsDown = false } = opts;
   await page.clock.setFixedTime(NOW);
   if (authed) await page.addInitScript(() => sessionStorage.setItem('coxia-token', 'test-token'));
   const empty = data === 'empty';
@@ -254,6 +287,10 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/projects/p1' && method === 'GET') return respond(PROJECT_XPO);
     if (path === '/projects/p3' && method === 'GET') return respond(PROJECT_CLOSED);
     if (path.startsWith('/projects/p1/') && method !== 'GET') return route.fulfill({ status: 200, json: {} });
+    if (path === '/ops/overview') return respond(opsDown ? OPS_DOWN : OPS);
+    if (path === '/ops/messages/failed') return respond(empty ? [] : FAILED_MESSAGES);
+    if (path === '/ops/deliveries/dead') return respond(empty ? [] : DEAD_DELIVERIES);
+    if (path.startsWith('/ops/') && method === 'POST') return route.fulfill({ status: 202, json: { status: 'queued' } });
     return route.fulfill({ status: 404, json: { message: 'não simulado' } });
   });
 }
@@ -398,6 +435,22 @@ test.describe('golden visual', () => {
     await snap(page, 'project-close-dialog.png');
   });
 
+  test('configurações com operação', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/configuracoes');
+    await expect(page.getByRole('heading', { name: 'Operação' })).toBeVisible();
+    await expect(page.getByText('Ana Admin · PROJETO - XPO')).toBeVisible();
+    await snap(page, 'settings-ops.png', { fullPage: true });
+  });
+
+  test('operação: WhatsApp desconectado', async ({ page }) => {
+    await mockApi(page, { opsDown: true });
+    await page.goto('/configuracoes');
+    const alert = page.getByRole('alert').filter({ hasText: 'WhatsApp desconectado' });
+    await expect(alert).toBeVisible();
+    await snap(page, 'settings-ops-down.png', { fullPage: true });
+  });
+
   for (const [path, heading, name] of [
     ['/projetos', 'Projetos em movimento.', 'projects'],
     ['/agenda', 'Agenda das salas.', 'agenda'],
@@ -485,6 +538,49 @@ test.describe('interação acessível', () => {
       await expect(page.getByRole('main')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, path).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('reprocessar mensagem com falha chama a API', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/configuracoes');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/ops/messages/fm1/retry') && r.method() === 'POST'),
+      page.getByRole('button', { name: 'Reprocessar' }).click(),
+    ]);
+    expect(req.headers()['idempotency-key']).toBeTruthy();
+  });
+
+  test('operação só aparece para administração; "Sair" para todos', async ({ page }) => {
+    await mockApi(page, { role: 'staff' });
+    await page.goto('/configuracoes');
+    await expect(page.getByRole('button', { name: 'Sair' }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Operação' })).toHaveCount(0);
+  });
+
+  test('no celular, Configurações fica a um toque no cabeçalho', async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'só no celular');
+    await mockApi(page);
+    await page.goto('/agenda');
+    await page.getByRole('link', { name: 'Configurações' }).click();
+    await expect(page).toHaveURL(/\/configuracoes$/);
+  });
+
+  test('alvos de toque têm pelo menos 44px no celular', async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'só no celular');
+    await mockApi(page);
+    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/contas', '/configuracoes']) {
+      await page.goto(path);
+      await expect(page.getByRole('main')).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForLoadState('networkidle');
+      const small = await page.evaluate(() =>
+        [...document.querySelectorAll('header a, header button, main a, main button, main summary, nav a')]
+          .map((el) => ({ el, r: el.getBoundingClientRect() }))
+          .filter(({ r }) => r.width > 0 && r.height > 0 && r.height < 43.5)
+          .map(({ el, r }) => `${(el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 30)} (${Math.round(r.height)}px)`),
+      );
+      expect(small, path).toEqual([]);
     }
   });
 

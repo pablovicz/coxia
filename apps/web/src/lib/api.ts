@@ -291,3 +291,41 @@ export async function apiSend<T>(path: string, method: 'POST' | 'PATCH' | 'PUT' 
   if (!res.ok) throw new ApiBodyError(res.status, json);
   return json as T;
 }
+
+// ───────────── Etapa 4: operação ─────────────
+
+export interface OpsOverview {
+  generatedAt: string;
+  whatsapp: Array<{ provider: string; connected: boolean; lastCheckedAt: string | null; lastConnectedAt: string | null; lastError: string | null }>;
+  lastInboundAt: string | null;
+  inbound: {
+    last24h: Record<'received' | 'queued' | 'processing' | 'processed' | 'ignored' | 'failed', number>;
+    oldestPendingSeconds: number;
+  };
+  outbox: {
+    byStatus: Record<'pending' | 'sending' | 'failed' | 'sent' | 'dead', number>;
+    sentLast24h: number;
+    oldestPendingSeconds: number;
+  };
+  ai: Array<{ operation: string; calls: number; failures: number; inputTokens: number; outputTokens: number; avgLatencyMs: number }>;
+  retention: { days: number; lastRunAt: string | null; result: { messages?: number; files?: number } | null };
+}
+
+export interface FailedMessage {
+  id: string;
+  kind: string;
+  senderName: string | null;
+  senderPhone: string | null;
+  receivedAt: string;
+  processingError: string | null;
+  conversation: { isGroup: boolean; group: { name: string | null } | null };
+}
+
+export interface DeadDelivery {
+  id: string;
+  recipient: string;
+  text: string;
+  attempts: number;
+  lastError: string | null;
+  updatedAt: string;
+}

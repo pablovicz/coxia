@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { MemberRole } from '@coxia/contracts';
+import { PrismaService } from '../prisma/prisma.service';
 import { type AuthUser, IS_PUBLIC, ROLES } from './decorators';
 
 interface JwtPayload {
@@ -23,6 +24,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -33,13 +35,18 @@ export class JwtAuthGuard implements CanActivate {
     const [scheme, token] = (req.headers.authorization ?? '').split(' ');
     if (scheme !== 'Bearer' || !token) throw new UnauthorizedException();
 
+    let payload: JwtPayload;
     try {
-      const payload = await this.jwt.verifyAsync<JwtPayload>(token);
-      req.user = { userId: payload.sub, organizationId: payload.org, memberId: payload.mid, role: payload.role };
-      return true;
+      payload = await this.jwt.verifyAsync<JwtPayload>(token);
     } catch {
       throw new UnauthorizedException();
     }
+    // O papel vem do banco, não do token: remover alguém ou mudar o papel vale na hora,
+    // sem esperar o JWT expirar.
+    const member = await this.prisma.organizationMember.findUnique({ where: { id: payload.mid }, select: { role: true, userId: true, organizationId: true } });
+    if (!member || member.userId !== payload.sub || member.organizationId !== payload.org) throw new UnauthorizedException();
+    req.user = { userId: payload.sub, organizationId: payload.org, memberId: payload.mid, role: member.role };
+    return true;
   }
 }
 

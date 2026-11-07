@@ -1,4 +1,5 @@
-import { Body, Controller, Get, HttpCode, Injectable, Module, UnauthorizedException, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Injectable, Module, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { LoginThrottle } from './login-throttle';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
@@ -65,13 +66,24 @@ export class AuthService {
 
 @Controller('auth')
 export class AuthController {
+  private readonly throttle = new LoginThrottle();
+
   constructor(private readonly auth: AuthService) {}
 
   @Public()
   @Post('login')
   @HttpCode(200)
-  login(@Body(new ZodValidationPipe(loginSchema)) body: LoginInput) {
-    return this.auth.login(body);
+  async login(@Body(new ZodValidationPipe(loginSchema)) body: LoginInput, @Req() req: { ip?: string }) {
+    const ip = req.ip ?? 'unknown';
+    this.throttle.check(ip, body.email);
+    try {
+      const result = await this.auth.login(body);
+      this.throttle.succeed(ip, body.email);
+      return result;
+    } catch (err) {
+      if (err instanceof UnauthorizedException) this.throttle.fail(ip, body.email);
+      throw err;
+    }
   }
 
   @Get('me')

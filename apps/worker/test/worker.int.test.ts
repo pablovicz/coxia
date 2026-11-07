@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { createPrismaClient, enqueueDelivery } from '@coxia/database';
-import { FakeWhatsappProvider, WhatsappProviderError } from '@coxia/shared';
+import { AiServiceError, FakeWhatsappProvider, WhatsappProviderError } from '@coxia/shared';
 import type { Job } from 'bullmq';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -206,11 +206,98 @@ describe('outbox', () => {
 
   it('verificação de conexão atualiza a instância', async () => {
     whatsapp.connected = false;
-    expect(await app.get(MaintenanceService).checkConnection()).toEqual({ connected: false });
+    expect(await app.get(MaintenanceService).checkConnection()).toMatchObject({ connected: false });
     const inst = await prisma.whatsappInstance.findUniqueOrThrow({ where: { id: instanceId } });
     expect(inst.connected).toBe(false);
     expect(inst.lastCheckedAt).not.toBeNull();
     whatsapp.connected = true;
+    await app.get(MaintenanceService).checkConnection();
+  });
+});
+
+describe('resiliência (Etapa 4)', () => {
+  it('WhatsApp desconectado: outbox pausa sem gastar tentativas e retoma ao reconectar', async () => {
+    const svc = app.get(MaintenanceService);
+    await prisma.notificationDelivery.updateMany({ where: { status: { in: ['pending', 'failed'] } }, data: { status: 'dead' } });
+    const key = `t:${randomUUID()}`;
+    await enqueueDelivery(prisma, { organizationId: orgId, recipient: adminPhone(), text: 'Aviso durante a queda', idempotencyKey: key });
+
+    const audits = (action: string) => prisma.auditEvent.count({ where: { organizationId: orgId, action } });
+    const [downBefore, upBefore] = [await audits('whatsapp.disconnected'), await audits('whatsapp.reconnected')];
+    whatsapp.connected = false;
+    const t0 = new Date();
+    expect(await svc.checkConnection(t0)).toEqual({ connected: false, changed: true });
+    const before = whatsapp.sent.length;
+    expect(await svc.dispatchOutbox(20, new Date(t0.getTime() + 5_000))).toMatchObject({ paused: true, claimed: 0 });
+    const held = await prisma.notificationDelivery.findUniqueOrThrow({ where: { idempotencyKey: key } });
+    expect([held.status, held.attempts]).toEqual(['pending', 0]);
+    expect(await audits('whatsapp.disconnected')).toBe(downBefore + 1);
+
+    // Volta: passado o intervalo de reconferência, o próprio dispatcher checa e retoma.
+    whatsapp.connected = true;
+    const r = await svc.dispatchOutbox(20, new Date(t0.getTime() + 61_000));
+    expect(r).toMatchObject({ paused: false, sent: 1 });
+    expect(whatsapp.sent.length).toBe(before + 1);
+    expect(await audits('whatsapp.reconnected')).toBe(upBefore + 1);
+  });
+
+  it('mensagem presa em "processing" (worker caiu) volta para a fila', async () => {
+    const msg = await createMessage({ senderPhone: adminPhone() });
+    await prisma.message.update({ where: { id: msg.id }, data: { processingStatus: 'processing', receivedAt: new Date(Date.now() - 20 * 60_000) } });
+    const svc = app.get(MaintenanceService);
+    expect(await svc.reconcileInbound()).toBeGreaterThanOrEqual(1);
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: msg.id } })).processingStatus).toBe('queued');
+  });
+
+  it('falha da IA fica registrada em ai_executions e a mensagem é retentada pelo job', async () => {
+    const original = ai.interpretCommand;
+    ai.interpretCommand = async () => {
+      throw new AiServiceError('IA /v1/commands/interpret: timeout', 'network', true, null);
+    };
+    const msg = await createMessage({ senderPhone: adminPhone(), text: 'Reserva alguma coisa' });
+    await expect(app.get(InboundProcessor).process(job(msg.id))).rejects.toThrow(/timeout/);
+    ai.interpretCommand = original;
+    const exec = await prisma.aiExecution.findFirstOrThrow({ where: { sourceMessageId: msg.id } });
+    expect([exec.operation, exec.status, exec.error]).toEqual(['interpret_command', 'failed', 'network: IA /v1/commands/interpret: timeout']);
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: msg.id } })).processingStatus).toBe('queued');
+  });
+
+  it('retenção: apaga conteúdo e mídia antigos, mas guarda comprovantes de pagamento', async () => {
+    const svc = app.get(MaintenanceService);
+    const storage = app.get(StorageService);
+    await prisma.organization.update({ where: { id: orgId }, data: { retentionDays: 30 } });
+    const old = new Date(Date.now() - 40 * 24 * 60 * 60_000);
+    const mk = async (text: string) => {
+      const m = await createMessage({ senderPhone: adminPhone(), text });
+      const key = `org/${orgId}/retencao/${randomUUID()}`;
+      await storage.put(key, new TextEncoder().encode(text), 'text/plain');
+      const att = await prisma.messageAttachment.create({
+        data: { organizationId: orgId, messageId: m.id, kind: 'image', sourceUrl: 'https://x', storageKey: key, sha256: randomUUID(), transcript: 'transcrição' },
+      });
+      await prisma.message.update({ where: { id: m.id }, data: { receivedAt: old, processingStatus: 'processed' } });
+      return { m, att, key };
+    };
+    const chat = await mk('conversa antiga');
+    const proof = await mk('comprovante antigo');
+    const fresh = await createMessage({ senderPhone: adminPhone(), text: 'mensagem recente' });
+    const bill = await prisma.recurringBill.create({ data: { organizationId: orgId, name: 'Gás retenção', category: 'outros', dueDay: 5, startsOn: new Date('2026-01-01') } });
+    const occ = await prisma.billOccurrence.create({ data: { organizationId: orgId, recurringBillId: bill.id, competence: '2026-01', dueDate: new Date('2026-01-05') } });
+    await prisma.paymentAttachment.create({ data: { organizationId: orgId, billOccurrenceId: occ.id, messageAttachmentId: proof.att.id, sha256: proof.att.sha256, storageKey: proof.key } });
+
+    const r = await svc.applyRetention();
+    expect(r.messages).toBeGreaterThanOrEqual(2);
+    const c = await prisma.message.findUniqueOrThrow({ where: { id: chat.m.id }, include: { attachments: true } });
+    expect([c.text, c.rawPayload, c.redactedAt !== null]).toEqual([null, null, true]);
+    expect([c.attachments[0]!.storageKey, c.attachments[0]!.transcript]).toEqual([null, null]);
+    expect((await fetch(await storage.signedGetUrl(chat.key))).status).toBe(404);
+    // Comprovante: arquivo e vínculo ficam; o texto da conversa vai embora.
+    const p = await prisma.message.findUniqueOrThrow({ where: { id: proof.m.id }, include: { attachments: true } });
+    expect([p.text, p.attachments[0]!.storageKey]).toEqual([null, proof.key]);
+    expect(await (await fetch(await storage.signedGetUrl(proof.key))).text()).toBe('comprovante antigo');
+    expect((await prisma.message.findUniqueOrThrow({ where: { id: fresh.id } })).text).toBe('mensagem recente');
+    // Idempotente.
+    expect((await svc.applyRetention()).messages).toBe(0);
+    await prisma.organization.update({ where: { id: orgId }, data: { retentionDays: 730 } });
   });
 });
 

@@ -62,7 +62,7 @@ export function HomePage() {
               <CardTitle>Agenda de hoje</CardTitle>
               <CardDescription>Reservas confirmadas nas salas</CardDescription>
             </div>
-            <Link to="/agenda" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+            <Link to="/agenda" className="-my-3 inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
               Ver agenda
             </Link>
           </CardHeader>
@@ -106,7 +106,7 @@ export function HomePage() {
                 <CardTitle>Contas</CardTitle>
                 <CardDescription>Atrasadas e a vencer em 7 dias</CardDescription>
               </div>
-              <Link to="/contas" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+              <Link to="/contas" className="-my-3 inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
                 Ver contas
               </Link>
             </CardHeader>

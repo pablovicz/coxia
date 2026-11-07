@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { type InboundMessage, type InboundMessageJob, QUEUES } from '@coxia/contracts';
 import { enqueueDelivery } from '@coxia/database';
-import { CommandService, ProjectWorkspaceService } from '@coxia/domain';
+import { CommandService, ProjectWorkspaceService, trackAi } from '@coxia/domain';
 import { AiServiceError, normalizePhone, sha256, type WhatsappProvider } from '@coxia/shared';
 import type { Job } from 'bullmq';
 import { createHash } from 'node:crypto';
@@ -126,16 +126,21 @@ export class InboundProcessor extends WorkerHost {
   }
 
   /** Texto da mensagem; áudio sem texto é transcrito (uma vez: a transcrição fica no anexo). */
-  private async textOf(message: { id: string; text: string | null }, attachments: StoredAttachment[], traceId: string | null) {
+  private async textOf(message: { id: string; organizationId: string; text: string | null }, attachments: StoredAttachment[], traceId: string | null) {
     const audio = attachments.find((a) => a.kind === 'audio');
     if (message.text || !audio) return { text: message.text ?? '', fromAudio: false };
     const existing = await this.prisma.messageAttachment.findUnique({ where: { id: audio.id }, select: { transcript: true } });
     if (existing?.transcript) return { text: existing.transcript, fromAudio: true };
     const url = await this.storage.signedGetUrl(audio.storageKey);
-    const t = await this.ai.transcribe(
-      { mediaUrl: url, mimeType: audio.mimeType ?? 'audio/ogg', language: 'pt', sourceMessageId: message.id },
-      `transcribe:${message.id}`,
-      traceId ?? undefined,
+    const { res: t } = await trackAi(
+      this.prisma,
+      { organizationId: message.organizationId, operation: 'transcribe', sourceMessageId: message.id, request: { attachment: audio.sha256 }, traceId },
+      () =>
+        this.ai.transcribe(
+          { mediaUrl: url, mimeType: audio.mimeType ?? 'audio/ogg', language: 'pt', sourceMessageId: message.id },
+          `transcribe:${message.id}`,
+          traceId ?? undefined,
+        ),
     );
     await this.prisma.messageAttachment.update({ where: { id: audio.id }, data: { transcript: t.text } });
     return { text: t.text, fromAudio: true };

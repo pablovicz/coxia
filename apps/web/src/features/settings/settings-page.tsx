@@ -1,11 +1,17 @@
-import { Settings } from 'lucide-react';
-import { EmptyState, PageHeader } from '@/components/empty-state';
+import { LogOut } from 'lucide-react';
+import { PageHeader } from '@/components/empty-state';
 import { ThemeSwitch } from '@/components/theme-switch';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { canManage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
+import { OpsPanel } from './ops-panel';
+
+const ROLE_LABEL: Record<string, string> = { owner: 'Responsável', admin: 'Administração', staff: 'Equipe', viewer: 'Leitura' };
 
 export function SettingsPage() {
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
+  const tz = session?.organization.timezone ?? 'America/Sao_Paulo';
   return (
     <>
       <PageHeader eyebrow="Organização" title="Configurações." description="Preferências da casa e da sua conta." />
@@ -21,24 +27,25 @@ export function SettingsPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Organização</CardTitle>
+            <CardTitle>Sua conta</CardTitle>
             <CardDescription>{session?.organization.name}</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap items-end justify-between gap-4">
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">Nome</dt>
+              <dd>{session?.user.name}</dd>
+              <dt className="text-muted-foreground">Papel</dt>
+              <dd>{ROLE_LABEL[session?.user.role ?? ''] ?? session?.user.role}</dd>
               <dt className="text-muted-foreground">Fuso horário</dt>
-              <dd className="font-mono text-[13px]">{session?.organization.timezone}</dd>
-              <dt className="text-muted-foreground">Seu papel</dt>
-              <dd>{session?.user.role}</dd>
+              <dd className="font-mono text-[13px]">{tz}</dd>
             </dl>
+            <Button variant="outline" onClick={logout}>
+              <LogOut aria-hidden /> Sair
+            </Button>
           </CardContent>
         </Card>
       </div>
-      <div className="mt-4">
-        <EmptyState icon={Settings} title="Mais ajustes em breve">
-          Salas, horários de funcionamento, contas e destinatários dos avisos serão editáveis aqui.
-        </EmptyState>
-      </div>
+      {canManage(session?.user.role) ? <OpsPanel tz={tz} /> : null}
     </>
   );
 }
