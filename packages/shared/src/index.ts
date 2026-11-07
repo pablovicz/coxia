@@ -1,4 +1,6 @@
 export * from './time';
+export * from './recurrence';
+export * from './format';
 export * from './hash';
 export * from './phone';
 export * from './whatsapp/provider';

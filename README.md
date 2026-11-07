@@ -5,7 +5,23 @@
 
 Planejamento completo em [docs/PLANO_MVP.md](docs/PLANO_MVP.md) · identidade visual em [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 
-## Estado atual — Etapa 1 (fundação)
+## Estado atual — Etapas 1 e 2
+
+### Etapa 2 — agenda, contas, lembretes e briefing
+
+| Entregue | Onde |
+|---|---|
+| Regras de negócio compartilhadas por api e worker (sem NestJS, testáveis isoladamente) | `packages/domain` |
+| Reservas avulsas e semanais, horário de funcionamento, bloqueios, conflitos relatados por data, alterar/cancelar uma data ou a série | `packages/domain/src/bookings.ts` |
+| Contas mensais: competência sem duplicidade, dia 31 → último dia, pagamento parcial/antecipado, comprovante duplicado, mudança de vencimento/valor, suspensão | `packages/domain/src/bills.ts` |
+| Briefing matinal (texto gerado do estado estruturado), avisos D-1/no dia/atrasada com reaviso configurável, véspera e 1h antes da reserva, lembretes | `briefing.ts`, `notifications.ts` |
+| Comandos de administradoras pelo WhatsApp (texto ou áudio): disponibilidade, reservar, cancelar com confirmação SIM, pagar conta com comprovante, resumo | `packages/domain/src/commands.ts`, `apps/worker` |
+| REST: salas, reservas, disponibilidade, contas, pagamentos, lembretes, visão geral | `apps/api/src/domain` |
+| Painel: agenda (dia no celular, semana no desktop), formulário com conflitos, contas do mês, pagamento, cadastro de contas e lembretes | `apps/web/src/features` |
+
+Política anti-spam: quem recebe o briefing matinal vê nele as contas e reservas do dia; avisos avulsos vão só para os demais destinatários. Nada diário sai antes do horário do briefing.
+
+### Etapa 1 — fundação
 
 | Entregue | Onde |
 |---|---|
@@ -20,7 +36,7 @@ Planejamento completo em [docs/PLANO_MVP.md](docs/PLANO_MVP.md) · identidade vi
 | Docker Compose (dev com hot reload) e compose de teste isolado | `docker-compose*.yml` |
 | Railway IaC e CI | `.railway/railway.ts`, `.github/workflows/ci.yml` |
 
-**Ainda não implementado:** regras de agenda e contas (Etapa 2), workspaces de projeto com IA (Etapa 3), estabilização (Etapa 4). A **Etapa 0** (validação com instância Z-API real) continua pendente: as fixtures em `tests/fixtures/zapi` foram montadas a partir da documentação e estão marcadas em `manifest.json` para substituição por payloads reais.
+**Ainda não implementado:** workspaces de projeto com IA (Etapa 3) e estabilização (Etapa 4). Comandos por WhatsApp usam a IA real só com `AI_PROVIDER=openai`; com `fixture` (padrão local) a interpretação vem de `tests/fixtures/ai/commands`. A **Etapa 0** (validação com instância Z-API real) continua pendente: as fixtures em `tests/fixtures/zapi` foram montadas a partir da documentação e estão marcadas em `manifest.json` para substituição por payloads reais.
 
 ## Arquitetura
 
@@ -104,6 +120,7 @@ packages/
   config/     validação de variáveis de ambiente (zod)
   contracts/  schemas compartilhados (InboundMessage, contratos API↔IA, filas) + JSON Schema
   database/   Prisma schema, migrations, seed, outbox
+  domain/     regras de negócio: salas, reservas, contas, lembretes, briefing, avisos, comandos
   shared/     regras de tempo, normalizador e provedores de WhatsApp, cliente da IA
 tests/
   fixtures/   payloads Z-API, exemplos de contrato, respostas determinísticas de IA

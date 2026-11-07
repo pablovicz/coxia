@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { LoggerModule } from 'nestjs-pino';
 import { AuditModule } from './audit/audit.service';
 import { AuthModule } from './auth/auth.module';
+import { DomainHttpModule, DomainModule } from './domain/domain.module';
 import { redactUrl, REDACTED_PATHS } from './common/log-redaction';
 import { API_ENV, type ApiEnv } from './config/env';
 import { HealthModule } from './health/health.controller';
@@ -53,6 +54,8 @@ export class AppModule {
         HealthModule,
         WhatsappModule,
         OrganizationModule,
+        DomainModule,
+        DomainHttpModule,
       ],
       providers: [{ provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor }],
     };

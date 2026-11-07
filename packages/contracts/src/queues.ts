@@ -16,6 +16,9 @@ export const MAINTENANCE_JOBS = {
   dispatchOutbox: 'dispatch-outbox',
   reconcileInbound: 'reconcile-inbound',
   checkConnection: 'check-whatsapp-connection',
-  morningBriefing: 'morning-briefing',
+  /** Briefing matinal, avisos de contas/reservas e lembretes (idempotente; roda a cada minuto). */
+  runNotifications: 'run-notifications',
+  generateBillOccurrences: 'generate-bill-occurrences',
+  extendBookingSeries: 'extend-booking-series',
 } as const;
 export type MaintenanceJobName = (typeof MAINTENANCE_JOBS)[keyof typeof MAINTENANCE_JOBS];

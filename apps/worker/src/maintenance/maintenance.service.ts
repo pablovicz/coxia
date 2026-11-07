@@ -2,6 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type InboundMessageJob, QUEUES } from '@coxia/contracts';
 import { claimDueDeliveries, markDeliveryFailed, markDeliverySent, reclaimStaleDeliveries } from '@coxia/database';
+import { BillingService, BookingService, NotificationService } from '@coxia/domain';
 import { type WhatsappProvider, WhatsappProviderError } from '@coxia/shared';
 import type { Queue } from 'bullmq';
 import { PrismaService, WHATSAPP_PROVIDER } from '../infra.module';
@@ -22,7 +23,44 @@ export class MaintenanceService {
     private readonly prisma: PrismaService,
     @Inject(WHATSAPP_PROVIDER) private readonly whatsapp: WhatsappProvider,
     @InjectQueue(QUEUES.inbound) private readonly inboundQueue: Queue<InboundMessageJob>,
+    private readonly notifications: NotificationService,
+    private readonly billing: BillingService,
+    private readonly bookings: BookingService,
   ) {}
+
+  private organizations() {
+    return this.prisma.organization.findMany({ select: { id: true } });
+  }
+
+  /** Briefing, avisos e lembretes de todas as organizações. Falha numa não impede as outras. */
+  async runNotifications(now = new Date()): Promise<{ planned: number; failed: number }> {
+    let planned = 0;
+    let failed = 0;
+    for (const org of await this.organizations()) {
+      try {
+        planned += (await this.notifications.run(org.id, now)).length;
+      } catch (err) {
+        failed++;
+        this.logger.error({ organization_id: org.id, err: (err as Error).message }, 'falha ao planejar notificações');
+      }
+    }
+    return { planned, failed };
+  }
+
+  async generateBillOccurrences(now = new Date()): Promise<{ created: number }> {
+    let created = 0;
+    for (const org of await this.organizations()) created += await this.billing.generateOccurrences(org.id, now);
+    return { created };
+  }
+
+  async extendBookingSeries(now = new Date()) {
+    const report = await this.bookings.extendSeries(now);
+    const skipped = report.reduce((s, r) => s + r.skipped.length, 0);
+    if (skipped) {
+      this.logger.warn({ skipped, series: report.filter((r) => r.skipped.length).map((r) => r.bookingId) }, 'ocorrências de série puladas por conflito');
+    }
+    return { series: report.length, created: report.reduce((s, r) => s + r.created, 0), skipped };
+  }
 
   /** Envia entregas pendentes do outbox. Seguro com várias réplicas (SKIP LOCKED). */
   async dispatchOutbox(batchSize = 20): Promise<DispatchResult> {

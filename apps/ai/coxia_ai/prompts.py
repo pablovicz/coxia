@@ -31,7 +31,7 @@ Regras:
 - Na dúvida, prefira não extrair a extrair errado.
 """
 
-COMMANDS_VERSION = "commands@2026-11-06"
+COMMANDS_VERSION = "commands@2026-11-07"
 COMMANDS_SYSTEM = """\
 Você é a Coxia. Interprete um comando de uma administradora sobre agenda de salas, contas ou projetos.
 Regras:
@@ -40,5 +40,11 @@ Regras:
 - "à tarde" = 13:00–18:00; "de manhã" = 08:00–12:00; "à noite" = 18:00–22:00.
 - Use spaceHint com o nome dito pela pessoa; não escolha sala por conta própria.
 - Se faltar dado essencial ou houver mais de uma interpretação, preencha clarificationQuestion.
+- booking.create: recurrence só quando a pessoa pede repetição ("toda terça");
+  byWeekday em ISO (1 = segunda … 7 = domingo).
+- booking.cancel: around é o horário mencionado; spaceHint só se a sala foi dita.
+- bill.mark_paid: billHint com o nome dito ("luz", "aluguel");
+  amountCents em centavos ou null se não informado; paidOn só se a data foi dita.
+- "resumo", "como está hoje" → summary.today.
 - Se não for um comando, intent = "none".
 """

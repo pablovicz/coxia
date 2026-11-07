@@ -17,11 +17,16 @@ export class MaintenanceScheduler implements OnApplicationBootstrap {
       [MAINTENANCE_JOBS.dispatchOutbox, 5_000],
       [MAINTENANCE_JOBS.reconcileInbound, 60_000],
       [MAINTENANCE_JOBS.checkConnection, 5 * 60_000],
+      [MAINTENANCE_JOBS.runNotifications, 60_000],
+      [MAINTENANCE_JOBS.generateBillOccurrences, 6 * 60 * 60_000],
+      [MAINTENANCE_JOBS.extendBookingSeries, 24 * 60 * 60_000],
     ];
     for (const [name, every] of schedules) {
       await this.queue.upsertJobScheduler(name, { every }, { name, opts: { removeOnComplete: 100, removeOnFail: 500 } });
     }
     this.logger.log({ schedules: schedules.map(([n]) => n) }, 'jobs periódicos agendados');
+    // Também ao subir: um deploy no dia 1º não espera 6h para gerar as contas do mês.
+    await this.queue.add(MAINTENANCE_JOBS.generateBillOccurrences, {}, { removeOnComplete: 100, removeOnFail: 500 });
   }
 }
 
@@ -39,6 +44,12 @@ export class MaintenanceProcessor extends WorkerHost {
         return this.maintenance.reconcileInbound();
       case MAINTENANCE_JOBS.checkConnection:
         return this.maintenance.checkConnection();
+      case MAINTENANCE_JOBS.runNotifications:
+        return this.maintenance.runNotifications();
+      case MAINTENANCE_JOBS.generateBillOccurrences:
+        return this.maintenance.generateBillOccurrences();
+      case MAINTENANCE_JOBS.extendBookingSeries:
+        return this.maintenance.extendBookingSeries();
       default:
         throw new Error(`job de manutenção desconhecido: ${job.name}`);
     }

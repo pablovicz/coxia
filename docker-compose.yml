@@ -116,12 +116,14 @@ services:
       - ./packages/shared/src:/repo/packages/shared/src
       - ./packages/config/src:/repo/packages/config/src
       - ./packages/database/src:/repo/packages/database/src
+      - ./packages/domain/src:/repo/packages/domain/src
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 40s
+      # Dev: os watchers geram declarações de tipo de todos os pacotes ao subir (lento no Windows).
+      start_period: 300s
     networks: [coxia]
 
   worker:
@@ -140,7 +142,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
-      start_period: 40s
+      # Dev: os watchers geram declarações de tipo de todos os pacotes ao subir (lento no Windows).
+      start_period: 300s
     networks: [coxia]
 
   ai:

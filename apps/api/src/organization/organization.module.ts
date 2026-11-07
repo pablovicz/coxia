@@ -14,21 +14,6 @@ export class OrganizationController {
     });
   }
 
-  @Get('spaces')
-  spaces(@CurrentUser() user: AuthUser) {
-    return this.prisma.space.findMany({
-      where: { organizationId: user.organizationId, active: true },
-      orderBy: { sortOrder: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        aliases: true,
-        capacity: true,
-        availabilityRules: { select: { weekday: true, opensAt: true, closesAt: true }, orderBy: { weekday: 'asc' } },
-      },
-    });
-  }
 }
 
 @Module({ controllers: [OrganizationController] })

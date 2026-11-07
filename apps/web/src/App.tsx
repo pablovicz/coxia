@@ -3,7 +3,9 @@ import { AppShell } from '@/components/layout/app-shell';
 import { Skeleton } from '@/components/ui/input';
 import { LoginPage } from '@/features/auth/login-page';
 import { HomePage } from '@/features/dashboard/home-page';
-import { AgendaPage, BillsPage, ProjectsPage, SettingsPage } from '@/features/placeholder-pages';
+import { ProjectsPage, SettingsPage } from '@/features/placeholder-pages';
+import { BillsPage } from '@/features/reminders/bills-page';
+import { AgendaPage } from '@/features/rooms/agenda-page';
 import { useAuth } from '@/providers/auth-provider';
 
 function RequireAuth() {

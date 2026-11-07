@@ -1,0 +1,14 @@
+{
+  "_text": "Reserva a sala grande terça das 14h às 17h para a Micaela",
+  "command": {
+    "intent": "booking.create",
+    "spaceHint": "sala grande",
+    "startAt": "2026-11-10T14:00:00-03:00",
+    "endAt": "2026-11-10T17:00:00-03:00",
+    "responsibleName": "Micaela",
+    "notes": null,
+    "recurrence": null
+  },
+  "confidence": 0.94,
+  "clarificationQuestion": null
+}

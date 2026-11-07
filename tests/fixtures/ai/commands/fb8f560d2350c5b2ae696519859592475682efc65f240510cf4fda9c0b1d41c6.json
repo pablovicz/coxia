@@ -1,0 +1,6 @@
+{
+  "_text": "Resumo de hoje",
+  "command": { "intent": "summary.today" },
+  "confidence": 0.98,
+  "clarificationQuestion": null
+}

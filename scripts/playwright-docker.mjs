@@ -5,7 +5,7 @@
  * node_modules do host (Windows/macOS) não servem no Linux: volumes nomeados guardam os do container.
  */
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +24,15 @@ const script = [
   `pnpm --filter @coxia/web exec playwright test ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' ')}`,
 ].join(' && ');
 
+// Cada pacote do workspace ganha um volume próprio sobre o node_modules: sem isso, o pnpm do
+// container apaga (via bind mount) os node_modules do host dos pacotes que não instalou.
+const workspaceDirs = ['apps', 'packages'].flatMap((base) =>
+  readdirSync(join(root, base), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => `${base}/${d.name}`),
+);
+const moduleVolumes = workspaceDirs.flatMap((dir) => ['-v', `coxia-pw-${dir.replace(/\//g, '-')}-modules:/repo/${dir}/node_modules`]);
+
 const result = spawnSync(
   'docker',
   [
@@ -31,7 +40,7 @@ const result = spawnSync(
     '-e', 'CI=1',
     '-v', `${root}:/repo`,
     '-v', 'coxia-pw-root-modules:/repo/node_modules',
-    '-v', 'coxia-pw-web-modules:/repo/apps/web/node_modules',
+    ...moduleVolumes,
     '-v', 'coxia-pw-pnpm-store:/pnpm-store',
     '-w', '/repo',
     image,

@@ -16,6 +16,7 @@
     "@coxia/config": "workspace:*",
     "@coxia/contracts": "workspace:*",
     "@coxia/database": "workspace:*",
+    "@coxia/domain": "workspace:*",
     "@coxia/shared": "workspace:*",
     "@nestjs/bullmq": "^11.0.2",
     "@nestjs/common": "^11.1.3",

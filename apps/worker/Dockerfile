@@ -14,6 +14,7 @@ COPY packages/config/package.json packages/config/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/shared/package.json packages/shared/
 COPY packages/database/package.json packages/database/
+COPY packages/domain/package.json packages/domain/
 COPY apps/worker/package.json apps/worker/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter "@coxia/worker..."
@@ -27,7 +28,7 @@ FROM source AS dev
 RUN pnpm turbo run build --filter="@coxia/worker^..."
 ENV NODE_ENV=development
 EXPOSE 3001
-CMD ["pnpm", "turbo", "run", "dev", "--filter=@coxia/worker...", "--ui=stream"]
+CMD ["pnpm", "turbo", "run", "dev", "--filter=@coxia/worker...", "--only", "--ui=stream"]
 
 # ---------- runtime ----------
 FROM source AS build

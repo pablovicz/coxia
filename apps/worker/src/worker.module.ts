@@ -6,7 +6,7 @@ import type { WhatsappProvider } from '@coxia/shared';
 import { LoggerModule } from 'nestjs-pino';
 import type { WorkerEnv } from './env';
 import { InboundProcessor } from './inbound/inbound.processor';
-import { InfraModule, PrismaService } from './infra.module';
+import { InfraModule, PrismaService, type WorkerAi } from './infra.module';
 import { MaintenanceProcessor, MaintenanceScheduler } from './maintenance/maintenance.processor';
 import { MaintenanceService } from './maintenance/maintenance.service';
 import { StorageService } from './storage/storage.service';
@@ -37,7 +37,7 @@ class HealthController {
 
 @Module({})
 export class WorkerModule {
-  static forRoot(env: WorkerEnv, overrides: { whatsapp?: WhatsappProvider; withSchedulers?: boolean } = {}): DynamicModule {
+  static forRoot(env: WorkerEnv, overrides: { whatsapp?: WhatsappProvider; ai?: WorkerAi; withSchedulers?: boolean } = {}): DynamicModule {
     return {
       module: WorkerModule,
       imports: [

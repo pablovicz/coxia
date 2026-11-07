@@ -1,17 +1,21 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { type InboundMessage, type InboundMessageJob, QUEUES } from '@coxia/contracts';
-import { normalizePhone, sha256, type WhatsappProvider } from '@coxia/shared';
+import { enqueueDelivery } from '@coxia/database';
+import { CommandService } from '@coxia/domain';
+import { AiServiceError, normalizePhone, sha256, type WhatsappProvider } from '@coxia/shared';
 import type { Job } from 'bullmq';
 import { createHash } from 'node:crypto';
-import { PrismaService, WHATSAPP_PROVIDER } from '../infra.module';
+import { AI_CLIENT, PrismaService, WHATSAPP_PROVIDER, type WorkerAi } from '../infra.module';
 import { StorageService } from '../storage/storage.service';
 import { type MessageRoute, routeMessage } from './message-router';
 
 /**
  * Processa uma mensagem persistida pela api.
- * Etapa 1: copia mídia para o bucket (as URLs do provedor expiram) e classifica a rota.
- * As ações por rota (workspace de projeto, comandos de agenda/contas) entram nas Etapas 2 e 3.
+ * 1. Copia mídia para o bucket (as URLs do provedor expiram).
+ * 2. Classifica a rota.
+ * 3. Conversa direta com admin → comando (agenda, contas, resumo), com resposta pelo outbox.
+ * Workspaces de projeto (grupos) entram na Etapa 3.
  */
 @Processor(QUEUES.inbound, { concurrency: Number(process.env.WORKER_CONCURRENCY ?? 5) })
 export class InboundProcessor extends WorkerHost {
@@ -21,6 +25,8 @@ export class InboundProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     @Inject(WHATSAPP_PROVIDER) private readonly whatsapp: WhatsappProvider,
+    @Inject(AI_CLIENT) private readonly ai: WorkerAi,
+    private readonly commands: CommandService,
   ) {
     super();
   }
@@ -40,19 +46,23 @@ export class InboundProcessor extends WorkerHost {
 
     await this.prisma.message.update({ where: { id: messageId }, data: { processingStatus: 'processing' } });
     try {
+      const stored: StoredAttachment[] = [];
       for (const att of message.attachments.filter((a) => !a.storageKey)) {
         const media = await this.whatsapp.getMedia(att.sourceUrl);
         const key = `org/${message.organizationId}/messages/${message.id}/${att.id}`;
         await this.storage.put(key, media.body, media.contentType ?? att.mimeType);
+        const hash = createHash('sha256').update(media.body).digest('hex');
+        const mimeType = att.mimeType ?? media.contentType;
         await this.prisma.messageAttachment.update({
           where: { id: att.id },
-          data: {
-            storageKey: key,
-            sizeBytes: media.body.byteLength,
-            sha256: createHash('sha256').update(media.body).digest('hex'),
-            mimeType: att.mimeType ?? media.contentType,
-          },
+          data: { storageKey: key, sizeBytes: media.body.byteLength, sha256: hash, mimeType },
         });
+        stored.push({ id: att.id, kind: att.kind, mimeType, sha256: hash, storageKey: key });
+      }
+      for (const att of message.attachments) {
+        if (att.storageKey && att.sha256) {
+          stored.push({ id: att.id, kind: att.kind, mimeType: att.mimeType, sha256: att.sha256, storageKey: att.storageKey });
+        }
       }
 
       const members = await this.prisma.organizationMember.findMany({
@@ -81,6 +91,10 @@ export class InboundProcessor extends WorkerHost {
         adminPhones: phones((m) => m.role === 'owner' || m.role === 'admin'),
       });
 
+      if (route.route === 'admin_direct' && message.senderPhone) {
+        await this.handleCommand(message, stored, traceId);
+      }
+
       await this.prisma.message.update({
         where: { id: messageId },
         data: {
@@ -92,6 +106,11 @@ export class InboundProcessor extends WorkerHost {
       this.logger.log({ message_id: messageId, trace_id: traceId, route: route.route, hash: sha256(messageId).slice(0, 8) }, 'mensagem processada');
       return route;
     } catch (err) {
+      // Erro não retentável da IA (ex.: resposta fora do contrato): não adianta repetir o job.
+      if (err instanceof AiServiceError && !err.retryable) {
+        await this.prisma.message.update({ where: { id: messageId }, data: { processingStatus: 'failed', processingError: err.message.slice(0, 2000) } });
+        return { route: 'skipped' };
+      }
       const final = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
       await this.prisma.message.update({
         where: { id: messageId },
@@ -100,4 +119,51 @@ export class InboundProcessor extends WorkerHost {
       throw err;
     }
   }
+
+  /** Comando de admin em conversa direta. Áudio é transcrito antes; a resposta sai pelo outbox. */
+  private async handleCommand(
+    message: { id: string; organizationId: string; conversationId: string; senderPhone: string | null; text: string | null; conversation: { externalChatId: string } },
+    attachments: StoredAttachment[],
+    traceId: string | null,
+  ) {
+    let text = message.text ?? '';
+    const audio = attachments.find((a) => a.kind === 'audio');
+    if (!text && audio) {
+      const url = await this.storage.signedGetUrl(audio.storageKey);
+      const t = await this.ai.transcribe(
+        { mediaUrl: url, mimeType: audio.mimeType ?? 'audio/ogg', language: 'pt', sourceMessageId: message.id },
+        `transcribe:${message.id}`,
+        traceId ?? undefined,
+      );
+      text = t.text;
+      await this.prisma.messageAttachment.update({ where: { id: audio.id }, data: { transcript: t.text } });
+    }
+    const proof = attachments.find((a) => a.kind === 'image' || a.kind === 'document');
+    const result = await this.commands.handle({
+      organizationId: message.organizationId,
+      conversationId: message.conversationId,
+      messageId: message.id,
+      senderPhone: message.senderPhone!,
+      text,
+      attachment: proof ? { id: proof.id, sha256: proof.sha256, storageKey: proof.storageKey } : null,
+    });
+    if (result.reply) {
+      // Chave pela mensagem: reprocessar o job não manda a resposta duas vezes.
+      await enqueueDelivery(this.prisma, {
+        organizationId: message.organizationId,
+        recipient: message.conversation.externalChatId,
+        text: result.reply,
+        idempotencyKey: `reply:${message.id}`,
+      });
+    }
+    this.logger.log({ message_id: message.id, trace_id: traceId, action: result.action }, 'comando processado');
+  }
+}
+
+interface StoredAttachment {
+  id: string;
+  kind: string;
+  mimeType: string | null;
+  sha256: string;
+  storageKey: string;
 }
