@@ -1,0 +1,38 @@
+{
+  "name": "@coxia/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "prisma generate && tsup src/index.ts --format cjs --dts --clean",
+    "dev": "tsup src/index.ts --format cjs --dts --watch",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "~6.16.0"
+  },
+  "devDependencies": {
+    "@coxia/shared": "workspace:*",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.17.0",
+    "bcryptjs": "^2.4.3",
+    "prisma": "~6.16.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

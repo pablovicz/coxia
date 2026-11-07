@@ -1,0 +1,28 @@
+{
+  "provider": "zapi",
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "providerMessageId": "3EB0A1B2C3D4E5F60007",
+  "dedupeKey": "zapi:3E1A2B3C4D5E6F708192A3B4C5D6E7F8:3EB0A1B2C3D4E5F60007",
+  "kind": "text",
+  "chat": {
+    "id": "120363019502650977-group",
+    "isGroup": true,
+    "name": "PROJETO XPO renomeado"
+  },
+  "sender": {
+    "phone": "5511977776666",
+    "lid": null,
+    "name": "Ana Admin"
+  },
+  "fromMe": false,
+  "sentAt": "2026-11-06T14:10:00.000Z",
+  "text": "Mudei o nome do grupo, segue tudo igual.",
+  "media": null,
+  "notification": null,
+  "flags": {
+    "isEdit": false,
+    "isStatusReply": false,
+    "isNewsletter": false,
+    "isBroadcast": false
+  }
+}

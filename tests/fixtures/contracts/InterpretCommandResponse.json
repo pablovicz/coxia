@@ -1,0 +1,68 @@
+{
+  "valid": [
+    {
+      "command": {
+        "intent": "booking.create",
+        "spaceHint": "sala grande",
+        "startAt": "2026-11-13T14:00:00-03:00",
+        "endAt": "2026-11-13T17:00:00-03:00",
+        "responsibleName": "Micaela",
+        "notes": null,
+        "recurrence": null
+      },
+      "confidence": 0.93,
+      "clarificationQuestion": null,
+      "meta": { "executionId": "e1", "model": "gpt-4.1-mini", "promptVersion": "commands@2026-11-06", "parserVersion": "1", "inputTokens": 300, "outputTokens": 80, "latencyMs": 900 }
+    },
+    {
+      "command": {
+        "intent": "booking.create",
+        "spaceHint": "sala pequena",
+        "startAt": "2026-11-10T19:00:00-03:00",
+        "endAt": "2026-11-10T21:00:00-03:00",
+        "responsibleName": null,
+        "notes": null,
+        "recurrence": { "freq": "WEEKLY", "byWeekday": [2] }
+      },
+      "confidence": 0.9,
+      "clarificationQuestion": null,
+      "meta": { "executionId": "e2", "model": "gpt-4.1-mini", "promptVersion": "commands@2026-11-06", "parserVersion": "1", "inputTokens": 300, "outputTokens": 80, "latencyMs": 900 }
+    },
+    {
+      "command": { "intent": "booking.cancel", "spaceHint": null, "around": "2026-11-07T15:00:00-03:00" },
+      "confidence": 0.6,
+      "clarificationQuestion": "Há duas reservas às 15h amanhã (Sala Grande e Sala Pequena). Qual delas devo cancelar?",
+      "meta": { "executionId": "e3", "model": "gpt-4.1-mini", "promptVersion": "commands@2026-11-06", "parserVersion": "1", "inputTokens": 300, "outputTokens": 80, "latencyMs": 900 }
+    },
+    {
+      "command": { "intent": "none" },
+      "confidence": 0.99,
+      "clarificationQuestion": null,
+      "meta": { "executionId": "e4", "model": "fixture", "promptVersion": "commands@2026-11-06", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    }
+  ],
+  "invalid": [
+    {
+      "_why": "horário sem offset de fuso",
+      "command": { "intent": "booking.cancel", "spaceHint": null, "around": "2026-11-07T15:00:00" },
+      "confidence": 0.6,
+      "clarificationQuestion": null,
+      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    },
+    {
+      "_why": "dia da semana fora de 1..7",
+      "command": {
+        "intent": "booking.create",
+        "spaceHint": "sala pequena",
+        "startAt": "2026-11-10T19:00:00-03:00",
+        "endAt": "2026-11-10T21:00:00-03:00",
+        "responsibleName": null,
+        "notes": null,
+        "recurrence": { "freq": "WEEKLY", "byWeekday": [0] }
+      },
+      "confidence": 0.9,
+      "clarificationQuestion": null,
+      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    }
+  ]
+}

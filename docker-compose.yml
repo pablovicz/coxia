@@ -1,0 +1,187 @@
+# Ambiente de desenvolvimento completo da Coxia.
+#   docker compose up --build        → tudo (web, api, worker, ai, postgres, redis, minio)
+#   docker compose up postgres redis minio minio-init   → só infraestrutura (apps rodando no host com `pnpm dev`)
+# Valores abaixo são exclusivos de desenvolvimento local. Produção usa variáveis do Railway.
+
+x-node-dev-env: &node-dev-env
+  NODE_ENV: development
+  LOG_LEVEL: debug
+  DATABASE_URL: postgresql://coxia:coxia@postgres:5432/coxia?schema=public
+  REDIS_URL: redis://redis:6379
+  ORG_DEFAULT_TIMEZONE: America/Sao_Paulo
+  WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-fake}
+  ZAPI_INSTANCE_ID: ${ZAPI_INSTANCE_ID:-}
+  ZAPI_INSTANCE_TOKEN: ${ZAPI_INSTANCE_TOKEN:-}
+  ZAPI_CLIENT_TOKEN: ${ZAPI_CLIENT_TOKEN:-}
+  ZAPI_WEBHOOK_SECRET: ${ZAPI_WEBHOOK_SECRET:-dev-webhook-secret-change-me}
+  AI_SERVICE_URL: http://ai:8000
+  AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-dev-ai-service-token}
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: coxia-media
+  S3_ACCESS_KEY_ID: coxia
+  S3_SECRET_ACCESS_KEY: coxia-dev-secret
+  S3_FORCE_PATH_STYLE: "true"
+  # Bind mounts do Windows/macOS não propagam eventos de arquivo: usar polling.
+  CHOKIDAR_USEPOLLING: "true"
+  TSC_WATCHFILE: DynamicPriorityPolling
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: coxia
+      POSTGRES_PASSWORD: coxia
+      POSTGRES_DB: coxia
+    # Porta do host configurável (ex.: POSTGRES_PORT=5433 no .env se já houver um Postgres local).
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coxia -d coxia"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [coxia]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports: ["6379:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [coxia]
+
+  # A MinIO deixou de publicar imagens públicas em Docker Hub/Quay; a Chainguard mantém builds gratuitos.
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: coxia
+      MINIO_ROOT_PASSWORD: coxia-dev-secret
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio-data:/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [coxia]
+
+  minio-init:
+    image: cgr.dev/chainguard/minio-client:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MC_HOST_local: http://coxia:coxia-dev-secret@minio:9000
+    command: ["mb", "--ignore-existing", "local/coxia-media"]
+    restart: on-failure
+    networks: [coxia]
+
+  migrate:
+    build: { context: ., dockerfile: apps/api/Dockerfile, target: dev }
+    # Migrations + seed idempotente (organização, salas, contas padrão, instância e admin opcional).
+    command: ["sh", "-c", "pnpm --filter @coxia/database db:deploy && pnpm --filter @coxia/database db:seed"]
+    environment:
+      <<: *node-dev-env
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administradora}
+      SEED_ADMIN_PHONE: ${SEED_ADMIN_PHONE:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+    volumes:
+      - ./packages/database/prisma:/repo/packages/database/prisma
+    networks: [coxia]
+
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile, target: dev }
+    environment:
+      <<: *node-dev-env
+      PORT: "3000"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-dev-jwt-secret-0000}
+      CORS_ORIGINS: http://localhost:5173
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    volumes: &node-src
+      - ./apps/api/src:/repo/apps/api/src
+      - ./apps/worker/src:/repo/apps/worker/src
+      - ./packages/contracts/src:/repo/packages/contracts/src
+      - ./packages/shared/src:/repo/packages/shared/src
+      - ./packages/config/src:/repo/packages/config/src
+      - ./packages/database/src:/repo/packages/database/src
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    networks: [coxia]
+
+  worker:
+    build: { context: ., dockerfile: apps/worker/Dockerfile, target: dev }
+    environment:
+      <<: *node-dev-env
+      WORKER_CONCURRENCY: "5"
+      MORNING_BRIEFING_TIME: "08:00"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    volumes: *node-src
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    networks: [coxia]
+
+  ai:
+    build: { context: ., dockerfile: apps/ai/Dockerfile, target: dev }
+    environment:
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-dev-ai-service-token}
+      # "fixture" responde de forma determinística sem chamar a OpenAI; "openai" exige OPENAI_API_KEY.
+      AI_PROVIDER: ${AI_PROVIDER:-fixture}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WATCHFILES_FORCE_POLLING: "true"
+    ports: ["8000:8000"]
+    volumes:
+      - ./apps/ai/coxia_ai:/app/coxia_ai
+      - ./apps/ai/tests:/app/tests
+      - ./tests/fixtures:/fixtures:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    networks: [coxia]
+
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile, target: dev }
+    environment:
+      VITE_API_URL: http://localhost:3000
+      VITE_USE_POLLING: "true"
+    ports: ["5173:5173"]
+    depends_on:
+      api: { condition: service_started }
+    volumes:
+      - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/public:/repo/apps/web/public
+      - ./apps/web/index.html:/repo/apps/web/index.html
+    networks: [coxia]
+
+networks:
+  coxia:
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

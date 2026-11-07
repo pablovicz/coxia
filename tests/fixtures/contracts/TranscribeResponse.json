@@ -1,0 +1,18 @@
+{
+  "valid": [
+    {
+      "text": "Oi pessoal, esse é o briefing da XPO. A abertura é dia doze de dezembro, o Bruno cuida da produção e a gente tem uns oito mil de orçamento.",
+      "durationSeconds": 94,
+      "meta": { "executionId": "e1", "model": "gpt-4o-mini-transcribe", "promptVersion": "transcribe@2026-11-06", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 4100 }
+    },
+    {
+      "text": "",
+      "durationSeconds": null,
+      "meta": { "executionId": "e2", "model": "fixture", "promptVersion": "transcribe@2026-11-06", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    }
+  ],
+  "invalid": [
+    { "_why": "duração negativa", "text": "x", "durationSeconds": -1, "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 } },
+    { "_why": "tokens negativos", "text": "x", "durationSeconds": 1, "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": -5, "outputTokens": 0, "latencyMs": 0 } }
+  ]
+}

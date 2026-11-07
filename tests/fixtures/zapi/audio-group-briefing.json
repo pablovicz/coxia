@@ -1,0 +1,30 @@
+{
+  "isStatusReply": false,
+  "chatLid": null,
+  "connectedPhone": "5511900000000",
+  "waitingMessage": false,
+  "isEdit": false,
+  "isGroup": true,
+  "isNewsletter": false,
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "messageId": "3EB0A1B2C3D4E5F60003",
+  "phone": "120363019502650977-group",
+  "fromMe": false,
+  "momment": 1793963100000,
+  "status": "RECEIVED",
+  "chatName": "PROJETO - XPO",
+  "senderPhoto": null,
+  "senderName": "Ana Admin",
+  "participantPhone": "5511977776666",
+  "participantLid": null,
+  "photo": null,
+  "broadcast": false,
+  "type": "ReceivedCallback",
+  "audio": {
+    "ptt": true,
+    "seconds": 94,
+    "audioUrl": "https://storage.z-api.io/media/briefing-xpo.ogg",
+    "mimeType": "audio/ogg; codecs=opus",
+    "viewOnce": false
+  }
+}

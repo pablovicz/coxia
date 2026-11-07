@@ -1,0 +1,109 @@
+{
+  "valid": [
+    {
+      "events": [
+        {
+          "type": "task",
+          "sourceMessageId": "msg_01",
+          "confidence": 0.92,
+          "commitment": "committed",
+          "evidence": "Eu fecho o cartaz até quarta",
+          "title": "Fechar o cartaz",
+          "assigneeName": "Bruno",
+          "dueDate": "2026-11-11"
+        },
+        {
+          "type": "task",
+          "sourceMessageId": "msg_02",
+          "confidence": 0.55,
+          "commitment": "suggested",
+          "evidence": "Seria legal alguém ver a luz",
+          "title": "Verificar a iluminação",
+          "assigneeName": null,
+          "dueDate": null
+        },
+        {
+          "type": "quote",
+          "sourceMessageId": "msg_03",
+          "confidence": 0.88,
+          "commitment": "unclear",
+          "evidence": "Orçamento do som, ainda não aprovado",
+          "description": "Sonorização",
+          "vendor": null,
+          "amountCents": 250000,
+          "currency": "BRL"
+        },
+        {
+          "type": "payment_proof",
+          "sourceMessageId": "msg_04",
+          "confidence": 0.8,
+          "commitment": "committed",
+          "evidence": "Paguei a gráfica, R$ 480,00",
+          "description": "Gráfica",
+          "amountCents": 48000,
+          "currency": "BRL",
+          "paidOn": "2026-11-06"
+        }
+      ],
+      "meta": {
+        "executionId": "aiexec_01",
+        "model": "gpt-4.1-mini",
+        "promptVersion": "project-events@2026-11-06",
+        "parserVersion": "1",
+        "inputTokens": 812,
+        "outputTokens": 240,
+        "latencyMs": 1830
+      }
+    },
+    {
+      "events": [],
+      "meta": {
+        "executionId": "aiexec_02",
+        "model": "fixture",
+        "promptVersion": "project-events@2026-11-06",
+        "parserVersion": "1",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "latencyMs": 0
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "_why": "valor monetário com ponto flutuante",
+      "events": [
+        {
+          "type": "expense",
+          "sourceMessageId": "m",
+          "confidence": 0.9,
+          "commitment": "committed",
+          "evidence": "x",
+          "description": "x",
+          "vendor": null,
+          "amountCents": 480.5,
+          "currency": "BRL",
+          "claimedStatus": "paid"
+        }
+      ],
+      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    },
+    {
+      "_why": "tipo de evento desconhecido",
+      "events": [
+        { "type": "payment", "sourceMessageId": "m", "confidence": 0.9, "commitment": "committed", "evidence": "x" }
+      ],
+      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    },
+    {
+      "_why": "confiança acima de 1",
+      "events": [
+        { "type": "decision", "sourceMessageId": "m", "confidence": 1.4, "commitment": "committed", "evidence": "x", "summary": "x" }
+      ],
+      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    },
+    {
+      "_why": "meta ausente (versão de prompt/modelo é obrigatória)",
+      "events": []
+    }
+  ]
+}

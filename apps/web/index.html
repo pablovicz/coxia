@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F7F4EB" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#161E19" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Coxia — a inteligência por trás da cena." />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Coxia</title>
+    <script>
+      // Aplica o tema antes da primeira pintura (evita flash claro → escuro).
+      (function () {
+        try {
+          var pref = localStorage.getItem('coxia-theme') || 'system';
+          var dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

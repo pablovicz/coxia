@@ -1,0 +1,9 @@
+{
+  "valid": [
+    { "error": { "code": "upstream_timeout", "message": "OpenAI não respondeu a tempo", "retryable": true } },
+    { "error": { "code": "invalid_request", "message": "messages: lista vazia", "retryable": false } }
+  ],
+  "invalid": [
+    { "_why": "retryable ausente", "error": { "code": "x", "message": "y" } }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "isStatusReply": false,
+  "chatLid": null,
+  "connectedPhone": "5511900000000",
+  "waitingMessage": false,
+  "isEdit": false,
+  "isGroup": true,
+  "isNewsletter": false,
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "messageId": "3EB0A1B2C3D4E5F60004",
+  "phone": "120363019502650977-group",
+  "fromMe": false,
+  "momment": 1793972400000,
+  "status": "RECEIVED",
+  "chatName": "PROJETO - XPO",
+  "senderPhoto": null,
+  "senderName": "Bruno Produção",
+  "participantPhone": "5511966665555",
+  "participantLid": null,
+  "photo": null,
+  "broadcast": false,
+  "type": "ReceivedCallback",
+  "image": {
+    "mimeType": "image/jpeg",
+    "imageUrl": "https://storage.z-api.io/media/comprovante-pix.jpg",
+    "thumbnailUrl": "https://storage.z-api.io/media/comprovante-pix-thumb.jpg",
+    "caption": "Paguei a gráfica, R$ 480,00",
+    "width": 1080,
+    "height": 1920,
+    "viewOnce": false
+  }
+}

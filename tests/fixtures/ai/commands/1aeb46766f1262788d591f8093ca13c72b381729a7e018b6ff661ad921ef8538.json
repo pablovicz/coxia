@@ -1,0 +1,6 @@
+{
+  "_text": "Cancela a reserva das 15h de amanhã",
+  "command": { "intent": "booking.cancel", "spaceHint": null, "around": "2026-11-07T15:00:00-03:00" },
+  "confidence": 0.62,
+  "clarificationQuestion": "Há reservas às 15h amanhã na Sala Grande e na Sala Pequena. Qual delas devo cancelar?"
+}

@@ -1,0 +1,14 @@
+{
+  "description": "Payloads de webhook da Z-API usados como entrada dos golden tests do normalizador. 'docs' = montado a partir da documentação pública; DEVE ser substituído por payload real capturado na Etapa 0 (anonimizar telefones e nomes antes de versionar). 'unverified' = formato ainda não confirmado na documentação.",
+  "fixtures": {
+    "text-direct.json": { "source": "docs", "covers": "texto em chat direto" },
+    "text-group-first-message.json": { "source": "docs", "covers": "primeira mensagem válida em grupo PROJETO - XPO (ativa o workspace)" },
+    "audio-group-briefing.json": { "source": "docs", "covers": "áudio PTT de briefing em grupo" },
+    "image-group-receipt.json": { "source": "docs", "covers": "imagem com legenda (comprovante) em grupo" },
+    "document-group-quote.json": { "source": "docs", "covers": "PDF de orçamento em grupo (cotação não é pagamento)" },
+    "text-group-from-me.json": { "source": "docs", "covers": "mensagem enviada pelo próprio número conectado (fromMe)" },
+    "text-group-after-rename.json": { "source": "docs", "covers": "mesmo group_id com chatName diferente (renomeação preserva identidade)" },
+    "notification-participant-add-no-id.json": { "source": "unverified", "covers": "notificação de participante sem messageId (chave determinística)" },
+    "status-callback-ignored.json": { "source": "docs", "covers": "callback de status de leitura deve ser ignorado" }
+  }
+}

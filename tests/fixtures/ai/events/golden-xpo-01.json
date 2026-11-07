@@ -1,0 +1,25 @@
+{
+  "events": [
+    {
+      "type": "task",
+      "sourceMessageId": "golden-xpo-01",
+      "confidence": 0.93,
+      "commitment": "committed",
+      "evidence": "Eu fecho o cartaz até quarta.",
+      "title": "Fechar o cartaz",
+      "assigneeName": "Bruno",
+      "dueDate": "2026-11-11"
+    },
+    {
+      "type": "quote",
+      "sourceMessageId": "golden-xpo-01",
+      "confidence": 0.9,
+      "commitment": "unclear",
+      "evidence": "Orçamento do som chegou: 2.500, ainda não aprovado.",
+      "description": "Sonorização",
+      "vendor": null,
+      "amountCents": 250000,
+      "currency": "BRL"
+    }
+  ]
+}

@@ -1,0 +1,823 @@
+// Coxia — modelo de dados inicial do MVP.
+// Convenções:
+// - Tabelas e colunas em snake_case (@@map/@map); modelos em PascalCase.
+// - Instantes em UTC (timestamptz). Datas de calendário (vencimento, competência) em `date`,
+//   interpretadas no fuso da organização.
+// - Valores monetários em centavos inteiros (amount_cents) + currency.
+// - organization_id em todas as entidades de domínio (piloto com uma organização, pronto para mais).
+// - Regras que o Prisma não expressa (EXCLUDE USING gist, CHECKs) ficam nas migrations SQL.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum MemberRole {
+  owner
+  admin
+  staff
+  viewer
+}
+
+enum ProjectStatus {
+  draft
+  active
+  closing
+  closed
+}
+
+enum BookingStatus {
+  tentative
+  confirmed
+  cancelled
+}
+
+enum BillOccurrenceStatus {
+  pending
+  partially_paid
+  paid
+  overdue
+  cancelled
+}
+
+enum ProjectExpenseStatus {
+  proposed
+  confirmed
+  paid
+  rejected
+}
+
+enum ProjectExpenseKind {
+  quote
+  expense
+}
+
+enum ProjectTaskStatus {
+  proposed
+  open
+  done
+  cancelled
+}
+
+enum ProjectEventType {
+  briefing
+  task
+  decision
+  quote
+  expense
+  payment_proof
+  question
+  close_request
+}
+
+enum ReviewStatus {
+  pending_review
+  auto_applied
+  confirmed
+  rejected
+}
+
+enum Commitment {
+  committed
+  suggested
+  unclear
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageProcessingStatus {
+  received
+  queued
+  processing
+  processed
+  ignored
+  failed
+}
+
+enum ReminderKind {
+  one_time
+  recurring
+}
+
+enum NotificationKind {
+  morning_briefing
+  booking_day_before
+  booking_one_hour_before
+  bill_day_before
+  bill_due_today
+  bill_overdue
+  project_checkin
+  project_confirmation
+  ad_hoc
+}
+
+enum NotificationScheduleStatus {
+  scheduled
+  enqueued
+  done
+  skipped
+  cancelled
+}
+
+enum DeliveryStatus {
+  pending
+  sending
+  sent
+  failed
+  dead
+}
+
+enum AiExecutionStatus {
+  succeeded
+  failed
+}
+
+// ───────────────────────── Organização e acesso ─────────────────────────
+
+model Organization {
+  id                  String   @id @default(cuid())
+  name                String
+  slug                String   @unique
+  timezone            String   @default("America/Sao_Paulo")
+  /// Prefixo que identifica grupos de projeto, ex.: "PROJETO - XPO".
+  projectGroupPrefix  String   @default("PROJETO") @map("project_group_prefix")
+  /// Hora local (HH:mm) do briefing matinal.
+  morningBriefingTime String   @default("08:00") @map("morning_briefing_time")
+  /// Dias que mensagens e anexos são mantidos antes da rotina de retenção.
+  retentionDays       Int      @default(730) @map("retention_days")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members                OrganizationMember[]
+  whatsappInstances      WhatsappInstance[]
+  whatsappGroups         WhatsappGroup[]
+  conversations          Conversation[]
+  messages               Message[]
+  attachments            MessageAttachment[]
+  projects               Project[]
+  projectChannels        ProjectChannel[]
+  projectEvents          ProjectEvent[]
+  projectTasks           ProjectTask[]
+  projectDecisions       ProjectDecision[]
+  projectExpenses        ProjectExpense[]
+  projectSummaries       ProjectSummary[]
+  spaces                 Space[]
+  spaceBlocks            SpaceBlock[]
+  bookings               Booking[]
+  bookingOccurrences     BookingOccurrence[]
+  reminders              Reminder[]
+  recurringBills         RecurringBill[]
+  billOccurrences        BillOccurrence[]
+  paymentAttachments     PaymentAttachment[]
+  notificationSchedules  NotificationSchedule[]
+  notificationDeliveries NotificationDelivery[]
+  aiExecutions           AiExecution[]
+  auditEvents            AuditEvent[]
+
+  @@map("organizations")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String?  @unique
+  /// Telefone só com dígitos (E.164 sem '+'); identifica o usuário no WhatsApp.
+  phone        String?  @unique
+  passwordHash String?  @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  memberships OrganizationMember[]
+
+  @@map("users")
+}
+
+model OrganizationMember {
+  id                      String     @id @default(cuid())
+  organizationId          String     @map("organization_id")
+  userId                  String     @map("user_id")
+  role                    MemberRole @default(staff)
+  /// Pode criar/encerrar workspaces de projeto pelo WhatsApp.
+  canManageProjects       Boolean    @default(false) @map("can_manage_projects")
+  receivesMorningBriefing Boolean    @default(false) @map("receives_morning_briefing")
+  createdAt               DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("organization_members")
+}
+
+// ───────────────────────────── WhatsApp ─────────────────────────────
+
+model WhatsappInstance {
+  id                 String    @id @default(cuid())
+  organizationId     String    @map("organization_id")
+  provider           String    @default("zapi")
+  externalInstanceId String    @map("external_instance_id")
+  phone              String?
+  connected          Boolean   @default(false)
+  lastCheckedAt      DateTime? @map("last_checked_at") @db.Timestamptz(6)
+  lastConnectedAt    DateTime? @map("last_connected_at") @db.Timestamptz(6)
+  lastError          String?   @map("last_error")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  groups        WhatsappGroup[]
+  conversations Conversation[]
+
+  @@unique([provider, externalInstanceId])
+  @@map("whatsapp_instances")
+}
+
+model WhatsappGroup {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  instanceId      String   @map("instance_id")
+  /// ID estável do grupo no provedor. Nunca usar o nome como chave.
+  externalGroupId String   @map("external_group_id")
+  name            String?
+  lastSeenAt      DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instance       WhatsappInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  conversation   Conversation?
+  projectChannel ProjectChannel?
+
+  @@unique([instanceId, externalGroupId])
+  @@map("whatsapp_groups")
+}
+
+model Conversation {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  instanceId     String    @map("instance_id")
+  externalChatId String    @map("external_chat_id")
+  isGroup        Boolean   @map("is_group")
+  groupId        String?   @unique @map("group_id")
+  lastMessageAt  DateTime? @map("last_message_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  instance     WhatsappInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  group        WhatsappGroup?   @relation(fields: [groupId], references: [id])
+  messages     Message[]
+
+  @@unique([instanceId, externalChatId])
+  @@map("conversations")
+}
+
+model Message {
+  id                String                  @id @default(cuid())
+  organizationId    String                  @map("organization_id")
+  conversationId    String                  @map("conversation_id")
+  direction         MessageDirection
+  provider          String
+  externalMessageId String?                 @map("external_message_id")
+  /// (provider, instance, message_id) ou chave determinística do evento — impede reprocessar reenvios.
+  dedupeKey         String                  @unique @map("dedupe_key")
+  kind              String
+  senderPhone       String?                 @map("sender_phone")
+  senderName        String?                 @map("sender_name")
+  fromMe            Boolean                 @default(false) @map("from_me")
+  text              String?
+  sentAt            DateTime                @map("sent_at") @db.Timestamptz(6)
+  receivedAt        DateTime                @default(now()) @map("received_at") @db.Timestamptz(6)
+  rawPayload        Json?                   @map("raw_payload")
+  normalized        Json?
+  processingStatus  MessageProcessingStatus @default(received) @map("processing_status")
+  processingError   String?                 @map("processing_error")
+  processedAt       DateTime?               @map("processed_at") @db.Timestamptz(6)
+  traceId           String?                 @map("trace_id")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  attachments  MessageAttachment[]
+
+  @@index([conversationId, sentAt])
+  @@index([processingStatus])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  messageId       String   @map("message_id")
+  kind            String
+  mimeType        String?  @map("mime_type")
+  fileName        String?  @map("file_name")
+  /// URL temporária do provedor; o conteúdo é copiado para o bucket.
+  sourceUrl       String   @map("source_url")
+  storageKey      String?  @map("storage_key")
+  sizeBytes       Int?     @map("size_bytes")
+  sha256          String?
+  durationSeconds Float?   @map("duration_seconds")
+  transcript      String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, sha256])
+  @@map("message_attachments")
+}
+
+// ───────────────────────────── Projetos ─────────────────────────────
+
+model Project {
+  id                   String        @id @default(cuid())
+  organizationId       String        @map("organization_id")
+  title                String
+  status               ProjectStatus @default(draft)
+  objective            String?
+  /// Último briefing estruturado aprovado (ProjectBriefing do contrato de IA).
+  briefing             Json?
+  estimatedBudgetCents Int?          @map("estimated_budget_cents")
+  currency             String        @default("BRL")
+  createdByPhone       String?       @map("created_by_phone")
+  activatedAt          DateTime?     @map("activated_at") @db.Timestamptz(6)
+  closingRequestedAt   DateTime?     @map("closing_requested_at") @db.Timestamptz(6)
+  closedAt             DateTime?     @map("closed_at") @db.Timestamptz(6)
+  closedByPhone        String?       @map("closed_by_phone")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channels     ProjectChannel[]
+  events       ProjectEvent[]
+  tasks        ProjectTask[]
+  decisions    ProjectDecision[]
+  expenses     ProjectExpense[]
+  summaries    ProjectSummary[]
+
+  @@index([organizationId, status])
+  @@map("projects")
+}
+
+/// Vínculo grupo ↔ projeto. Um grupo pertence a no máximo um projeto (unique em whatsapp_group_id).
+model ProjectChannel {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  projectId       String   @map("project_id")
+  whatsappGroupId String   @unique @map("whatsapp_group_id")
+  displayName     String?  @map("display_name")
+  linkedAt        DateTime @default(now()) @map("linked_at") @db.Timestamptz(6)
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  whatsappGroup WhatsappGroup @relation(fields: [whatsappGroupId], references: [id])
+
+  @@map("project_channels")
+}
+
+/// Evento extraído (pela IA ou por regra) de uma mensagem. É a trilha de evidência de tudo que vira estado.
+model ProjectEvent {
+  id              String           @id @default(cuid())
+  organizationId  String           @map("organization_id")
+  projectId       String           @map("project_id")
+  type            ProjectEventType
+  sourceMessageId String           @map("source_message_id")
+  /// Hash do conteúdo normalizado do evento: (mensagem, tipo, fingerprint) é único → reenvio não duplica.
+  fingerprint     String
+  payload         Json
+  confidence      Float?
+  commitment      Commitment       @default(unclear)
+  reviewStatus    ReviewStatus     @default(pending_review) @map("review_status")
+  authorPhone     String?          @map("author_phone")
+  aiExecutionId   String?          @map("ai_execution_id")
+  model           String?
+  promptVersion   String?          @map("prompt_version")
+  parserVersion   String?          @map("parser_version")
+  reviewedByPhone String?          @map("reviewed_by_phone")
+  reviewedAt      DateTime?        @map("reviewed_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  aiExecution  AiExecution?     @relation(fields: [aiExecutionId], references: [id])
+  task         ProjectTask?
+  decision     ProjectDecision?
+  expense      ProjectExpense?
+
+  @@unique([sourceMessageId, type, fingerprint])
+  @@index([projectId, createdAt])
+  @@map("project_events")
+}
+
+model ProjectTask {
+  id              String            @id @default(cuid())
+  organizationId  String            @map("organization_id")
+  projectId       String            @map("project_id")
+  title           String
+  assigneeName    String?           @map("assignee_name")
+  assigneePhone   String?           @map("assignee_phone")
+  dueDate         DateTime?         @map("due_date") @db.Date
+  status          ProjectTaskStatus @default(proposed)
+  sourceEventId   String?           @unique @map("source_event_id")
+  sourceMessageId String?           @map("source_message_id")
+  completedAt     DateTime?         @map("completed_at") @db.Timestamptz(6)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceEvent  ProjectEvent? @relation(fields: [sourceEventId], references: [id])
+
+  @@index([projectId, status])
+  @@map("project_tasks")
+}
+
+model ProjectDecision {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  projectId       String   @map("project_id")
+  summary         String
+  sourceEventId   String?  @unique @map("source_event_id")
+  sourceMessageId String?  @map("source_message_id")
+  decidedAt       DateTime @default(now()) @map("decided_at") @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceEvent  ProjectEvent? @relation(fields: [sourceEventId], references: [id])
+
+  @@map("project_decisions")
+}
+
+/// Cotações e despesas do projeto. Cotação não é pagamento; `paid` exige comprovação ou confirmação.
+model ProjectExpense {
+  id                String               @id @default(cuid())
+  organizationId    String               @map("organization_id")
+  projectId         String               @map("project_id")
+  kind              ProjectExpenseKind
+  description       String
+  vendor            String?
+  amountCents       Int?                 @map("amount_cents")
+  currency          String               @default("BRL")
+  status            ProjectExpenseStatus @default(proposed)
+  sourceEventId     String?              @unique @map("source_event_id")
+  sourceMessageId   String?              @map("source_message_id")
+  proofAttachmentId String?              @map("proof_attachment_id")
+  confirmedByPhone  String?              @map("confirmed_by_phone")
+  confirmedAt       DateTime?            @map("confirmed_at") @db.Timestamptz(6)
+  paidAt            DateTime?            @map("paid_at") @db.Timestamptz(6)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceEvent  ProjectEvent? @relation(fields: [sourceEventId], references: [id])
+
+  @@index([projectId, status])
+  @@map("project_expenses")
+}
+
+model ProjectSummary {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  projectId      String   @map("project_id")
+  /// daily | closing
+  kind           String
+  content        String
+  /// Estado estruturado usado para gerar o resumo (não o histórico bruto do chat).
+  stateSnapshot  Json     @map("state_snapshot")
+  aiExecutionId  String?  @map("ai_execution_id")
+  generatedAt    DateTime @default(now()) @map("generated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, generatedAt])
+  @@map("project_summaries")
+}
+
+// ───────────────────────────── Salas e reservas ─────────────────────────────
+
+model Space {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  name           String
+  slug           String
+  /// Apelidos usados nos comandos ("sala grande", "salão").
+  aliases        String[] @default([])
+  capacity       Int?
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  availabilityRules SpaceAvailabilityRule[]
+  blocks            SpaceBlock[]
+  bookings          Booking[]
+  occurrences       BookingOccurrence[]
+
+  @@unique([organizationId, slug])
+  @@map("spaces")
+}
+
+/// Horário de funcionamento por dia da semana, em hora local da organização.
+model SpaceAvailabilityRule {
+  id       String @id @default(cuid())
+  spaceId  String @map("space_id")
+  /// ISO: 1 = segunda … 7 = domingo.
+  weekday  Int
+  opensAt  String @map("opens_at") // HH:mm
+  closesAt String @map("closes_at") // HH:mm
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, weekday, opensAt])
+  @@map("space_availability_rules")
+}
+
+model SpaceBlock {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  spaceId        String   @map("space_id")
+  startAt        DateTime @map("start_at") @db.Timestamptz(6)
+  endAt          DateTime @map("end_at") @db.Timestamptz(6)
+  reason         String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space        Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@index([spaceId, startAt])
+  @@map("space_blocks")
+}
+
+/// Definição da reserva (avulsa ou série). As ocorrências concretas ficam em booking_occurrences.
+model Booking {
+  id                  String        @id @default(cuid())
+  organizationId      String        @map("organization_id")
+  spaceId             String        @map("space_id")
+  title               String?
+  responsibleName     String?       @map("responsible_name")
+  responsiblePhone    String?       @map("responsible_phone")
+  notes               String?
+  status              BookingStatus @default(confirmed)
+  /// RRULE (RFC 5545) em hora local; null para reserva avulsa.
+  recurrenceRule      String?       @map("recurrence_rule")
+  seriesUntil         DateTime?     @map("series_until") @db.Date
+  notifyOneHourBefore Boolean       @default(false) @map("notify_one_hour_before")
+  createdByPhone      String?       @map("created_by_phone")
+  sourceMessageId     String?       @map("source_message_id")
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space        Space               @relation(fields: [spaceId], references: [id])
+  occurrences  BookingOccurrence[]
+
+  @@map("bookings")
+}
+
+/// Intervalo concreto ocupado. A migration adiciona EXCLUDE USING gist que impede
+/// sobreposição de ocorrências não canceladas na mesma sala, mesmo sob concorrência.
+model BookingOccurrence {
+  id             String        @id @default(cuid())
+  organizationId String        @map("organization_id")
+  bookingId      String        @map("booking_id")
+  spaceId        String        @map("space_id")
+  startAt        DateTime      @map("start_at") @db.Timestamptz(6)
+  endAt          DateTime      @map("end_at") @db.Timestamptz(6)
+  status         BookingStatus @default(confirmed)
+  /// Ocorrência alterada individualmente (não segue mais a série).
+  isException    Boolean       @default(false) @map("is_exception")
+  cancelledAt    DateTime?     @map("cancelled_at") @db.Timestamptz(6)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  booking      Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  space        Space        @relation(fields: [spaceId], references: [id])
+
+  @@index([spaceId, startAt])
+  @@map("booking_occurrences")
+}
+
+// ───────────────────────────── Lembretes e contas ─────────────────────────────
+
+model Reminder {
+  id              String       @id @default(cuid())
+  organizationId  String       @map("organization_id")
+  kind            ReminderKind
+  title           String
+  message         String?
+  /// Para one_time: instante do aviso.
+  dueAt           DateTime?    @map("due_at") @db.Timestamptz(6)
+  /// Para recurring: RRULE em hora local da organização.
+  recurrenceRule  String?      @map("recurrence_rule")
+  nextRunAt       DateTime?    @map("next_run_at") @db.Timestamptz(6)
+  recipientPhones String[]     @default([]) @map("recipient_phones")
+  active          Boolean      @default(true)
+  lastSentAt      DateTime?    @map("last_sent_at") @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([active, nextRunAt])
+  @@map("reminders")
+}
+
+model RecurringBill {
+  id                       String    @id @default(cuid())
+  organizationId           String    @map("organization_id")
+  name                     String
+  /// aluguel | energia | agua | internet | telefone | outros
+  category                 String
+  responsibleName          String?   @map("responsible_name")
+  responsiblePhone         String?   @map("responsible_phone")
+  /// 1..31. Em meses mais curtos, vence no último dia do mês.
+  dueDay                   Int       @map("due_day")
+  estimatedAmountCents     Int?      @map("estimated_amount_cents")
+  isVariableAmount         Boolean   @default(false) @map("is_variable_amount")
+  currency                 String    @default("BRL")
+  recipientPhones          String[]  @default([]) @map("recipient_phones")
+  /// Intervalo mínimo entre reavisos de conta vencida (anti-spam).
+  overdueReminderEveryDays Int       @default(3) @map("overdue_reminder_every_days")
+  startsOn                 DateTime  @map("starts_on") @db.Date
+  endsOn                   DateTime? @map("ends_on") @db.Date
+  active                   Boolean   @default(true)
+  suspendedAt              DateTime? @map("suspended_at") @db.Timestamptz(6)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  occurrences  BillOccurrence[]
+
+  @@map("recurring_bills")
+}
+
+/// Uma ocorrência por conta e competência (unique) — o job mensal pode rodar várias vezes sem duplicar.
+model BillOccurrence {
+  id                  String               @id @default(cuid())
+  organizationId      String               @map("organization_id")
+  recurringBillId     String               @map("recurring_bill_id")
+  /// YYYY-MM
+  competence          String
+  dueDate             DateTime             @map("due_date") @db.Date
+  expectedAmountCents Int?                 @map("expected_amount_cents")
+  paidAmountCents     Int                  @default(0) @map("paid_amount_cents")
+  status              BillOccurrenceStatus @default(pending)
+  paidAt              DateTime?            @map("paid_at") @db.Timestamptz(6)
+  confirmedByPhone    String?              @map("confirmed_by_phone")
+  sourceMessageId     String?              @map("source_message_id")
+  notes               String?
+  lastOverdueNoticeAt DateTime?            @map("last_overdue_notice_at") @db.Timestamptz(6)
+  createdAt           DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recurringBill RecurringBill       @relation(fields: [recurringBillId], references: [id], onDelete: Cascade)
+  payments      PaymentAttachment[]
+
+  @@unique([recurringBillId, competence])
+  @@index([organizationId, status, dueDate])
+  @@map("bill_occurrences")
+}
+
+model PaymentAttachment {
+  id                  String    @id @default(cuid())
+  organizationId      String    @map("organization_id")
+  billOccurrenceId    String    @map("bill_occurrence_id")
+  messageAttachmentId String?   @map("message_attachment_id")
+  storageKey          String?   @map("storage_key")
+  /// Mesmo arquivo enviado duas vezes para a mesma conta = comprovante duplicado.
+  sha256              String?
+  amountCents         Int?      @map("amount_cents")
+  paidOn              DateTime? @map("paid_on") @db.Date
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billOccurrence BillOccurrence @relation(fields: [billOccurrenceId], references: [id], onDelete: Cascade)
+
+  @@unique([billOccurrenceId, sha256])
+  @@map("payment_attachments")
+}
+
+// ───────────────────────────── Notificações (outbox) ─────────────────────────────
+
+/// "Deve avisar X em tal momento". dedupe_key garante um único D-1 por ocorrência, um briefing por dia etc.
+model NotificationSchedule {
+  id             String                     @id @default(cuid())
+  organizationId String                     @map("organization_id")
+  kind           NotificationKind
+  /// Entidade alvo (bill_occurrence, booking_occurrence, project, organization).
+  targetType     String                     @map("target_type")
+  targetId       String                     @map("target_id")
+  scheduledFor   DateTime                   @map("scheduled_for") @db.Timestamptz(6)
+  dedupeKey      String                     @unique @map("dedupe_key")
+  status         NotificationScheduleStatus @default(scheduled)
+  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries   NotificationDelivery[]
+
+  @@index([status, scheduledFor])
+  @@map("notification_schedules")
+}
+
+/// Outbox de envios. Gravada na mesma transação da mudança de domínio; o worker envia com retries.
+model NotificationDelivery {
+  id                String         @id @default(cuid())
+  organizationId    String         @map("organization_id")
+  scheduleId        String?        @map("schedule_id")
+  channel           String         @default("whatsapp")
+  /// Telefone ou ID do grupo.
+  recipient         String
+  text              String
+  idempotencyKey    String         @unique @map("idempotency_key")
+  status            DeliveryStatus @default(pending)
+  attempts          Int            @default(0)
+  maxAttempts       Int            @default(5) @map("max_attempts")
+  availableAt       DateTime       @default(now()) @map("available_at") @db.Timestamptz(6)
+  lastError         String?        @map("last_error")
+  providerMessageId String?        @map("provider_message_id")
+  sentAt            DateTime?      @map("sent_at") @db.Timestamptz(6)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  schedule     NotificationSchedule? @relation(fields: [scheduleId], references: [id])
+
+  @@index([status, availableAt])
+  @@map("notification_deliveries")
+}
+
+// ───────────────────────────── Infra de domínio ─────────────────────────────
+
+model IdempotencyRecord {
+  id          String    @id @default(cuid())
+  scope       String
+  key         String
+  requestHash String    @map("request_hash")
+  response    Json?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  @@unique([scope, key])
+  @@map("idempotency_records")
+}
+
+model AiExecution {
+  id              String            @id @default(cuid())
+  organizationId  String            @map("organization_id")
+  /// transcribe | extract_briefing | extract_project_events | interpret_command | summarize
+  operation       String
+  status          AiExecutionStatus
+  model           String?
+  promptVersion   String?           @map("prompt_version")
+  parserVersion   String?           @map("parser_version")
+  inputTokens     Int               @default(0) @map("input_tokens")
+  outputTokens    Int               @default(0) @map("output_tokens")
+  latencyMs       Int               @default(0) @map("latency_ms")
+  requestHash     String            @map("request_hash")
+  sourceMessageId String?           @map("source_message_id")
+  error           String?
+  traceId         String?           @map("trace_id")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  events       ProjectEvent[]
+
+  @@index([organizationId, createdAt])
+  @@map("ai_executions")
+}
+
+model AuditEvent {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  actorUserId     String?  @map("actor_user_id")
+  actorPhone      String?  @map("actor_phone")
+  /// whatsapp | web | system | ai
+  actorChannel    String   @map("actor_channel")
+  action          String
+  entityType      String   @map("entity_type")
+  entityId        String   @map("entity_id")
+  before          Json?
+  after           Json?
+  sourceMessageId String?  @map("source_message_id")
+  traceId         String?  @map("trace_id")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, createdAt])
+  @@map("audit_events")
+}

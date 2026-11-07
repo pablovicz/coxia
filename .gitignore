@@ -1,0 +1,22 @@
+node_modules/
+.pnpm-store/
+dist/
+.turbo/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+# Playwright
+apps/web/test-results/
+apps/web/playwright-report/
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/

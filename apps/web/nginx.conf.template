@@ -1,0 +1,30 @@
+# Renderizado pelo entrypoint do nginx (envsubst) com ${PORT}.
+server {
+  listen ${PORT};
+  listen [::]:${PORT};
+  root /usr/share/nginx/html;
+  server_tokens off;
+
+  add_header X-Content-Type-Options nosniff always;
+  add_header Referrer-Policy strict-origin-when-cross-origin always;
+  add_header X-Frame-Options DENY always;
+
+  location = /health {
+    access_log off;
+    default_type application/json;
+    return 200 '{"status":"ok","service":"web"}';
+  }
+
+  # Arquivos com hash no nome: cache longo.
+  location /assets/ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+    try_files $uri =404;
+  }
+
+  # SPA: qualquer rota cai no index.html (sem cache, para pegar novas versões).
+  location / {
+    add_header Cache-Control "no-cache";
+    try_files $uri /index.html;
+  }
+}

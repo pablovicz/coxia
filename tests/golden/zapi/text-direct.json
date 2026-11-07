@@ -1,0 +1,28 @@
+{
+  "provider": "zapi",
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "providerMessageId": "3EB0A1B2C3D4E5F60001",
+  "dedupeKey": "zapi:3E1A2B3C4D5E6F708192A3B4C5D6E7F8:3EB0A1B2C3D4E5F60001",
+  "kind": "text",
+  "chat": {
+    "id": "5511988887777",
+    "isGroup": false,
+    "name": null
+  },
+  "sender": {
+    "phone": "5511988887777",
+    "lid": null,
+    "name": "Micaela"
+  },
+  "fromMe": false,
+  "sentAt": "2026-11-06T11:00:00.000Z",
+  "text": "Oi Coxia, quais salas estão livres amanhã à tarde?",
+  "media": null,
+  "notification": null,
+  "flags": {
+    "isEdit": false,
+    "isStatusReply": false,
+    "isNewsletter": false,
+    "isBroadcast": false
+  }
+}

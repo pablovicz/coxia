@@ -1,0 +1,33 @@
+{
+  "provider": "zapi",
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "providerMessageId": null,
+  "dedupeKey": "zapi:3E1A2B3C4D5E6F708192A3B4C5D6E7F8:evt-046d93ba72dc88ef9a7d4911feb39b21f052b2a9f36f0a41bdac7c4c872932f6",
+  "kind": "notification",
+  "chat": {
+    "id": "120363019502650977-group",
+    "isGroup": true,
+    "name": "PROJETO - XPO"
+  },
+  "sender": {
+    "phone": "5511977776666",
+    "lid": null,
+    "name": "Ana Admin"
+  },
+  "fromMe": false,
+  "sentAt": "2026-11-06T14:10:00.000Z",
+  "text": null,
+  "media": null,
+  "notification": {
+    "type": "GROUP_PARTICIPANT_ADD",
+    "parameters": [
+      "5511955554444"
+    ]
+  },
+  "flags": {
+    "isEdit": false,
+    "isStatusReply": false,
+    "isNewsletter": false,
+    "isBroadcast": false
+  }
+}

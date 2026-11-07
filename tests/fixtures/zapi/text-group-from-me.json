@@ -1,0 +1,26 @@
+{
+  "isStatusReply": false,
+  "chatLid": null,
+  "connectedPhone": "5511900000000",
+  "waitingMessage": false,
+  "isEdit": false,
+  "isGroup": true,
+  "isNewsletter": false,
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "messageId": "3EB0A1B2C3D4E5F60006",
+  "phone": "120363019502650977-group",
+  "fromMe": true,
+  "momment": 1793974200000,
+  "status": "RECEIVED",
+  "chatName": "PROJETO - XPO",
+  "senderPhoto": null,
+  "senderName": "Coxia",
+  "participantPhone": null,
+  "participantLid": null,
+  "photo": null,
+  "broadcast": false,
+  "type": "ReceivedCallback",
+  "text": {
+    "message": "Resumo do dia: 3 pendências abertas."
+  }
+}

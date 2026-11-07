@@ -1,0 +1,56 @@
+# Ambiente isolado para testes de integração: dados em tmpfs (descartados ao parar),
+# portas próprias e nome de projeto separado — não interfere no ambiente de desenvolvimento.
+#
+#   docker compose -f docker-compose.test.yml up -d --wait
+#   pnpm test:integration:local      (usa as variáveis abaixo)
+#   docker compose -f docker-compose.test.yml down
+name: coxia-test
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: coxia
+      POSTGRES_PASSWORD: coxia
+      POSTGRES_DB: coxia_test
+    ports: ["55432:5432"]
+    tmpfs: [/var/lib/postgresql/data]
+    command: ["postgres", "-c", "fsync=off", "-c", "synchronous_commit=off", "-c", "full_page_writes=off"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coxia -d coxia_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory-policy", "noeviction"]
+    ports: ["56379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: coxia
+      MINIO_ROOT_PASSWORD: coxia-dev-secret
+    ports: ["59000:9000"]
+    tmpfs: [/data]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  minio-init:
+    image: cgr.dev/chainguard/minio-client:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MC_HOST_local: http://coxia:coxia-dev-secret@minio:9000
+    command: ["mb", "--ignore-existing", "local/coxia-media"]
+    restart: on-failure

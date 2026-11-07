@@ -1,0 +1,41 @@
+{
+  "name": "coxia",
+  "private": true,
+  "description": "Coxia — A inteligência por trás da cena. Assistente operacional WhatsApp-first para casas culturais.",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=20.17"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "node scripts/test-integration.mjs",
+    "db:generate": "pnpm --filter @coxia/database db:generate",
+    "db:migrate": "pnpm --filter @coxia/database db:migrate",
+    "db:deploy": "pnpm --filter @coxia/database db:deploy",
+    "db:seed": "pnpm --filter @coxia/database db:seed",
+    "contracts:export": "pnpm --filter @coxia/contracts export:schemas",
+    "format": "prettier --write .",
+    "test:integration:ci": "node scripts/test-integration.mjs --no-compose",
+    "test:visual": "node scripts/playwright-docker.mjs",
+    "test:ai": "cd apps/ai && uv run pytest"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "turbo": "^2.5.4",
+    "typescript": "~5.8.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "@swc/core",
+      "esbuild",
+      "@nestjs/core"
+    ]
+  }
+}

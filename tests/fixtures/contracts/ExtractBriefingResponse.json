@@ -1,0 +1,49 @@
+{
+  "valid": [
+    {
+      "briefing": {
+        "title": "XPO — Exposição de fim de ano",
+        "objective": "Montar a exposição coletiva dos alunos do ateliê",
+        "deliverables": ["Cartaz", "Montagem da sala grande", "Coquetel de abertura"],
+        "deadlines": [
+          { "description": "Abertura", "date": "2026-12-12" },
+          { "description": "Cartaz na gráfica", "date": null }
+        ],
+        "owners": [
+          { "name": "Bruno", "responsibility": "Produção" },
+          { "name": "Micaela", "responsibility": null }
+        ],
+        "estimatedBudgetCents": 800000,
+        "openQuestions": ["Quem cuida da iluminação?"],
+        "proposedTasks": [
+          { "title": "Fechar arte do cartaz", "assigneeName": "Bruno", "dueDate": "2026-11-20" }
+        ]
+      },
+      "meta": {
+        "executionId": "aiexec_10",
+        "model": "gpt-4.1-mini",
+        "promptVersion": "briefing@2026-11-06",
+        "parserVersion": "1",
+        "inputTokens": 1200,
+        "outputTokens": 400,
+        "latencyMs": 2900
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "_why": "data fora do formato YYYY-MM-DD",
+      "briefing": {
+        "title": null,
+        "objective": null,
+        "deliverables": [],
+        "deadlines": [{ "description": "Abertura", "date": "12/12/2026" }],
+        "owners": [],
+        "estimatedBudgetCents": null,
+        "openQuestions": [],
+        "proposedTasks": []
+      },
+      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+    }
+  ]
+}

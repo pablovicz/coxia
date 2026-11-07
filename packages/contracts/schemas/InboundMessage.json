@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "zapi",
+        "fake"
+      ]
+    },
+    "instanceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "providerMessageId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "dedupeKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "text",
+        "audio",
+        "image",
+        "document",
+        "video",
+        "sticker",
+        "reaction",
+        "location",
+        "contact",
+        "notification",
+        "unknown"
+      ]
+    },
+    "chat": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "isGroup": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "isGroup",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "sender": {
+      "type": "object",
+      "properties": {
+        "phone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "phone",
+        "lid",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "fromMe": {
+      "type": "boolean"
+    },
+    "sentAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "media": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "mimeType": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "fileName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "seconds": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "voiceNote": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "url",
+            "mimeType",
+            "caption",
+            "fileName",
+            "seconds",
+            "voiceNote"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notification": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "parameters": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "type",
+            "parameters"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "flags": {
+      "type": "object",
+      "properties": {
+        "isEdit": {
+          "type": "boolean"
+        },
+        "isStatusReply": {
+          "type": "boolean"
+        },
+        "isNewsletter": {
+          "type": "boolean"
+        },
+        "isBroadcast": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "isEdit",
+        "isStatusReply",
+        "isNewsletter",
+        "isBroadcast"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "provider",
+    "instanceId",
+    "providerMessageId",
+    "dedupeKey",
+    "kind",
+    "chat",
+    "sender",
+    "fromMe",
+    "sentAt",
+    "text",
+    "media",
+    "notification",
+    "flags"
+  ],
+  "additionalProperties": false
+}

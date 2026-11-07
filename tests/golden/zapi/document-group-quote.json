@@ -1,0 +1,35 @@
+{
+  "provider": "zapi",
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "providerMessageId": "3EB0A1B2C3D4E5F60005",
+  "dedupeKey": "zapi:3E1A2B3C4D5E6F708192A3B4C5D6E7F8:3EB0A1B2C3D4E5F60005",
+  "kind": "document",
+  "chat": {
+    "id": "120363019502650977-group",
+    "isGroup": true,
+    "name": "PROJETO - XPO"
+  },
+  "sender": {
+    "phone": "5511966665555",
+    "lid": null,
+    "name": "Bruno Produção"
+  },
+  "fromMe": false,
+  "sentAt": "2026-11-06T14:10:00.000Z",
+  "text": "Orçamento do som, ainda não aprovado",
+  "media": {
+    "url": "https://storage.z-api.io/media/orcamento-som.pdf",
+    "mimeType": "application/pdf",
+    "caption": "Orçamento do som, ainda não aprovado",
+    "fileName": "orcamento-som.pdf",
+    "seconds": null,
+    "voiceNote": false
+  },
+  "notification": null,
+  "flags": {
+    "isEdit": false,
+    "isStatusReply": false,
+    "isNewsletter": false,
+    "isBroadcast": false
+  }
+}
