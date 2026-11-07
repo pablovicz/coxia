@@ -1,0 +1,17 @@
+{
+  "_input": "Orçamento do som chegou: R$ 2.500, ainda não aprovado",
+  "_comment": "Cotação não é pagamento.",
+  "events": [
+    {
+      "type": "quote",
+      "sourceMessageId": "$last",
+      "confidence": 0.9,
+      "commitment": "unclear",
+      "evidence": "Orçamento do som chegou: R$ 2.500",
+      "description": "Sonorização",
+      "vendor": null,
+      "amountCents": 250000,
+      "currency": "BRL"
+    }
+  ]
+}

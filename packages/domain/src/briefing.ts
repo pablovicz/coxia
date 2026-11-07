@@ -22,7 +22,7 @@ export interface BriefingState {
   billsOverdue: BriefingBill[];
   remindersToday: Array<{ title: string; at: Date }>;
   /** Pendências de projetos ativos (Etapa 3). */
-  projects: Array<{ title: string; openTasks: number; overdueTasks: number }>;
+  projects: Array<{ title: string; openTasks: number; overdueTasks: number; toReview: number }>;
 }
 
 export interface BriefingBooking {
@@ -75,8 +75,15 @@ export function composeMorningBriefing(s: BriefingState, greeting = 'Bom dia!'):
   section(
     'Projetos',
     s.projects
-      .filter((p) => p.openTasks > 0)
-      .map((p) => `• ${p.title}: ${p.openTasks} pendência${p.openTasks > 1 ? 's' : ''}${p.overdueTasks ? `, ${p.overdueTasks} atrasada${p.overdueTasks > 1 ? 's' : ''}` : ''}`),
+      .filter((p) => p.openTasks > 0 || p.toReview > 0)
+      .map((p) => {
+        const parts = [
+          p.openTasks ? `${p.openTasks} pendência${p.openTasks > 1 ? 's' : ''}` : null,
+          p.overdueTasks ? `${p.overdueTasks} atrasada${p.overdueTasks > 1 ? 's' : ''}` : null,
+          p.toReview ? `${p.toReview} para revisar` : null,
+        ].filter(Boolean);
+        return `• ${p.title}: ${parts.join(', ')}`;
+      }),
   );
 
   if (lines.length === 1) lines.push('', 'Nenhuma reserva hoje e nenhuma conta pendente. Bom trabalho!');
@@ -111,8 +118,11 @@ export async function loadBriefingState(db: Db, organizationId: string, date: Is
       orderBy: { nextRunAt: 'asc' },
     }),
     db.project.findMany({
-      where: { organizationId, status: 'active' },
-      include: { tasks: { where: { status: 'open' }, select: { dueDate: true } } },
+      where: { organizationId, status: { in: ['active', 'closing'] } },
+      include: {
+        tasks: { where: { status: { in: ['open', 'proposed'] } }, select: { dueDate: true, status: true, sourceEventId: true } },
+        _count: { select: { events: { where: { reviewStatus: 'pending_review' } } } },
+      },
       orderBy: { title: 'asc' },
     }),
   ]);
@@ -143,8 +153,9 @@ export async function loadBriefingState(db: Db, organizationId: string, date: Is
     remindersToday: reminders.map((r) => ({ title: r.title, at: r.nextRunAt! })),
     projects: projects.map((p) => ({
       title: p.title,
-      openTasks: p.tasks.length,
-      overdueTasks: p.tasks.filter((t) => t.dueDate && toIsoDate(t.dueDate) < date).length,
+      openTasks: p.tasks.filter((t) => t.status === 'open').length,
+      overdueTasks: p.tasks.filter((t) => t.status === 'open' && t.dueDate && toIsoDate(t.dueDate) < date).length,
+      toReview: p._count.events + p.tasks.filter((t) => t.status === 'proposed' && !t.sourceEventId).length,
     })),
   };
 }

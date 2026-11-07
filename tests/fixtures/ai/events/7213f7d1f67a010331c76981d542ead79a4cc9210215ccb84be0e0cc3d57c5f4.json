@@ -1,0 +1,14 @@
+{
+  "_input": "Cartaz pronto e enviado pra gráfica!",
+  "_comment": "Conclusão de tarefa já registrada.",
+  "events": [
+    {
+      "type": "task_done",
+      "sourceMessageId": "$last",
+      "confidence": 0.9,
+      "commitment": "committed",
+      "evidence": "Cartaz pronto",
+      "taskTitle": "Fazer o cartaz"
+    }
+  ]
+}

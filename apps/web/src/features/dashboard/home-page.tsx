@@ -44,7 +44,11 @@ export function HomePage() {
             <MetricCard highlight title="Reservas de hoje" value={String(o.todayBookings.length)} caption={o.todayBookings.length ? `Em ${roomsUsed} sala${roomsUsed > 1 ? 's' : ''}` : 'Salas livres'} />
             <MetricCard title="Contas a vencer" value={String(o.billsDueSoon.length)} caption="Próximos 7 dias" />
             <MetricCard title="Atrasadas" value={String(o.billsOverdue.length)} caption={o.billsOverdue.length ? 'Precisam de atenção' : 'Tudo em dia'} />
-            <MetricCard title="Projetos ativos" value={String(o.activeProjects)} caption="Workspaces do WhatsApp" />
+            <MetricCard
+              title="Projetos ativos"
+              value={String(o.activeProjects)}
+              caption={o.projectsToReview ? `${o.projectsToReview} ite${o.projectsToReview > 1 ? 'ns' : 'm'} para revisar` : 'Workspaces do WhatsApp'}
+            />
           </>
         ) : (
           [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-28" />)

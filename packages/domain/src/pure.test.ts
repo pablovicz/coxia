@@ -116,7 +116,11 @@ const briefingState: BriefingState = {
   billsDueToday: [],
   billsDueTomorrow: [{ name: 'Energia elétrica', dueDate: '2026-11-14', expectedCents: null, paidCents: 0 }],
   remindersToday: [{ title: 'Renovar alvará', at: at('2026-11-13T10:00') }],
-  projects: [],
+  projects: [
+    { title: 'XPO', openTasks: 2, overdueTasks: 1, toReview: 3 },
+    { title: 'Mostra de dança', openTasks: 0, overdueTasks: 0, toReview: 1 },
+    { title: 'Sarau', openTasks: 0, overdueTasks: 0, toReview: 0 },
+  ],
 };
 
 describe('golden: briefing matinal', () => {
@@ -124,7 +128,7 @@ describe('golden: briefing matinal', () => {
   it('dia vazio', () =>
     golden(
       'briefing-empty.txt',
-      composeMorningBriefing({ ...briefingState, today: [], tomorrow: [], billsOverdue: [], billsDueTomorrow: [], remindersToday: [] }),
+      composeMorningBriefing({ ...briefingState, today: [], tomorrow: [], billsOverdue: [], billsDueTomorrow: [], remindersToday: [], projects: [] }),
     ));
   it('sem reservas hoje, mas com contas', () =>
     golden('briefing-no-bookings.txt', composeMorningBriefing({ ...briefingState, today: [], tomorrow: [], remindersToday: [] })));

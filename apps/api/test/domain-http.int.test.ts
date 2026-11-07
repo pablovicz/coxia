@@ -178,3 +178,56 @@ describe('lembretes', () => {
     await http().post('/reminders').set(as('owner')).send({ title: 'x', dueAt: `${year}-01-10T09:00:00-03:00`, recipientPhones: [] }).expect(400);
   });
 });
+
+describe('projetos', () => {
+  it('lista, revisa sugestões e encerra com relatório; RBAC por papel', async () => {
+    const p = await prisma.project.create({ data: { organizationId: orgId, title: 'XPO', status: 'active', estimatedBudgetCents: 500000 } });
+    const msg = { organizationId: orgId, projectId: p.id, sourceMessageId: `m-${randomUUID()}`, commitment: 'suggested' as const };
+    const taskEvent = await prisma.projectEvent.create({ data: { ...msg, type: 'task', fingerprint: 'f1', payload: {}, reviewStatus: 'pending_review' } });
+    const task = await prisma.projectTask.create({
+      data: { organizationId: orgId, projectId: p.id, title: 'Ver a luz', status: 'proposed', sourceEventId: taskEvent.id },
+    });
+    const quoteEvent = await prisma.projectEvent.create({ data: { ...msg, type: 'quote', fingerprint: 'f2', payload: {}, reviewStatus: 'pending_review' } });
+    const quote = await prisma.projectExpense.create({
+      data: { organizationId: orgId, projectId: p.id, kind: 'quote', description: 'Som', amountCents: 250000, status: 'proposed', sourceEventId: quoteEvent.id },
+    });
+    const decision = await prisma.projectEvent.create({
+      data: {
+        ...msg,
+        type: 'decision',
+        fingerprint: 'f3',
+        payload: { type: 'decision', summary: 'Abertura às 19h', sourceMessageId: msg.sourceMessageId, confidence: 0.6, commitment: 'suggested', evidence: 'x' },
+        reviewStatus: 'pending_review',
+      },
+    });
+
+    const list = await http().get('/projects').set(as('viewer')).expect(200);
+    expect(list.body[0]).toMatchObject({ title: 'XPO', status: 'active', toReview: 3, openTasks: 0 });
+
+    const detail = await http().get(`/projects/${p.id}`).set(as('viewer')).expect(200);
+    expect(detail.body.suggestions.map((s: { type: string }) => s.type)).toEqual(['decision']);
+    expect(detail.body.tasks[0]).toMatchObject({ title: 'Ver a luz', status: 'proposed' });
+
+    // Equipe aprova tarefa proposta; quem só visualiza, não.
+    await http().patch(`/projects/${p.id}/tasks/${task.id}`).set(as('viewer')).send({ status: 'open' }).expect(403);
+    await http().patch(`/projects/${p.id}/tasks/${task.id}`).set(as('staff')).send({ status: 'open', assigneeName: 'Bruno' }).expect(200);
+    expect((await prisma.projectEvent.findUniqueOrThrow({ where: { id: taskEvent.id } })).reviewStatus).toBe('confirmed');
+    await http().patch(`/projects/${p.id}/tasks/${task.id}`).set(as('staff')).send({ status: 'proposed' }).expect(422);
+
+    // Validação financeira só para administração; cotação aprovada vira confirmada, nunca paga sozinha.
+    await http().post(`/projects/${p.id}/expenses/${quote.id}/review`).set(as('staff')).send({ action: 'confirm' }).expect(403);
+    const confirmed = await http().post(`/projects/${p.id}/expenses/${quote.id}/review`).set(as('owner')).send({ action: 'confirm' }).expect(200);
+    expect(confirmed.body.status).toBe('confirmed');
+    await http().post(`/projects/${p.id}/expenses/${quote.id}/review`).set(as('owner')).send({ action: 'confirm' }).expect(422);
+
+    await http().post(`/projects/${p.id}/events/${decision.id}/review`).set(as('owner')).send({ decision: 'confirm' }).expect(204);
+    expect(await prisma.projectDecision.count({ where: { projectId: p.id } })).toBe(1);
+    await http().post(`/projects/${p.id}/events/${decision.id}/review`).set(as('owner')).send({ decision: 'confirm' }).expect(422);
+
+    await http().post(`/projects/${p.id}/close`).set(as('staff')).expect(403);
+    const closed = await http().post(`/projects/${p.id}/close`).set(as('owner')).expect(200);
+    expect(closed.body.report).toContain('Projeto *XPO* encerrado');
+    await http().post(`/projects/${p.id}/close`).set(as('owner')).expect(422);
+    await http().get(`/projects/${randomUUID()}`).set(as('viewer')).expect(404);
+  });
+});

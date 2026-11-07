@@ -87,3 +87,25 @@ export const reminderSchema = z.object({
 export function webActor(user: AuthUser): Actor {
   return { channel: 'web', userId: user.userId };
 }
+
+// ───────────── Projetos ─────────────
+
+export const projectPatchSchema = z.object({
+  title: z.string().min(1).max(120).optional(),
+  objective: z.string().max(2000).nullish(),
+  estimatedBudgetCents: z.number().int().nonnegative().nullish(),
+  groupCheckIns: z.boolean().optional(),
+});
+
+export const taskSchema = z.object({
+  title: z.string().min(1).max(200),
+  assigneeName: z.string().max(120).nullish(),
+  dueDate: isoDate.nullish(),
+});
+
+export const taskPatchSchema = taskSchema.partial().extend({
+  status: z.enum(['proposed', 'open', 'done', 'cancelled']).optional(),
+});
+
+export const expenseReviewSchema = z.object({ action: z.enum(['confirm', 'reject', 'mark_paid']) });
+export const eventReviewSchema = z.object({ decision: z.enum(['confirm', 'reject']) });

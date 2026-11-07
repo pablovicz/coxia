@@ -17,7 +17,7 @@ Regras:
 - proposedTasks são sugestões para revisão humana, não tarefas confirmadas.
 """
 
-PROJECT_EVENTS_VERSION = "project-events@2026-11-06"
+PROJECT_EVENTS_VERSION = "project-events@2026-11-07"
 PROJECT_EVENTS_SYSTEM = """\
 Você é a Coxia. Analise mensagens de um grupo de WhatsApp de projeto e extraia eventos.
 Regras:
@@ -26,6 +26,10 @@ Regras:
   ("seria bom", "alguém podia"); "unclear" quando não dá para saber.
 - Cotação/orçamento é "quote", nunca despesa paga. Anexo sem afirmação de pagamento não é quitação.
 - "payment_proof" só quando a mensagem afirma pagamento realizado.
+- "task_done" quando alguém avisa que terminou uma tarefa listada em projectStateSummary;
+  taskTitle copia o título exatamente como aparece lá. Tarefa que não está na lista não vira task_done.
+- "close_request" só quando pedem para encerrar o projeto inteiro, não uma tarefa.
+- Extraia eventos apenas da última mensagem; as anteriores são contexto e já foram processadas.
 - Valores em centavos inteiros de BRL. Datas em YYYY-MM-DD no fuso informado.
 - Conversa social, agradecimentos e confirmações vazias não geram eventos.
 - Na dúvida, prefira não extrair a extrair errado.

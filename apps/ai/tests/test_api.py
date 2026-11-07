@@ -1,5 +1,6 @@
 from coxia_ai.contracts import (
     AiErrorResponse,
+    ExtractBriefingResponse,
     ExtractProjectEventsResponse,
     InterpretCommandResponse,
     TranscribeResponse,
@@ -103,3 +104,60 @@ def test_idempotency_key_returns_same_execution(client, auth):
     a = TranscribeResponse.model_validate(client.post("/v1/transcribe", json=req, headers=headers).json())
     b = TranscribeResponse.model_validate(client.post("/v1/transcribe", json=req, headers=headers).json())
     assert a.meta.executionId == b.meta.executionId
+
+
+def test_events_fixture_by_text_points_to_last_message(client, auth):
+    """Fixture por texto (smoke no Docker): o id interno da mensagem não é conhecido de antemão."""
+    req = {
+        **EVENTS_REQUEST,
+        "messages": [
+            {**EVENTS_REQUEST["messages"][0], "id": "msg-anterior", "text": "Bom dia, gente"},
+            {
+                **EVENTS_REQUEST["messages"][0],
+                "id": "cuid-interno-123",
+                "text": "Eu fecho o  cartaz até quarta",
+            },
+        ],
+    }
+    out = ExtractProjectEventsResponse.model_validate(
+        client.post("/v1/projects/events", json=req, headers=auth).json()
+    )
+    assert [(e.type, e.sourceMessageId) for e in out.events] == [("task", "cuid-interno-123")]
+    assert out.meta.promptVersion == "project-events@2026-11-07"
+
+
+def test_task_done_event_from_fixture(client, auth):
+    req = {
+        **EVENTS_REQUEST,
+        "projectStateSummary": "Projeto: XPO\nTarefas em aberto:\n- Fazer o cartaz (Bruno, qua, 11/11)",
+        "messages": [
+            {**EVENTS_REQUEST["messages"][0], "id": "m9", "text": "Cartaz pronto e enviado pra gráfica!"}
+        ],
+    }
+    out = ExtractProjectEventsResponse.model_validate(
+        client.post("/v1/projects/events", json=req, headers=auth).json()
+    )
+    assert out.events[0].type == "task_done"
+    assert out.events[0].taskTitle == "Fazer o cartaz"  # type: ignore[union-attr]
+
+
+def test_briefing_fixture_by_transcript(client, auth):
+    transcript = (
+        "Mostra de fim de ano dos alunos de dança no dia 12 de dezembro. "
+        "O Bruno cuida do cartaz até dia 11 de novembro, a Ana fecha o som. "
+        "Orçamento de oito mil reais. Falta definir se vai ter venda de ingresso."
+    )
+    req = {
+        "organizationId": "org_1",
+        "projectId": "prj_1",
+        "timezone": "America/Sao_Paulo",
+        "now": "2026-11-07T10:00:00-03:00",
+        "transcript": transcript,
+        "sourceMessageId": "id-desconhecido",
+    }
+    out = ExtractBriefingResponse.model_validate(
+        client.post("/v1/projects/briefing", json=req, headers=auth).json()
+    )
+    assert out.briefing.estimatedBudgetCents == 800000
+    assert [t.title for t in out.briefing.proposedTasks] == ["Fazer o cartaz", "Fechar o som"]
+    assert out.meta.model == "fixture"

@@ -5,7 +5,21 @@
 
 Planejamento completo em [docs/PLANO_MVP.md](docs/PLANO_MVP.md) · identidade visual em [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md).
 
-## Estado atual — Etapas 1 e 2
+## Estado atual — Etapas 1, 2 e 3
+
+### Etapa 3 — projetos com IA (grupo do WhatsApp = workspace)
+
+| Entregue | Onde |
+|---|---|
+| Ativação do workspace na primeira mensagem de quem coordena projetos, idempotente pelo ID do grupo (nunca pelo nome); aviso de privacidade e retenção no grupo; renomear o grupo preserva o projeto | `packages/domain/src/projects.ts`, `workspace.ts` |
+| Briefing em áudio (ou "Briefing: …"): transcrição → briefing estruturado → tarefas propostas + confirmação no grupo | `workspace.ts`, `apps/worker` |
+| Eventos extraídos pela IA e aplicados por **política explícita** (`decideEvent`): compromisso vira tarefa, sugestão vai para revisão, cotação nunca é pagamento, `paid` exige comprovante; "terminei X" conclui a tarefa | `projects.ts` |
+| Sem duplicação: fingerprint por mensagem, comprovante único por organização (também contra contas mensais), pagamento casa com a despesa já lançada | `workspace.ts`, migration `etapa3_projects` |
+| Encerramento: só quem coordena, prévia de pendências, "SIM" do mesmo participante, relatório salvo; expira em 30 min | `workspace.ts`, `ProjectService` |
+| Check-in diário opcional no grupo (só com tarefa atrasada/vencendo) e pendências de projeto no briefing matinal | `notifications.ts`, `briefing.ts` |
+| REST de projetos (revisão de tarefas, lançamentos e sugestões; encerramento) e painel com fila de revisão e evidência da mensagem de origem | `apps/api/src/domain`, `apps/web/src/features/projects` |
+
+Cada evento grava mensagem de origem, autor, modelo, versão de prompt/parser e status de revisão; a IA recebe o **estado estruturado** do projeto e as últimas mensagens, nunca o histórico inteiro.
 
 ### Etapa 2 — agenda, contas, lembretes e briefing
 
@@ -36,7 +50,7 @@ Política anti-spam: quem recebe o briefing matinal vê nele as contas e reserva
 | Docker Compose (dev com hot reload) e compose de teste isolado | `docker-compose*.yml` |
 | Railway IaC e CI | `.railway/railway.ts`, `.github/workflows/ci.yml` |
 
-**Ainda não implementado:** workspaces de projeto com IA (Etapa 3) e estabilização (Etapa 4). Comandos por WhatsApp usam a IA real só com `AI_PROVIDER=openai`; com `fixture` (padrão local) a interpretação vem de `tests/fixtures/ai/commands`. A **Etapa 0** (validação com instância Z-API real) continua pendente: as fixtures em `tests/fixtures/zapi` foram montadas a partir da documentação e estão marcadas em `manifest.json` para substituição por payloads reais.
+**Ainda não implementado:** estabilização (Etapa 4), incluindo a rotina que aplica a retenção de mensagens e anexos (`organizations.retention_days`, já informada no aviso do grupo). Comandos e projetos usam a IA real só com `AI_PROVIDER=openai`; com `fixture` (padrão local) as respostas vêm de `tests/fixtures/ai`. A **Etapa 0** (validação com instância Z-API real) continua pendente: as fixtures em `tests/fixtures/zapi` foram montadas a partir da documentação e estão marcadas em `manifest.json` para substituição por payloads reais.
 
 ## Arquitetura
 
@@ -92,6 +106,7 @@ curl -X POST http://localhost:3000/webhooks/zapi/dev-webhook-secret-change-me \
 - Entradas em `tests/fixtures/`, saídas aprovadas em `tests/golden/` e `apps/web/e2e/__screenshots__/`.
 - **Mudança de golden exige revisão**: os testes nunca regravam sozinhos. Para aprovar uma mudança intencional:
   - normalizador: `UPDATE_GOLDEN=1 pnpm --filter @coxia/shared test`
+  - domínio (briefing, mensagens de projeto, política de eventos): `UPDATE_GOLDEN=1 pnpm --filter @coxia/domain test`
   - visual: `pnpm --filter @coxia/web test:visual:docker:update` (sempre no container, nunca no host)
   - e revise o diff no PR.
 - Contratos API↔IA: depois de alterar `packages/contracts`, rode `pnpm contracts:export`; o CI falha se `packages/contracts/schemas` estiver desatualizado, e o pytest compara os campos obrigatórios com os modelos Pydantic.

@@ -100,6 +100,8 @@ export const projectEvent = z.discriminatedUnion('type', [
     assigneeName: z.string().nullable(),
     dueDate: isoDate.nullable(),
   }),
+  /** Alguém avisa que terminou uma tarefa já registrada (título como está no estado do projeto). */
+  z.object({ ...eventBase, type: z.literal('task_done'), taskTitle: z.string() }),
   z.object({ ...eventBase, type: z.literal('decision'), summary: z.string() }),
   z.object({
     ...eventBase,

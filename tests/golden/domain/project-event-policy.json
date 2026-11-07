@@ -1,0 +1,242 @@
+{
+  "taskCommitted | coordenação | sem anexo": {
+    "review": "auto_applied",
+    "task": "open"
+  },
+  "taskCommitted | coordenação | com anexo": {
+    "review": "auto_applied",
+    "task": "open"
+  },
+  "taskCommitted | participante | sem anexo": {
+    "review": "auto_applied",
+    "task": "open"
+  },
+  "taskCommitted | participante | com anexo": {
+    "review": "auto_applied",
+    "task": "open"
+  },
+  "taskSuggested | coordenação | sem anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskSuggested | coordenação | com anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskSuggested | participante | sem anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskSuggested | participante | com anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskLowConfidence | coordenação | sem anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskLowConfidence | coordenação | com anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskLowConfidence | participante | sem anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskLowConfidence | participante | com anexo": {
+    "review": "pending_review",
+    "task": "proposed"
+  },
+  "taskDone | coordenação | sem anexo": {
+    "review": "auto_applied",
+    "taskDone": true
+  },
+  "taskDone | coordenação | com anexo": {
+    "review": "auto_applied",
+    "taskDone": true
+  },
+  "taskDone | participante | sem anexo": {
+    "review": "auto_applied",
+    "taskDone": true
+  },
+  "taskDone | participante | com anexo": {
+    "review": "auto_applied",
+    "taskDone": true
+  },
+  "decision | coordenação | sem anexo": {
+    "review": "auto_applied",
+    "decision": true
+  },
+  "decision | coordenação | com anexo": {
+    "review": "auto_applied",
+    "decision": true
+  },
+  "decision | participante | sem anexo": {
+    "review": "pending_review"
+  },
+  "decision | participante | com anexo": {
+    "review": "pending_review"
+  },
+  "quote | coordenação | sem anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "quote",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "quote | coordenação | com anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "quote",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "quote | participante | sem anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "quote",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "quote | participante | com anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "quote",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "expensePaid | coordenação | sem anexo": {
+    "review": "auto_applied",
+    "expense": {
+      "kind": "expense",
+      "status": "confirmed",
+      "withProof": false
+    },
+    "matchExisting": true
+  },
+  "expensePaid | coordenação | com anexo": {
+    "review": "auto_applied",
+    "expense": {
+      "kind": "expense",
+      "status": "paid",
+      "withProof": true
+    },
+    "matchExisting": true
+  },
+  "expensePaid | participante | sem anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": false
+    },
+    "matchExisting": true
+  },
+  "expensePaid | participante | com anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": true
+    },
+    "matchExisting": true
+  },
+  "expensePlanned | coordenação | sem anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "expensePlanned | coordenação | com anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "expensePlanned | participante | sem anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "expensePlanned | participante | com anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": false
+    }
+  },
+  "paymentProof | coordenação | sem anexo": {
+    "review": "auto_applied",
+    "expense": {
+      "kind": "expense",
+      "status": "confirmed",
+      "withProof": false
+    },
+    "matchExisting": true
+  },
+  "paymentProof | coordenação | com anexo": {
+    "review": "auto_applied",
+    "expense": {
+      "kind": "expense",
+      "status": "paid",
+      "withProof": true
+    },
+    "matchExisting": true
+  },
+  "paymentProof | participante | sem anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": false
+    },
+    "matchExisting": true
+  },
+  "paymentProof | participante | com anexo": {
+    "review": "pending_review",
+    "expense": {
+      "kind": "expense",
+      "status": "proposed",
+      "withProof": true
+    },
+    "matchExisting": true
+  },
+  "question | coordenação | sem anexo": {
+    "review": "pending_review"
+  },
+  "question | coordenação | com anexo": {
+    "review": "pending_review"
+  },
+  "question | participante | sem anexo": {
+    "review": "pending_review"
+  },
+  "question | participante | com anexo": {
+    "review": "pending_review"
+  },
+  "closeRequest | coordenação | sem anexo": {
+    "review": "auto_applied",
+    "close": true
+  },
+  "closeRequest | coordenação | com anexo": {
+    "review": "auto_applied",
+    "close": true
+  },
+  "closeRequest | participante | sem anexo": {
+    "review": "rejected"
+  },
+  "closeRequest | participante | com anexo": {
+    "review": "rejected"
+  }
+}

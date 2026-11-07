@@ -1,0 +1,17 @@
+{
+  "_input": "Paguei a gráfica, R$ 480,00",
+  "_comment": "Legenda do comprovante (tests/fixtures/zapi/image-group-receipt.json).",
+  "events": [
+    {
+      "type": "payment_proof",
+      "sourceMessageId": "$last",
+      "confidence": 0.88,
+      "commitment": "committed",
+      "evidence": "Paguei a gráfica, R$ 480,00",
+      "description": "Gráfica",
+      "amountCents": 48000,
+      "currency": "BRL",
+      "paidOn": null
+    }
+  ]
+}

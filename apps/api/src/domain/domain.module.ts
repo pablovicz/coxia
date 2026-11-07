@@ -7,13 +7,14 @@ import {
   Module,
 } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
-import { BillingService, BookingService, DomainError, ReminderService, SpaceService } from '@coxia/domain';
+import { BillingService, BookingService, DomainError, ProjectService, ReminderService, SpaceService } from '@coxia/domain';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BillsController,
   BookingsController,
   OverviewController,
+  ProjectsController,
   RemindersController,
   SpacesController,
 } from './controllers';
@@ -41,13 +42,14 @@ export class DomainErrorFilter implements ExceptionFilter {
     { provide: BookingService, inject: [PrismaService], useFactory: (db: PrismaService) => new BookingService(db) },
     { provide: BillingService, inject: [PrismaService], useFactory: (db: PrismaService) => new BillingService(db) },
     { provide: ReminderService, inject: [PrismaService], useFactory: (db: PrismaService) => new ReminderService(db) },
+    { provide: ProjectService, inject: [PrismaService], useFactory: (db: PrismaService) => new ProjectService(db) },
     { provide: APP_FILTER, useClass: DomainErrorFilter },
   ],
-  exports: [SpaceService, BookingService, BillingService, ReminderService],
+  exports: [SpaceService, BookingService, BillingService, ReminderService, ProjectService],
 })
 export class DomainModule {}
 
 @Module({
-  controllers: [SpacesController, BookingsController, BillsController, RemindersController, OverviewController],
+  controllers: [SpacesController, BookingsController, BillsController, RemindersController, OverviewController, ProjectsController],
 })
 export class DomainHttpModule {}

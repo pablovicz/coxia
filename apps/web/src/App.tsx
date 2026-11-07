@@ -3,7 +3,9 @@ import { AppShell } from '@/components/layout/app-shell';
 import { Skeleton } from '@/components/ui/input';
 import { LoginPage } from '@/features/auth/login-page';
 import { HomePage } from '@/features/dashboard/home-page';
-import { ProjectsPage, SettingsPage } from '@/features/placeholder-pages';
+import { SettingsPage } from '@/features/placeholder-pages';
+import { ProjectDetailPage } from '@/features/projects/project-detail-page';
+import { ProjectsPage } from '@/features/projects/projects-page';
 import { BillsPage } from '@/features/reminders/bills-page';
 import { AgendaPage } from '@/features/rooms/agenda-page';
 import { useAuth } from '@/providers/auth-provider';
@@ -29,6 +31,7 @@ export function App() {
         <Route element={<AppShell />}>
           <Route index element={<HomePage />} />
           <Route path="projetos" element={<ProjectsPage />} />
+          <Route path="projetos/:id" element={<ProjectDetailPage />} />
           <Route path="agenda" element={<AgendaPage />} />
           <Route path="contas" element={<BillsPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />

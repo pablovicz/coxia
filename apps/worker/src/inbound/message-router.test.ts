@@ -8,7 +8,7 @@ const base: RouteInput = {
   groupName: 'PROJETO - XPO',
   senderPhone: '5511977776666',
   flags: { isStatusReply: false, isNewsletter: false, isBroadcast: false },
-  linkedProjectId: null,
+  linkedProject: null,
   projectGroupPrefix: 'PROJETO',
   projectManagerPhones: new Set(['5511977776666']),
   adminPhones: new Set(['5511977776666']),
@@ -40,7 +40,11 @@ describe('golden: routeMessage', () => {
   });
 
   it('grupo já vinculado vai para o projeto, mesmo após renomeação', () => {
-    expect(routeMessage({ ...base, groupName: 'Outro nome', linkedProjectId: 'p1' })).toEqual({ route: 'project_group', projectId: 'p1' });
+    expect(routeMessage({ ...base, groupName: 'Outro nome', linkedProject: { id: 'p1', closed: false } })).toEqual({ route: 'project_group', projectId: 'p1' });
+  });
+
+  it('grupo de projeto encerrado não reabre nem cria outro workspace', () => {
+    expect(routeMessage({ ...base, linkedProject: { id: 'p1', closed: true } })).toEqual({ route: 'project_closed', projectId: 'p1' });
   });
 
   it('mensagens da própria Coxia (fromMe) são ignoradas', () => {

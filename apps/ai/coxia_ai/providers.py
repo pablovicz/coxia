@@ -64,6 +64,11 @@ def _meta(model: str, prompt_version: str, started: float, input_tokens: int = 0
 T = TypeVar("T", bound=BaseModel)
 
 
+def text_key(text: str) -> str:
+    """sha256 do texto em minúsculas com espaços normalizados (chave das fixtures por texto)."""
+    return hashlib.sha256(" ".join(text.lower().split()).encode()).hexdigest()
+
+
 # ───────────────────────── Fixture ─────────────────────────
 
 
@@ -72,7 +77,10 @@ class FixtureProvider:
     """Responde a partir de tests/fixtures/ai/<operação>/<chave>.json.
 
     Chave = sourceMessageId (transcrição/briefing), id da última mensagem (eventos) ou
-    sha256 do texto normalizado (comandos). Sem fixture, devolve um resultado vazio e seguro.
+    sha256 do texto normalizado (comandos). Briefing e eventos também aceitam o sha256 do texto
+    (transcrição ou última mensagem): útil quando o id interno da mensagem não é conhecido de
+    antemão, como no smoke do Docker. Nesse caso, `"sourceMessageId": "$last"` na fixture
+    aponta para a última mensagem. Sem fixture, devolve um resultado vazio e seguro.
     """
 
     fixtures_dir: Path
@@ -83,6 +91,13 @@ class FixtureProvider:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         return model.model_validate({k: v for k, v in data.items() if not k.startswith("_")})
+
+    def _load_any(self, operation: str, keys: list[str], model: type[T]) -> T | None:
+        for key in keys:
+            found = self._load(operation, key, model)
+            if found is not None:
+                return found
+        return None
 
     def transcribe(self, req: TranscribeRequest) -> TranscribeResponse:
         started = time.monotonic()
@@ -95,7 +110,7 @@ class FixtureProvider:
 
     def extract_briefing(self, req: ExtractBriefingRequest) -> ExtractBriefingResponse:
         started = time.monotonic()
-        found = self._load("briefing", req.sourceMessageId, ProjectBriefing)
+        found = self._load_any("briefing", [req.sourceMessageId, text_key(req.transcript)], ProjectBriefing)
         briefing = found or ProjectBriefing(
             title=None,
             objective=None,
@@ -112,16 +127,20 @@ class FixtureProvider:
 
     def extract_project_events(self, req: ExtractProjectEventsRequest) -> ExtractProjectEventsResponse:
         started = time.monotonic()
-        found = self._load("events", req.messages[-1].id, _EventsOutput)
+        last = req.messages[-1]
+        found = self._load_any("events", [last.id, text_key(last.text)], _EventsOutput)
+        events = [
+            e.model_copy(update={"sourceMessageId": last.id}) if e.sourceMessageId == "$last" else e
+            for e in (found.events if found else [])
+        ]
         return ExtractProjectEventsResponse(
-            events=found.events if found else [],
+            events=events,
             meta=_meta("fixture", prompts.PROJECT_EVENTS_VERSION, started),
         )
 
     def interpret_command(self, req: InterpretCommandRequest) -> InterpretCommandResponse:
         started = time.monotonic()
-        key = hashlib.sha256(" ".join(req.text.lower().split()).encode()).hexdigest()
-        found = self._load("commands", key, _CommandOutput)
+        found = self._load("commands", text_key(req.text), _CommandOutput)
         return InterpretCommandResponse(
             command=found.command if found else NoIntent(intent="none"),
             confidence=found.confidence if found else 1.0,

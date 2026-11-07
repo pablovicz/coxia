@@ -1,0 +1,16 @@
+{
+  "_input": "Seria bom alguém ver a luz do palco",
+  "_comment": "Sugestão → tarefa proposta, para revisão.",
+  "events": [
+    {
+      "type": "task",
+      "sourceMessageId": "$last",
+      "confidence": 0.82,
+      "commitment": "suggested",
+      "evidence": "Seria bom alguém ver a luz do palco",
+      "title": "Ver a luz do palco",
+      "assigneeName": null,
+      "dueDate": null
+    }
+  ]
+}

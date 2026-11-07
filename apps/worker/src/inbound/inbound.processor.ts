@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { type InboundMessage, type InboundMessageJob, QUEUES } from '@coxia/contracts';
 import { enqueueDelivery } from '@coxia/database';
-import { CommandService } from '@coxia/domain';
+import { CommandService, ProjectWorkspaceService } from '@coxia/domain';
 import { AiServiceError, normalizePhone, sha256, type WhatsappProvider } from '@coxia/shared';
 import type { Job } from 'bullmq';
 import { createHash } from 'node:crypto';
@@ -15,7 +15,7 @@ import { type MessageRoute, routeMessage } from './message-router';
  * 1. Copia mídia para o bucket (as URLs do provedor expiram).
  * 2. Classifica a rota.
  * 3. Conversa direta com admin → comando (agenda, contas, resumo), com resposta pelo outbox.
- * Workspaces de projeto (grupos) entram na Etapa 3.
+ * 4. Grupo de projeto → workspace (ativação, briefing, eventos, encerramento).
  */
 @Processor(QUEUES.inbound, { concurrency: Number(process.env.WORKER_CONCURRENCY ?? 5) })
 export class InboundProcessor extends WorkerHost {
@@ -27,6 +27,7 @@ export class InboundProcessor extends WorkerHost {
     @Inject(WHATSAPP_PROVIDER) private readonly whatsapp: WhatsappProvider,
     @Inject(AI_CLIENT) private readonly ai: WorkerAi,
     private readonly commands: CommandService,
+    private readonly workspace: ProjectWorkspaceService,
   ) {
     super();
   }
@@ -73,7 +74,7 @@ export class InboundProcessor extends WorkerHost {
         new Set(members.filter(filter).flatMap((m) => (m.user.phone ? [normalizePhone(m.user.phone)!] : [])));
 
       const normalized = message.normalized as unknown as InboundMessage | null;
-      const project = message.conversation.group?.projectChannel?.project;
+      const project = message.conversation.group?.projectChannel?.project ?? null;
       const route = routeMessage({
         kind: message.kind,
         fromMe: message.fromMe,
@@ -85,7 +86,7 @@ export class InboundProcessor extends WorkerHost {
           isNewsletter: normalized?.flags.isNewsletter ?? false,
           isBroadcast: normalized?.flags.isBroadcast ?? false,
         },
-        linkedProjectId: project && project.status !== 'closed' ? project.id : null,
+        linkedProject: project ? { id: project.id, closed: project.status === 'closed' } : null,
         projectGroupPrefix: message.organization.projectGroupPrefix,
         projectManagerPhones: phones((m) => m.canManageProjects || m.role === 'owner'),
         adminPhones: phones((m) => m.role === 'owner' || m.role === 'admin'),
@@ -93,6 +94,10 @@ export class InboundProcessor extends WorkerHost {
 
       if (route.route === 'admin_direct' && message.senderPhone) {
         await this.handleCommand(message, stored, traceId);
+      }
+      // Grupo de projeto (ou candidato com remetente autorizado): o domínio decide o resto.
+      if ((route.route === 'project_group' || (route.route === 'project_group_candidate' && route.authorized)) && message.conversation.group) {
+        await this.handleProjectMessage(message, message.conversation.group, project?.id ?? null, stored, traceId);
       }
 
       await this.prisma.message.update({
@@ -120,24 +125,73 @@ export class InboundProcessor extends WorkerHost {
     }
   }
 
+  /** Texto da mensagem; áudio sem texto é transcrito (uma vez: a transcrição fica no anexo). */
+  private async textOf(message: { id: string; text: string | null }, attachments: StoredAttachment[], traceId: string | null) {
+    const audio = attachments.find((a) => a.kind === 'audio');
+    if (message.text || !audio) return { text: message.text ?? '', fromAudio: false };
+    const existing = await this.prisma.messageAttachment.findUnique({ where: { id: audio.id }, select: { transcript: true } });
+    if (existing?.transcript) return { text: existing.transcript, fromAudio: true };
+    const url = await this.storage.signedGetUrl(audio.storageKey);
+    const t = await this.ai.transcribe(
+      { mediaUrl: url, mimeType: audio.mimeType ?? 'audio/ogg', language: 'pt', sourceMessageId: message.id },
+      `transcribe:${message.id}`,
+      traceId ?? undefined,
+    );
+    await this.prisma.messageAttachment.update({ where: { id: audio.id }, data: { transcript: t.text } });
+    return { text: t.text, fromAudio: true };
+  }
+
+  /** Mensagem num grupo de projeto: ativação, briefing, eventos, encerramento. Resposta pelo outbox. */
+  private async handleProjectMessage(
+    message: {
+      id: string;
+      organizationId: string;
+      conversationId: string;
+      senderPhone: string | null;
+      senderName: string | null;
+      sentAt: Date;
+      text: string | null;
+      conversation: { externalChatId: string };
+    },
+    group: { id: string; name: string | null },
+    projectId: string | null,
+    attachments: StoredAttachment[],
+    traceId: string | null,
+  ) {
+    const { text, fromAudio } = await this.textOf(message, attachments, traceId);
+    const file = attachments.find((a) => a.kind === 'image' || a.kind === 'document');
+    const result = await this.workspace.handle({
+      organizationId: message.organizationId,
+      conversationId: message.conversationId,
+      messageId: message.id,
+      whatsappGroupId: group.id,
+      groupName: group.name,
+      senderPhone: message.senderPhone,
+      senderName: message.senderName,
+      sentAt: message.sentAt,
+      text,
+      fromAudio,
+      attachment: file ? { id: file.id, kind: file.kind, sha256: file.sha256 } : null,
+      projectId,
+    });
+    if (result.reply) {
+      await enqueueDelivery(this.prisma, {
+        organizationId: message.organizationId,
+        recipient: message.conversation.externalChatId,
+        text: result.reply,
+        idempotencyKey: `reply:${message.id}`,
+      });
+    }
+    this.logger.log({ message_id: message.id, trace_id: traceId, project_id: result.projectId, actions: result.actions }, 'mensagem de projeto processada');
+  }
+
   /** Comando de admin em conversa direta. Áudio é transcrito antes; a resposta sai pelo outbox. */
   private async handleCommand(
     message: { id: string; organizationId: string; conversationId: string; senderPhone: string | null; text: string | null; conversation: { externalChatId: string } },
     attachments: StoredAttachment[],
     traceId: string | null,
   ) {
-    let text = message.text ?? '';
-    const audio = attachments.find((a) => a.kind === 'audio');
-    if (!text && audio) {
-      const url = await this.storage.signedGetUrl(audio.storageKey);
-      const t = await this.ai.transcribe(
-        { mediaUrl: url, mimeType: audio.mimeType ?? 'audio/ogg', language: 'pt', sourceMessageId: message.id },
-        `transcribe:${message.id}`,
-        traceId ?? undefined,
-      );
-      text = t.text;
-      await this.prisma.messageAttachment.update({ where: { id: audio.id }, data: { transcript: t.text } });
-    }
+    const { text } = await this.textOf(message, attachments, traceId);
     const proof = attachments.find((a) => a.kind === 'image' || a.kind === 'document');
     const result = await this.commands.handle({
       organizationId: message.organizationId,

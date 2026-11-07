@@ -80,16 +80,20 @@ describe('golden: reservas sem sobreposição (EXCLUDE USING gist)', () => {
   it('sob concorrência, exatamente uma de 10 reservas sobrepostas é aceita', async () => {
     const results = await Promise.allSettled(
       Array.from({ length: 10 }, (_, i) =>
-        prisma.$transaction(async (tx) =>
-          tx.bookingOccurrence.create({
-            data: {
-              organizationId: orgId,
-              bookingId,
-              spaceId: salaPequena,
-              startAt: at('08:00'),
-              endAt: new Date(at('09:00').getTime() + i * 60_000),
-            },
-          }),
+        prisma.$transaction(
+          async (tx) =>
+            tx.bookingOccurrence.create({
+              data: {
+                organizationId: orgId,
+                bookingId,
+                spaceId: salaPequena,
+                startAt: at('08:00'),
+                endAt: new Date(at('09:00').getTime() + i * 60_000),
+              },
+            }),
+          // Dez transações disputam o pool: sob carga, o maxWait padrão (2 s) rejeitava alguma por
+          // timeout, não por sobreposição. O que se testa aqui é a constraint, não o pool.
+          { maxWait: 15_000, timeout: 15_000 },
         ),
       ),
     );

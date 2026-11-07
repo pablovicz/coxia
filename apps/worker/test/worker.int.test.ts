@@ -45,6 +45,29 @@ const ai: WorkerAi = {
     transcribed.push(req.mediaUrl);
     return { text: 'Paguei a internet', durationSeconds: 3, meta: aiMeta };
   },
+  async extractBriefing() {
+    return {
+      briefing: {
+        title: null,
+        objective: 'Mostra de fim de ano',
+        deliverables: [],
+        deadlines: [],
+        owners: [],
+        estimatedBudgetCents: null,
+        openQuestions: [],
+        proposedTasks: [{ title: 'Fechar o cartaz', assigneeName: null, dueDate: null }],
+      },
+      meta: aiMeta,
+    };
+  },
+  async extractProjectEvents(req) {
+    const last = req.messages.at(-1)!;
+    const events =
+      last.text === 'Eu fecho o cartaz até quarta'
+        ? [{ type: 'task' as const, sourceMessageId: last.id, confidence: 0.9, commitment: 'committed' as const, evidence: last.text, title: 'Fechar o cartaz', assigneeName: 'Bruno', dueDate: null }]
+        : [];
+    return { events, meta: aiMeta };
+  },
 };
 let app: INestApplication;
 let orgId: string;
@@ -53,10 +76,22 @@ let instanceId: string;
 const job = (messageId: string) =>
   ({ data: { messageId, organizationId: orgId, traceId: 't' }, attemptsMade: 0, opts: { attempts: 5 } }) as unknown as Job;
 
-async function createMessage(opts: { group?: string; senderPhone: string; fromMe?: boolean; media?: boolean; text?: string | null; mediaKind?: string }) {
-  const chatId = opts.group ? `${randomUUID()}-group` : opts.senderPhone;
+async function createMessage(opts: {
+  group?: string;
+  chatId?: string;
+  senderPhone: string;
+  fromMe?: boolean;
+  media?: boolean;
+  text?: string | null;
+  mediaKind?: string;
+}) {
+  const chatId = opts.chatId ?? (opts.group ? `${randomUUID()}-group` : opts.senderPhone);
   const group = opts.group
-    ? await prisma.whatsappGroup.create({ data: { organizationId: orgId, instanceId, externalGroupId: chatId, name: opts.group } })
+    ? await prisma.whatsappGroup.upsert({
+        where: { instanceId_externalGroupId: { instanceId, externalGroupId: chatId } },
+        update: { name: opts.group },
+        create: { organizationId: orgId, instanceId, externalGroupId: chatId, name: opts.group },
+      })
     : null;
   const conv = await prisma.conversation.upsert({
     where: { instanceId_externalChatId: { instanceId, externalChatId: chatId } },
@@ -240,5 +275,40 @@ describe('comandos de admin pelo WhatsApp (Etapa 2)', () => {
     const r = await svc.runNotifications(new Date('2027-03-05T12:00:00Z'));
     expect(r.failed).toBe(0);
     expect((await svc.extendBookingSeries()).series).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('projetos pelo grupo (Etapa 3)', () => {
+  it('ativa o workspace, registra tarefa, encerra com confirmação e não reabre depois', async () => {
+    const chatId = `${randomUUID()}-group`;
+    const group = { group: 'PROJETO - Mostra', chatId };
+    const process = async (m: { id: string }) => app.get(InboundProcessor).process(job(m.id));
+    const reply = (m: { id: string }) => prisma.notificationDelivery.findUnique({ where: { idempotencyKey: `reply:${m.id}` } });
+
+    const m1 = await createMessage({ ...group, senderPhone: adminPhone(), text: 'Oi equipe, vamos começar' });
+    expect(await process(m1)).toEqual({ route: 'project_group_candidate', authorized: true });
+    const welcome = await reply(m1);
+    expect(welcome?.recipient).toBe(chatId);
+    expect(welcome?.text).toContain('Workspace do projeto *Mostra* ativado.');
+
+    const m2 = await createMessage({ ...group, senderPhone: '5511900002222', text: 'Eu fecho o cartaz até quarta' });
+    const route = await process(m2);
+    expect(route).toMatchObject({ route: 'project_group' });
+    const projectId = (route as { projectId: string }).projectId;
+    const task = await prisma.projectTask.findFirstOrThrow({ where: { projectId } });
+    expect([task.title, task.status, task.assigneeName]).toEqual(['Fechar o cartaz', 'open', 'Bruno']);
+    expect(await reply(m2)).toBeNull(); // automação silenciosa
+
+    const m3 = await createMessage({ ...group, senderPhone: adminPhone(), text: 'encerrado' });
+    await process(m3);
+    expect((await reply(m3))?.text).toContain('Responda SIM para encerrar.');
+    const m4 = await createMessage({ ...group, senderPhone: adminPhone(), text: 'SIM' });
+    await process(m4);
+    expect((await reply(m4))?.text).toContain('Projeto *Mostra* encerrado');
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId } })).status).toBe('closed');
+
+    const m5 = await createMessage({ ...group, senderPhone: adminPhone(), text: 'Alguém viu meu casaco?' });
+    expect(await process(m5)).toEqual({ route: 'project_closed', projectId });
+    expect(await prisma.project.count({ where: { organizationId: orgId, title: 'Mostra' } })).toBe(1);
   });
 });

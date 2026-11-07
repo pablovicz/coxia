@@ -69,6 +69,7 @@ enum ProjectTaskStatus {
 enum ProjectEventType {
   briefing
   task
+  task_done
   decision
   quote
   expense
@@ -354,6 +355,8 @@ model Project {
   /// Último briefing estruturado aprovado (ProjectBriefing do contrato de IA).
   briefing             Json?
   estimatedBudgetCents Int?          @map("estimated_budget_cents")
+  /// Check-in diário de pendências no próprio grupo (além do briefing das administradoras).
+  groupCheckIns        Boolean       @default(false) @map("group_check_ins")
   currency             String        @default("BRL")
   createdByPhone       String?       @map("created_by_phone")
   activatedAt          DateTime?     @map("activated_at") @db.Timestamptz(6)
@@ -478,6 +481,8 @@ model ProjectExpense {
   sourceEventId     String?              @unique @map("source_event_id")
   sourceMessageId   String?              @map("source_message_id")
   proofAttachmentId String?              @map("proof_attachment_id")
+  /// sha256 do comprovante: o mesmo arquivo não quita duas despesas.
+  proofSha256       String?              @map("proof_sha256")
   confirmedByPhone  String?              @map("confirmed_by_phone")
   confirmedAt       DateTime?            @map("confirmed_at") @db.Timestamptz(6)
   paidAt            DateTime?            @map("paid_at") @db.Timestamptz(6)
@@ -488,6 +493,7 @@ model ProjectExpense {
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   sourceEvent  ProjectEvent? @relation(fields: [sourceEventId], references: [id])
 
+  @@unique([organizationId, proofSha256])
   @@index([projectId, status])
   @@map("project_expenses")
 }

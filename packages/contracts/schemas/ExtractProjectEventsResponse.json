@@ -89,6 +89,46 @@
               },
               "type": {
                 "type": "string",
+                "const": "task_done"
+              },
+              "taskTitle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sourceMessageId",
+              "confidence",
+              "commitment",
+              "evidence",
+              "type",
+              "taskTitle"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sourceMessageId": {
+                "type": "string"
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "commitment": {
+                "type": "string",
+                "enum": [
+                  "committed",
+                  "suggested",
+                  "unclear"
+                ]
+              },
+              "evidence": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
                 "const": "decision"
               },
               "summary": {

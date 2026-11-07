@@ -2,7 +2,7 @@
   "name": "@coxia/domain",
   "version": "0.1.0",
   "private": true,
-  "description": "Regras de negócio da Coxia (agenda, contas, lembretes, briefing, comandos). Usado pela api e pelo worker.",
+  "description": "Regras de negócio da Coxia (agenda, contas, lembretes, briefing, comandos, projetos). Usado pela api e pelo worker.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

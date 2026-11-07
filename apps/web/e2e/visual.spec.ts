@@ -69,6 +69,130 @@ const REMINDERS = [
   { id: 'r2', title: 'Regar as plantas', message: null, kind: 'recurring', recurrenceRule: 'FREQ=WEEKLY;BYDAY=FR', nextRunAt: '2026-11-13T10:00:00Z', active: true, recipientPhones: ['5511'] },
 ];
 
+const ev = (who: string, at: string, text: string | null, attachmentKind: string | null = null) => ({
+  messageId: `m-${at}`,
+  authorName: who,
+  authorPhone: null,
+  sentAt: at,
+  text,
+  attachmentKind,
+});
+const task = (id: string, title: string, status: string, assigneeName: string | null, dueDate: string | null, source: unknown = null) => ({
+  id,
+  title,
+  assigneeName,
+  dueDate,
+  status,
+  completedAt: status === 'done' ? '2026-11-05T15:00:00Z' : null,
+  source,
+});
+const expense = (id: string, kind: string, description: string, amountCents: number | null, status: string, hasProof: boolean, source: unknown = null) => ({
+  id,
+  kind,
+  description,
+  vendor: null,
+  amountCents,
+  status,
+  hasProof,
+  paidAt: status === 'paid' ? '2026-11-05T18:00:00Z' : null,
+  confirmedAt: null,
+  source,
+});
+const PROJECTS = [
+  { id: 'p1', title: 'XPO', status: 'active', groupName: 'PROJETO - XPO', activatedAt: '2026-11-02T13:00:00Z', closedAt: null, estimatedBudgetCents: 800000, openTasks: 3, overdueTasks: 1, toReview: 4, paidCents: 48000 },
+  { id: 'p2', title: 'Mostra de Dança', status: 'closing', groupName: 'PROJETO - Mostra de Dança', activatedAt: '2026-10-10T13:00:00Z', closedAt: null, estimatedBudgetCents: null, openTasks: 1, overdueTasks: 0, toReview: 0, paidCents: 0 },
+  { id: 'p3', title: 'Sarau de Verão', status: 'closed', groupName: 'PROJETO - Sarau', activatedAt: '2026-09-01T13:00:00Z', closedAt: '2026-10-20T21:00:00Z', estimatedBudgetCents: 300000, openTasks: 0, overdueTasks: 0, toReview: 0, paidCents: 285000 },
+];
+const PROJECT_XPO = {
+  id: 'p1',
+  title: 'XPO',
+  status: 'active',
+  objective: 'Mostra de fim de ano dos alunos de dança',
+  briefing: {
+    title: 'Mostra de fim de ano',
+    objective: 'Mostra de fim de ano dos alunos de dança',
+    deliverables: ['Cartaz', 'Sonorização'],
+    deadlines: [
+      { description: 'Cartaz pronto', date: '2026-11-11' },
+      { description: 'Mostra', date: '2026-12-12' },
+    ],
+    owners: [
+      { name: 'Bruno', responsibility: 'Cartaz' },
+      { name: 'Ana', responsibility: 'Som' },
+    ],
+    estimatedBudgetCents: 800000,
+    openQuestions: ['Vai ter venda de ingresso?'],
+    proposedTasks: [],
+  },
+  estimatedBudgetCents: 800000,
+  groupCheckIns: true,
+  groupName: 'PROJETO - XPO',
+  activatedAt: '2026-11-02T13:00:00Z',
+  closingRequestedAt: null,
+  closedAt: null,
+  totals: { paidCents: 48000, committedCents: 90000, proposedCents: 250000 },
+  pendingReview: 4,
+  tasks: [
+    task('t1', 'Fazer o cartaz', 'open', 'Bruno', '2026-11-04', ev('Bruno Produção', '2026-11-02T14:10:00Z', 'Eu fecho o cartaz até quarta')),
+    task('t2', 'Fechar o som', 'open', 'Ana', '2026-11-12'),
+    task('t3', 'Confirmar o buffet', 'open', null, null),
+    task('t4', 'Ver a luz do palco', 'proposed', null, null, ev('Bruno Produção', '2026-11-05T19:20:00Z', 'Seria bom alguém ver a luz do palco')),
+    task('t5', 'Reservar a sala grande', 'done', 'Ana', '2026-11-03'),
+  ],
+  expenses: [
+    expense('e1', 'quote', 'Sonorização', 250000, 'proposed', false, ev('Ana Admin', '2026-11-05T20:02:00Z', 'Orçamento do som chegou: R$ 2.500, ainda não aprovado')),
+    expense('e2', 'expense', 'Gráfica', 48000, 'proposed', true, ev('Bruno Produção', '2026-11-06T11:30:00Z', 'Paguei a gráfica, R$ 480,00', 'image')),
+    expense('e3', 'expense', 'Buffet', 90000, 'confirmed', false),
+    expense('e4', 'expense', 'Impressão do programa', 48000, 'paid', true),
+  ],
+  decisions: [{ id: 'd1', summary: 'Entrada gratuita', decidedAt: '2026-11-03T15:00:00Z' }],
+  suggestions: [
+    {
+      id: 's1',
+      type: 'decision',
+      payload: { type: 'decision', summary: 'Abertura às 19h' },
+      confidence: 0.7,
+      createdAt: '2026-11-06T11:40:00Z',
+      source: ev('Bruno Produção', '2026-11-06T11:40:00Z', 'Acho que dá pra abrir às 19h, né?'),
+    },
+  ],
+  summaries: [],
+};
+const CLOSING_REPORT = [
+  'Projeto *Sarau de Verão* encerrado em ter, 20/10.',
+  '',
+  'Tarefas: 1 concluída.',
+  '',
+  '*Decisões*',
+  '• Entrada com contribuição consciente',
+  '',
+  '*Pagos*',
+  '• Som e luz: R$ 2.850,00',
+  '',
+  'Financeiro: R$ 2.850,00 pagos · orçamento estimado R$ 3.000,00',
+  '',
+  'Valeu, equipe! O histórico continua disponível no painel.',
+].join('\n');
+const PROJECT_CLOSED = {
+  ...PROJECT_XPO,
+  id: 'p3',
+  title: 'Sarau de Verão',
+  status: 'closed',
+  objective: 'Sarau de poesia no quintal',
+  briefing: null,
+  groupName: 'PROJETO - Sarau',
+  groupCheckIns: false,
+  closedAt: '2026-10-20T21:00:00Z',
+  pendingReview: 0,
+  totals: { paidCents: 285000, committedCents: 0, proposedCents: 0 },
+  estimatedBudgetCents: 300000,
+  tasks: [task('t9', 'Montar o varal de poesias', 'done', 'Ana', '2026-10-18')],
+  expenses: [{ ...expense('e9', 'expense', 'Som e luz', 285000, 'paid', true), paidAt: '2026-10-18T21:00:00Z' }],
+  suggestions: [],
+  decisions: [{ id: 'd9', summary: 'Entrada com contribuição consciente', decidedAt: '2026-09-15T15:00:00Z' }],
+  summaries: [{ id: 'sum1', kind: 'closing', content: CLOSING_REPORT, generatedAt: '2026-10-20T21:00:00Z' }],
+};
+
 /** Espera as fontes antes de fotografar: evita baseline com fonte de fallback. */
 async function snap(page: Page, name: string, opts: { fullPage?: boolean } = {}) {
   await page.evaluate(() => document.fonts.ready);
@@ -103,7 +227,8 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
         billsDueSoon: empty ? [] : [BILLS[1]],
         billsOverdue: empty ? [] : [BILLS[2]],
         monthSummary: SUMMARY,
-        activeProjects: 0,
+        activeProjects: empty ? 0 : 2,
+        projectsToReview: empty ? 0 : 4,
       });
     }
     if (path === '/bookings' && method === 'GET') {
@@ -125,6 +250,10 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/bills/summary') return respond(empty ? { ...SUMMARY, expectedCents: 0, paidCents: 0, total: 0, paid: 0, pending: 0, overdue: 0, variableWithoutAmount: 0 } : SUMMARY);
     if (path === '/bills') return respond(empty ? [] : RECURRING);
     if (path === '/reminders') return respond(empty ? [] : REMINDERS);
+    if (path === '/projects') return respond(empty ? [] : PROJECTS);
+    if (path === '/projects/p1' && method === 'GET') return respond(PROJECT_XPO);
+    if (path === '/projects/p3' && method === 'GET') return respond(PROJECT_CLOSED);
+    if (path.startsWith('/projects/p1/') && method !== 'GET') return route.fulfill({ status: 200, json: {} });
     return route.fulfill({ status: 404, json: { message: 'não simulado' } });
   });
 }
@@ -224,6 +353,51 @@ test.describe('golden visual', () => {
     await snap(page, 'bills-payment.png');
   });
 
+  test('projetos', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos');
+    await expect(page.getByText('4 para revisar')).toBeVisible();
+    await snap(page, 'projects.png', { fullPage: true });
+  });
+
+  test('projeto: revisão, tarefas e financeiro', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos/p1');
+    await expect(page.getByRole('heading', { name: 'Para revisar' })).toBeVisible();
+    await snap(page, 'project-detail.png', { fullPage: true });
+  });
+
+  test('projeto carregando', async ({ page }) => {
+    await mockApi(page, { data: 'loading' });
+    await page.goto('/projetos/p1');
+    await expect(page.getByLabel('Carregando projeto')).toBeVisible();
+    await snap(page, 'project-loading.png');
+  });
+
+  test('projeto com erro', async ({ page }) => {
+    await mockApi(page, { data: 'error' });
+    await page.goto('/projetos/p1');
+    await expect(page.getByRole('alert')).toHaveText('Não foi possível carregar o projeto.');
+    await snap(page, 'project-error.png');
+  });
+
+  test('projeto encerrado com relatório', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos/p3');
+    await expect(page.getByRole('heading', { name: 'Relatório de encerramento' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Encerrar projeto' })).toHaveCount(0);
+    await snap(page, 'project-closed.png', { fullPage: true });
+  });
+
+  test('projeto: encerrar pede confirmação com pendências', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos/p1');
+    await page.getByRole('button', { name: 'Encerrar projeto' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Encerrar XPO?' });
+    await expect(dialog.getByText('4 tarefas em aberto')).toBeVisible();
+    await snap(page, 'project-close-dialog.png');
+  });
+
   for (const [path, heading, name] of [
     ['/projetos', 'Projetos em movimento.', 'projects'],
     ['/agenda', 'Agenda das salas.', 'agenda'],
@@ -273,9 +447,40 @@ test.describe('interação acessível', () => {
     await expect(page.getByRole('button', { name: 'Nova reserva' })).toHaveCount(0);
   });
 
+  test('aprovar sugestão envia a decisão para a API', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos/p1');
+    const item = page.getByRole('listitem').filter({ hasText: 'Ver a luz do palco' });
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/projects/p1/tasks/t4') && r.method() === 'PATCH'),
+      item.getByRole('button', { name: 'Aprovar' }).click(),
+    ]);
+    expect(req.postDataJSON()).toEqual({ status: 'open' });
+    expect(req.headers()['idempotency-key']).toBeTruthy();
+  });
+
+  test('perfil leitura vê a revisão, mas sem ações', async ({ page }) => {
+    await mockApi(page, { role: 'viewer' });
+    await page.goto('/projetos/p1');
+    await expect(page.getByText('Ver a luz do palco', { exact: true })).toBeVisible();
+    for (const name of ['Aprovar', 'Validar pagamento', 'Concluir', 'Encerrar projeto', 'Marcar paga', 'Nova']) {
+      await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
+    }
+  });
+
+  test('cartão do projeto navega pelo teclado', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos');
+    const link = page.getByRole('link', { name: /XPO/ });
+    await link.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/projetos\/p1$/);
+    await expect(page.getByRole('heading', { name: 'XPO', level: 1 })).toBeVisible();
+  });
+
   test('sem rolagem horizontal', async ({ page }) => {
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/agenda', '/contas', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/contas', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

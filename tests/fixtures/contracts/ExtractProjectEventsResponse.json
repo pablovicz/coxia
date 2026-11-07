@@ -43,6 +43,14 @@
           "amountCents": 48000,
           "currency": "BRL",
           "paidOn": "2026-11-06"
+        },
+        {
+          "type": "task_done",
+          "sourceMessageId": "msg_05",
+          "confidence": 0.9,
+          "commitment": "committed",
+          "evidence": "Cartaz fechado e enviado pra gráfica!",
+          "taskTitle": "Fechar o cartaz"
         }
       ],
       "meta": {
@@ -85,21 +93,79 @@
           "claimedStatus": "paid"
         }
       ],
-      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+      "meta": {
+        "executionId": "e",
+        "model": "m",
+        "promptVersion": "p",
+        "parserVersion": "1",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "latencyMs": 0
+      }
     },
     {
       "_why": "tipo de evento desconhecido",
       "events": [
-        { "type": "payment", "sourceMessageId": "m", "confidence": 0.9, "commitment": "committed", "evidence": "x" }
+        {
+          "type": "payment",
+          "sourceMessageId": "m",
+          "confidence": 0.9,
+          "commitment": "committed",
+          "evidence": "x"
+        }
       ],
-      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+      "meta": {
+        "executionId": "e",
+        "model": "m",
+        "promptVersion": "p",
+        "parserVersion": "1",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "latencyMs": 0
+      }
+    },
+    {
+      "_why": "task_done sem o título da tarefa",
+      "events": [
+        {
+          "type": "task_done",
+          "sourceMessageId": "m",
+          "confidence": 0.9,
+          "commitment": "committed",
+          "evidence": "feito"
+        }
+      ],
+      "meta": {
+        "executionId": "e",
+        "model": "m",
+        "promptVersion": "p",
+        "parserVersion": "1",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "latencyMs": 0
+      }
     },
     {
       "_why": "confiança acima de 1",
       "events": [
-        { "type": "decision", "sourceMessageId": "m", "confidence": 1.4, "commitment": "committed", "evidence": "x", "summary": "x" }
+        {
+          "type": "decision",
+          "sourceMessageId": "m",
+          "confidence": 1.4,
+          "commitment": "committed",
+          "evidence": "x",
+          "summary": "x"
+        }
       ],
-      "meta": { "executionId": "e", "model": "m", "promptVersion": "p", "parserVersion": "1", "inputTokens": 0, "outputTokens": 0, "latencyMs": 0 }
+      "meta": {
+        "executionId": "e",
+        "model": "m",
+        "promptVersion": "p",
+        "parserVersion": "1",
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "latencyMs": 0
+      }
     },
     {
       "_why": "meta ausente (versão de prompt/modelo é obrigatória)",

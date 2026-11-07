@@ -1,0 +1,16 @@
+{
+  "_input": "Eu fecho o cartaz até quarta",
+  "_comment": "Compromisso assumido → tarefa aberta. \"$last\" = id da última mensagem enviada à IA.",
+  "events": [
+    {
+      "type": "task",
+      "sourceMessageId": "$last",
+      "confidence": 0.93,
+      "commitment": "committed",
+      "evidence": "Eu fecho o cartaz até quarta",
+      "title": "Fazer o cartaz",
+      "assigneeName": "Bruno",
+      "dueDate": "2026-11-11"
+    }
+  ]
+}

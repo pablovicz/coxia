@@ -117,6 +117,11 @@ class TaskEvent(_EventBase):
     dueDate: IsoDate | None
 
 
+class TaskDoneEvent(_EventBase):
+    type: Literal["task_done"]
+    taskTitle: str
+
+
 class DecisionEvent(_EventBase):
     type: Literal["decision"]
     summary: str
@@ -159,6 +164,7 @@ class CloseRequestEvent(_EventBase):
 
 ProjectEvent = Annotated[
     TaskEvent
+    | TaskDoneEvent
     | DecisionEvent
     | QuoteEvent
     | ExpenseEvent

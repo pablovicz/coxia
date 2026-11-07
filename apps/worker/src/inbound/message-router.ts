@@ -7,7 +7,9 @@ export type MessageRoute =
   | { route: 'ignored'; reason: 'from_me' | 'status_reply' | 'newsletter' | 'broadcast' | 'reaction' | 'notification' }
   /** Grupo já vinculado a um projeto: alimenta o histórico do projeto. */
   | { route: 'project_group'; projectId: string }
-  /** Grupo com o prefixo de projeto e remetente autorizado: pode ativar um workspace (Etapa 3). */
+  /** Grupo de um projeto encerrado: o histórico fica, mas mensagens novas não geram eventos. */
+  | { route: 'project_closed'; projectId: string }
+  /** Grupo com o prefixo de projeto e remetente autorizado: ativa o workspace. */
   | { route: 'project_group_candidate'; authorized: true }
   /** Grupo com o prefixo, mas remetente sem permissão: não cria workspace. */
   | { route: 'project_group_candidate'; authorized: false }
@@ -24,7 +26,7 @@ export interface RouteInput {
   senderPhone: string | null;
   flags: { isStatusReply: boolean; isNewsletter: boolean; isBroadcast: boolean };
   /** Projeto já vinculado ao grupo (project_channels), se houver. */
-  linkedProjectId: string | null;
+  linkedProject: { id: string; closed: boolean } | null;
   projectGroupPrefix: string;
   /** Telefones (só dígitos) autorizados a criar/encerrar workspaces. */
   projectManagerPhones: ReadonlySet<string>;
@@ -61,7 +63,11 @@ export function routeMessage(m: RouteInput): MessageRoute {
   if (m.kind === 'notification') return { route: 'ignored', reason: 'notification' };
 
   if (m.isGroup) {
-    if (m.linkedProjectId) return { route: 'project_group', projectId: m.linkedProjectId };
+    if (m.linkedProject) {
+      return m.linkedProject.closed
+        ? { route: 'project_closed', projectId: m.linkedProject.id }
+        : { route: 'project_group', projectId: m.linkedProject.id };
+    }
     if (matchesProjectPrefix(m.groupName, m.projectGroupPrefix)) {
       const authorized = m.senderPhone !== null && m.projectManagerPhones.has(m.senderPhone);
       return authorized

@@ -1,25 +1,8 @@
-import { FolderKanban, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { EmptyState, PageHeader } from '@/components/empty-state';
 import { ThemeSwitch } from '@/components/theme-switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/providers/auth-provider';
-
-export function ProjectsPage() {
-  return (
-    <>
-      <PageHeader
-        eyebrow="Workspaces"
-        title="Projetos em movimento."
-        description="Grupos do WhatsApp transformados em planejamento organizado."
-      />
-      <EmptyState icon={FolderKanban} title="Nenhum projeto ativo">
-        Os projetos nascem no WhatsApp: crie um grupo “PROJETO - Nome” e adicione o número da Coxia.
-      </EmptyState>
-    </>
-  );
-}
-
-
 
 export function SettingsPage() {
   const { session } = useAuth();

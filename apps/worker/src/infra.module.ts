@@ -1,6 +1,15 @@
 import { type DynamicModule, Global, Inject, Injectable, Module, type OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@coxia/database';
-import { BillingService, BookingService, type CommandInterpreter, CommandService, NotificationService } from '@coxia/domain';
+import {
+  BillingService,
+  BookingService,
+  type CommandInterpreter,
+  CommandService,
+  NotificationService,
+  type ProjectAi,
+  ProjectService,
+  ProjectWorkspaceService,
+} from '@coxia/domain';
 import { AiClient, FakeWhatsappProvider, type WhatsappProvider, ZapiProvider } from '@coxia/shared';
 import { WORKER_ENV, type WorkerEnv } from './env';
 import { StorageService } from './storage/storage.service';
@@ -10,7 +19,7 @@ export const AI_CLIENT = Symbol('AI_CLIENT');
 export const COMMAND_INTERPRETER = Symbol('COMMAND_INTERPRETER');
 
 /** Partes do cliente de IA usadas pelo worker (permite stub nos testes). */
-export type WorkerAi = Pick<AiClient, 'transcribe' | 'interpretCommand'>;
+export type WorkerAi = Pick<AiClient, 'transcribe' | 'interpretCommand' | 'extractBriefing' | 'extractProjectEvents'>;
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleDestroy {
@@ -41,6 +50,10 @@ export class InfraModule {
   static forRoot(env: WorkerEnv, overrides: { whatsapp?: WhatsappProvider; ai?: WorkerAi } = {}): DynamicModule {
     const ai: WorkerAi = overrides.ai ?? new AiClient({ baseUrl: env.AI_SERVICE_URL, token: env.AI_SERVICE_TOKEN, timeoutMs: env.AI_TIMEOUT_MS });
     const interpreter: CommandInterpreter = { interpret: (req, key) => ai.interpretCommand(req, key) };
+    const projectAi: ProjectAi = {
+      extractBriefing: (req, key) => ai.extractBriefing(req, key),
+      extractProjectEvents: (req, key) => ai.extractProjectEvents(req, key),
+    };
     return {
       module: InfraModule,
       providers: [
@@ -54,8 +67,22 @@ export class InfraModule {
         { provide: NotificationService, inject: [PrismaService], useFactory: (db: PrismaService) => new NotificationService(db) },
         { provide: BillingService, inject: [PrismaService], useFactory: (db: PrismaService) => new BillingService(db) },
         { provide: BookingService, inject: [PrismaService], useFactory: (db: PrismaService) => new BookingService(db) },
+        { provide: ProjectService, inject: [PrismaService], useFactory: (db: PrismaService) => new ProjectService(db) },
+        { provide: ProjectWorkspaceService, inject: [PrismaService], useFactory: (db: PrismaService) => new ProjectWorkspaceService(db, projectAi) },
       ],
-      exports: [WORKER_ENV, PrismaService, StorageService, WHATSAPP_PROVIDER, AI_CLIENT, CommandService, NotificationService, BillingService, BookingService],
+      exports: [
+        WORKER_ENV,
+        PrismaService,
+        StorageService,
+        WHATSAPP_PROVIDER,
+        AI_CLIENT,
+        CommandService,
+        NotificationService,
+        BillingService,
+        BookingService,
+        ProjectService,
+        ProjectWorkspaceService,
+      ],
     };
   }
 }

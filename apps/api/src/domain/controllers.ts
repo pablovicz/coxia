@@ -3,6 +3,7 @@ import {
   BillingService,
   BookingService,
   competenceOf,
+  ProjectService,
   ReminderService,
   SpaceService,
 } from '@coxia/domain';
@@ -18,11 +19,16 @@ import {
   cancelSeriesSchema,
   competence,
   createBookingSchema,
+  eventReviewSchema,
+  expenseReviewSchema,
   isoDate,
   paymentSchema,
+  projectPatchSchema,
   rangeQuery,
   reminderSchema,
   spaceSchema,
+  taskPatchSchema,
+  taskSchema,
   updateOccurrenceSchema,
   updateSeriesSchema,
   webActor,
@@ -218,6 +224,7 @@ export class OverviewController {
     private readonly prisma: PrismaService,
     private readonly bookings: BookingService,
     private readonly billing: BillingService,
+    private readonly projects: ProjectService,
   ) {}
 
   /** Números da tela inicial: agenda de hoje, contas a vencer em 7 dias e atrasadas, mês corrente. */
@@ -227,12 +234,13 @@ export class OverviewController {
     const now = new Date();
     const today = localDateOf(now, org.timezone);
     const day = localDayBoundsUtc(today, org.timezone);
-    const [todayBookings, open, summary, activeProjects] = await Promise.all([
+    const [todayBookings, open, summary, projects] = await Promise.all([
       this.bookings.listOccurrences(org.id, day.start, day.end),
       this.billing.listOpen(org.id),
       this.billing.summary(org.id, competenceOf(now, org.timezone)),
-      this.prisma.project.count({ where: { organizationId: org.id, status: 'active' } }),
+      this.projects.list(org.id),
     ]);
+    const active = projects.filter((p) => p.status === 'active' || p.status === 'closing');
     const limit = addDays(today, 7);
     const iso = (d: Date) => d.toISOString().slice(0, 10);
     return {
@@ -242,7 +250,84 @@ export class OverviewController {
       billsDueSoon: open.filter((o) => iso(o.dueDate) >= today && iso(o.dueDate) <= limit),
       billsOverdue: open.filter((o) => iso(o.dueDate) < today),
       monthSummary: summary,
-      activeProjects,
+      activeProjects: active.length,
+      projectsToReview: active.reduce((n, p) => n + p.toReview, 0),
     };
+  }
+}
+
+// ───────────────────────── Projetos ─────────────────────────
+
+/**
+ * Revisão e correção dos workspaces de projeto. Leitura para todos; tarefas para a equipe;
+ * validação financeira e encerramento só para administração.
+ */
+@Controller('projects')
+export class ProjectsController {
+  constructor(private readonly projects: ProjectService) {}
+
+  @Get()
+  list(@CurrentUser() user: AuthUser) {
+    return this.projects.list(user.organizationId);
+  }
+
+  @Get(':id')
+  detail(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.detail(user.organizationId, id);
+  }
+
+  @Roles('owner', 'admin')
+  @Patch(':id')
+  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body(v(projectPatchSchema)) body: z.infer<typeof projectPatchSchema>) {
+    return this.projects.update(user.organizationId, id, body, webActor(user));
+  }
+
+  @Roles('owner', 'admin', 'staff')
+  @Post(':id/tasks')
+  createTask(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body(v(taskSchema)) body: z.infer<typeof taskSchema>) {
+    return this.projects.createTask(user.organizationId, id, body, webActor(user));
+  }
+
+  @Roles('owner', 'admin', 'staff')
+  @Patch(':id/tasks/:taskId')
+  updateTask(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('taskId') taskId: string,
+    @Body(v(taskPatchSchema)) body: z.infer<typeof taskPatchSchema>,
+  ) {
+    return this.projects.updateTask(user.organizationId, id, taskId, body, webActor(user));
+  }
+
+  @Roles('owner', 'admin')
+  @Post(':id/expenses/:expenseId/review')
+  @HttpCode(200)
+  reviewExpense(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('expenseId') expenseId: string,
+    @Body(v(expenseReviewSchema)) body: z.infer<typeof expenseReviewSchema>,
+  ) {
+    return this.projects.reviewExpense(user.organizationId, id, expenseId, body.action, webActor(user));
+  }
+
+  @Roles('owner', 'admin')
+  @Post(':id/events/:eventId/review')
+  @HttpCode(204)
+  async reviewEvent(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('eventId') eventId: string,
+    @Body(v(eventReviewSchema)) body: z.infer<typeof eventReviewSchema>,
+  ) {
+    await this.projects.reviewEvent(user.organizationId, id, eventId, body.decision, webActor(user));
+  }
+
+  /** Encerrar pelo painel: a confirmação é o diálogo do próprio painel. */
+  @Roles('owner', 'admin')
+  @Post(':id/close')
+  @HttpCode(200)
+  close(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.close(user.organizationId, id, webActor(user));
   }
 }

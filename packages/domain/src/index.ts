@@ -7,3 +7,5 @@ export * from './reminders';
 export * from './briefing';
 export * from './notifications';
 export * from './commands';
+export * from './projects';
+export * from './workspace';

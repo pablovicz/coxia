@@ -135,7 +135,9 @@ export class WhatsappIngestionService {
         });
       }
       return message.id;
-    });
+      // Poucas escritas, mas sob carga o padrão de 5 s do Prisma estourou (smoke da Etapa 3): a api
+      // respondia 500 e a mensagem só era processada quando a reconciliação a pegava.
+    }, { maxWait: 5_000, timeout: 15_000 });
   }
 
   private async enqueue(messageId: string, organizationId: string, traceId: string | null): Promise<void> {

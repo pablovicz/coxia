@@ -1,5 +1,6 @@
-import type { NotificationKind } from '@coxia/database';
+import type { NotificationKind, Prisma } from '@coxia/database';
 import { enqueueDelivery, isUniqueViolation } from '@coxia/database';
+import { composeProjectCheckIn, loadProjectState, type ProjectState } from './projects';
 import { addDays, formatBRL, formatShortDate, formatTimeRange, type IsoDate, localDateOf, localDayBoundsUtc } from '@coxia/shared';
 import { DateTime } from 'luxon';
 import { BillingService } from './bills';
@@ -39,6 +40,8 @@ export interface PlannerInput {
     lastOverdueNoticeAt: Date | null;
   }>;
   remindersDue: Array<{ id: string; title: string; message: string | null; recipientPhones: string[]; runAt: Date }>;
+  /** Projetos ativos com check-in no grupo ligado. `text` null = nada relevante hoje (silêncio). */
+  projectCheckIns?: Array<{ projectId: string; groupChatId: string; text: () => string | null }>;
 }
 
 export interface PlannedNotification {
@@ -123,6 +126,20 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
         });
       }
     }
+
+    // Check-in de projeto no próprio grupo: uma vez por dia, só com pendência relevante.
+    for (const c of input.projectCheckIns ?? []) {
+      const text = c.text();
+      if (!text) continue;
+      out.push({
+        kind: 'project_checkin',
+        dedupeKey: `project_checkin:${c.projectId}:${today}`,
+        targetType: 'project',
+        targetId: c.projectId,
+        recipients: [c.groupChatId],
+        text,
+      });
+    }
   }
 
   for (const b of input.bookingsSoon) {
@@ -171,7 +188,7 @@ export class NotificationService {
 
     await this.billing.markOverdue(organizationId, now);
 
-    const [members, bookingsTomorrow, bookingsSoon, bills, remindersDue] = await Promise.all([
+    const [members, bookingsTomorrow, bookingsSoon, bills, remindersDue, checkInProjects] = await Promise.all([
       this.db.organizationMember.findMany({
         where: { organizationId, receivesMorningBriefing: true, user: { phone: { not: null } } },
         select: { user: { select: { phone: true } } },
@@ -194,7 +211,18 @@ export class NotificationService {
         include: { recurringBill: true },
       }),
       this.reminders.due(organizationId, now),
+      this.db.project.findMany({
+        where: { organizationId, status: 'active', groupCheckIns: true },
+        select: { id: true, channels: { select: { whatsappGroup: { select: { externalGroupId: true } } } } },
+      }),
     ]);
+
+    // Estado dos projetos carregado antes do planejamento (o planner é síncrono).
+    const checkInStates = new Map<string, ProjectState>();
+    if (DateTime.fromJSDate(now, { zone: tz }).toFormat('HH:mm') >= org.morningBriefingTime) {
+      for (const p of checkInProjects) checkInStates.set(p.id, await loadProjectState(this.db, p.id));
+    }
+    const tomorrow = addDays(today, 1);
 
     const briefingRecipients = members.map((m) => m.user.phone!);
     let briefingText: string | null = null;
@@ -236,6 +264,12 @@ export class NotificationService {
         lastOverdueNoticeAt: b.lastOverdueNoticeAt,
       })),
       remindersDue: remindersDue.map((r) => ({ id: r.id, title: r.title, message: r.message, recipientPhones: r.recipientPhones, runAt: r.nextRunAt! })),
+      projectCheckIns: checkInProjects.flatMap((p) => {
+        const state = checkInStates.get(p.id);
+        const group = p.channels[0]?.whatsappGroup.externalGroupId;
+        if (!state || !group) return [];
+        return [{ projectId: p.id, groupChatId: group, text: () => composeProjectCheckIn(state, today, tomorrow) }];
+      }),
     });
 
     const created: string[] = [];
@@ -254,6 +288,19 @@ export class NotificationService {
           }
           if (p.targetType === 'reminder') {
             await this.reminders.advance(tx, organizationId, p.targetId, now);
+          }
+          if (p.kind === 'project_checkin') {
+            // Resumo gerado do estado estruturado; o snapshot fica para auditoria.
+            await tx.projectSummary.create({
+              data: {
+                organizationId,
+                projectId: p.targetId,
+                kind: 'daily',
+                content: p.text,
+                stateSnapshot: checkInStates.get(p.targetId) as unknown as Prisma.InputJsonValue,
+                generatedAt: now,
+              },
+            });
           }
         });
         created.push(p.dedupeKey);

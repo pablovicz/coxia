@@ -2,7 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type InboundMessageJob, QUEUES } from '@coxia/contracts';
 import { claimDueDeliveries, markDeliveryFailed, markDeliverySent, reclaimStaleDeliveries } from '@coxia/database';
-import { BillingService, BookingService, NotificationService } from '@coxia/domain';
+import { BillingService, BookingService, NotificationService, ProjectService } from '@coxia/domain';
 import { type WhatsappProvider, WhatsappProviderError } from '@coxia/shared';
 import type { Queue } from 'bullmq';
 import { PrismaService, WHATSAPP_PROVIDER } from '../infra.module';
@@ -26,16 +26,19 @@ export class MaintenanceService {
     private readonly notifications: NotificationService,
     private readonly billing: BillingService,
     private readonly bookings: BookingService,
+    private readonly projects: ProjectService,
   ) {}
 
   private organizations() {
     return this.prisma.organization.findMany({ select: { id: true } });
   }
 
-  /** Briefing, avisos e lembretes de todas as organizações. Falha numa não impede as outras. */
+  /** Briefing, avisos, lembretes e check-ins de todas as organizações. Falha numa não impede as outras. */
   async runNotifications(now = new Date()): Promise<{ planned: number; failed: number }> {
     let planned = 0;
     let failed = 0;
+    // Encerramentos de projeto não confirmados a tempo voltam a ativo.
+    await this.projects.expireStaleClosings(now).catch((err: Error) => this.logger.error({ err: err.message }, 'falha ao expirar encerramentos'));
     for (const org of await this.organizations()) {
       try {
         planned += (await this.notifications.run(org.id, now)).length;

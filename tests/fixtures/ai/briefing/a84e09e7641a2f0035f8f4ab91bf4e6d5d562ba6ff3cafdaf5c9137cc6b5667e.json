@@ -1,0 +1,46 @@
+{
+  "_input": "Mostra de fim de ano dos alunos de dança no dia 12 de dezembro. O Bruno cuida do cartaz até dia 11 de novembro, a Ana fecha o som. Orçamento de oito mil reais. Falta definir se vai ter venda de ingresso.",
+  "_comment": "Briefing do projeto XPO (smoke no Docker). Chave = sha256 da transcrição/texto normalizado.",
+  "title": "Mostra de fim de ano",
+  "objective": "Mostra de fim de ano dos alunos de dança",
+  "deliverables": [
+    "Cartaz",
+    "Sonorização"
+  ],
+  "deadlines": [
+    {
+      "description": "Cartaz pronto",
+      "date": "2026-11-11"
+    },
+    {
+      "description": "Mostra",
+      "date": "2026-12-12"
+    }
+  ],
+  "owners": [
+    {
+      "name": "Bruno",
+      "responsibility": "Cartaz"
+    },
+    {
+      "name": "Ana",
+      "responsibility": "Som"
+    }
+  ],
+  "estimatedBudgetCents": 800000,
+  "openQuestions": [
+    "Vai ter venda de ingresso?"
+  ],
+  "proposedTasks": [
+    {
+      "title": "Fazer o cartaz",
+      "assigneeName": "Bruno",
+      "dueDate": "2026-11-11"
+    },
+    {
+      "title": "Fechar o som",
+      "assigneeName": "Ana",
+      "dueDate": null
+    }
+  ]
+}
