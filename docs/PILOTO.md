@@ -9,8 +9,8 @@ Cada item tem o que fazer, como saber que deu certo e o que anotar.
 | Item | Quem | Pronto quando |
 |---|---|---|
 | Número de WhatsApp dedicado à Coxia, num celular que fica na casa, carregado e com internet | Casa Kaju | O número não é o pessoal de ninguém |
-| Instância Z-API conectada a esse número (QR code) | Casa Kaju + dev | Painel da Z-API mostra "conectado" |
-| Confirmar horários de funcionamento das três salas e os dias de vencimento das contas | Casa Kaju | Valores do seed (`packages/database/prisma/seed.ts`) substituídos pelos reais |
+| Instância Z-API conectada a esse número: QR code ou código em **Configurações → Operação** (ou no painel da Z-API) | Casa Kaju + dev | Tela de operação mostra "Conectado" |
+| Cadastrar as salas reais (nome, descrição, fotos, situação, cor, ícone, horário) na tela **Salas** e confirmar os dias de vencimento das contas | Casa Kaju | Salas conferidas no painel; contas do seed (`packages/database/prisma/seed.ts`) ajustadas |
 | Lista de quem administra (owner/admin), quem coordena projetos e quem recebe o briefing das 08:00 | Casa Kaju | Telefones com DDI+DDD, sem espaços |
 | Prazo de retenção de mensagens (padrão: 730 dias) | Casa Kaju | Valor combinado e anotado em `organizations.retention_days` |
 
@@ -61,6 +61,8 @@ Faça em ordem, com o painel aberto em **Configurações → Operação** para v
 | 10 | Participante comum escreve "encerrado" | Coxia responde que só quem coordena encerra |
 | 11 | Admin escreve "encerrado" → "SIM" | Prévia com pendências; depois o relatório; projeto encerrado no painel |
 | 12 | Desligar a internet do celular da Coxia por 10 min e mandar comandos | Painel mostra "WhatsApp desconectado"; respostas saem ao reconectar, sem duplicar |
+| 13 | No painel, marcar uma sala como **alugada mensal**; pedir reserva dela pelo WhatsApp | Coxia responde que a sala está alugada; a sala some do "Nova reserva" e das salas livres |
+| 14 | Adicionar uma pessoa ao grupo `PROJETO - Teste`; depois removê-la | Ela aparece em **Contatos** com o grupo; ao sair, o grupo fica riscado com a data de saída |
 
 Anote para cada item: funcionou / funcionou com ressalva / falhou, e o texto exato quando a Coxia
 entendeu errado (vira fixture de avaliação da IA).
@@ -75,14 +77,14 @@ entendeu errado (vira fixture de avaliação da IA).
   - custo de IA (tokens por operação na tela de operação);
   - avisos que incomodaram ou faltaram (política anti-spam em `packages/domain/src/notifications.ts`);
   - ajustes de tela no celular, com print.
-- **Critério para encerrar o piloto:** os itens 1–12 passam sem ressalva, nenhum lançamento duplicado em
+- **Critério para encerrar o piloto:** os itens 1–14 passam sem ressalva, nenhum lançamento duplicado em
   duas semanas, e a equipe usa o briefing das 08:00 sem pedir para desligar.
 
 ## 6. Alertas e plano de contingência
 
 | Sinal | Onde aparece | O que fazer |
 |---|---|---|
-| WhatsApp desconectado | Log `WhatsApp desconectado: envios pausados`; banner na tela de operação | Reconectar o número no painel da Z-API (QR code). Os avisos ficam em espera e saem depois, sem duplicar |
+| WhatsApp desconectado | Log `WhatsApp desconectado: envios pausados`; banner na tela de operação | Ler o QR code (ou usar o código) que aparece na própria tela de operação. Os avisos ficam em espera e saem depois, sem duplicar |
 | Mensagens com falha (IA fora do ar) | Tela de operação; `ai_executions.status = failed` | Reprocessar quando a IA voltar; o reprocessamento não duplica nada |
 | Envio no dead-letter | Tela de operação | Ver o erro (ex.: número inválido), corrigir o cadastro e reenviar |
 | Fila de mensagens atrasada | `inbound.oldestPendingSeconds` alto | Ver se o worker está no ar (healthcheck do Railway) |

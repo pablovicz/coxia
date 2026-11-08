@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { canManage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { OpsPanel } from './ops-panel';
+import { AccountPhone, ROLE_LABEL, TeamPanel } from './team-panel';
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Responsável', admin: 'Administração', staff: 'Equipe', viewer: 'Leitura' };
 
 export function SettingsPage() {
   const { session, logout } = useAuth();
@@ -34,6 +34,10 @@ export function SettingsPage() {
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="text-muted-foreground">Nome</dt>
               <dd>{session?.user.name}</dd>
+              <dt className="text-muted-foreground">WhatsApp</dt>
+              <dd>
+                <AccountPhone />
+              </dd>
               <dt className="text-muted-foreground">Papel</dt>
               <dd>{ROLE_LABEL[session?.user.role ?? ''] ?? session?.user.role}</dd>
               <dt className="text-muted-foreground">Fuso horário</dt>
@@ -45,6 +49,7 @@ export function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+      {canManage(session?.user.role) ? <TeamPanel /> : null}
       {canManage(session?.user.role) ? <OpsPanel tz={tz} /> : null}
     </>
   );

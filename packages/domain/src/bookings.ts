@@ -7,9 +7,12 @@ import {
   type IsoDate,
   localDateOf,
   localDayBoundsUtc,
+  normalizeBrPhone,
+  normalizeText,
   parseRRule,
   zonedToUtc,
 } from '@coxia/shared';
+import { randomUUID } from 'node:crypto';
 import { DateTime } from 'luxon';
 import {
   clipIntervals,
@@ -20,6 +23,7 @@ import {
   withinOperatingHours,
 } from './availability';
 import { type Actor, audit, type Db, DomainError, fromIsoDate, getOrganization, toIsoDate, type Tx } from './common';
+import { assertBookable } from './spaces';
 
 /** Quanto à frente as ocorrências de séries sem fim ficam materializadas. */
 export const SERIES_HORIZON_DAYS = 182;
@@ -36,13 +40,31 @@ export interface Conflict {
   block?: { id: string; reason: string | null };
 }
 
+/** Um dia da semana com o seu horário, em hora local (reserva semanal com horários diferentes por dia). */
+export interface WeeklySlot {
+  /** ISO: 1 = segunda … 7 = domingo. */
+  weekday: number;
+  start: string; // HH:mm
+  end: string; // HH:mm
+}
+
 export interface CreateBookingInput {
   spaceId: string;
-  startAt: Date;
-  endAt: Date;
+  /** Reserva única (ou primeira data da série de `recurrence`). Dispensado quando há `weekly`. */
+  startAt?: Date;
+  endAt?: Date;
+  /**
+   * Semanal em vários dias, cada um com seu horário (ex.: seg e qua 14h–17h, sex 9h–12h).
+   * Vira uma série por horário, todas no mesmo grupo.
+   */
+  weekly?: { startsOn: IsoDate; until?: IsoDate | null; slots: WeeklySlot[] } | null;
   title?: string | null;
+  /** Quem vai usar a sala: contato cadastrado ou nome + telefone (vira contato). */
+  contactId?: string | null;
   responsibleName?: string | null;
   responsiblePhone?: string | null;
+  /** Valor da hora desta reserva; ausente = o da sala (desconto pontual = valor menor). */
+  hourlyRateCents?: number | null;
   notes?: string | null;
   status?: 'confirmed' | 'tentative';
   /** RRULE semanal/mensal em datas locais; a primeira ocorrência é startAt/endAt. */
@@ -53,10 +75,29 @@ export interface CreateBookingInput {
 }
 
 const hhmm = (instant: Date, timezone: string) => DateTime.fromJSDate(instant, { zone: timezone }).toFormat('HH:mm');
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+type BookingPlan = {
+  intervals: Interval[];
+  series: { rule: string; startsOn: IsoDate; localStart: string; localEnd: string; until: IsoDate | null; horizon: IsoDate } | null;
+};
 
 const occurrenceInclude = {
-  booking: { select: { id: true, title: true, responsibleName: true, responsiblePhone: true, notes: true, recurrenceRule: true, status: true } },
-  space: { select: { id: true, name: true } },
+  booking: {
+    select: {
+      id: true,
+      title: true,
+      responsibleName: true,
+      responsiblePhone: true,
+      contactId: true,
+      hourlyRateCents: true,
+      groupId: true,
+      notes: true,
+      recurrenceRule: true,
+      status: true,
+    },
+  },
+  space: { select: { id: true, name: true, color: true, icon: true } },
 } satisfies Prisma.BookingOccurrenceInclude;
 
 export type OccurrenceWithBooking = Prisma.BookingOccurrenceGetPayload<{ include: typeof occurrenceInclude }>;
@@ -91,7 +132,7 @@ export class BookingService {
     const org = await getOrganization(this.db, organizationId);
     const day = localDayBoundsUtc(date, org.timezone);
     const spaces = await this.db.space.findMany({
-      where: { organizationId, active: true, ...(opts.spaceId ? { id: opts.spaceId } : {}) },
+      where: { organizationId, active: true, status: 'available', ...(opts.spaceId ? { id: opts.spaceId } : {}) },
       include: { availabilityRules: true },
       orderBy: { sortOrder: 'asc' },
     });
@@ -130,7 +171,6 @@ export class BookingService {
   // ───────────── criação ─────────────
 
   async create(organizationId: string, input: CreateBookingInput, actor: Actor, now = new Date()) {
-    assertInterval(input.startAt, input.endAt);
     const org = await getOrganization(this.db, organizationId);
     const tz = org.timezone;
     const space = await this.db.space.findFirst({
@@ -138,93 +178,188 @@ export class BookingService {
       include: { availabilityRules: true },
     });
     if (!space) throw new DomainError('not_found', 'Sala não encontrada');
-
-    let intervals: Interval[] = [{ start: input.startAt, end: input.endAt }];
-    let series: { rule: string; startsOn: IsoDate; localStart: string; localEnd: string; until: IsoDate | null; horizon: IsoDate } | null = null;
-
-    if (input.recurrence) {
-      const startsOn = localDateOf(input.startAt, tz);
-      if (localDateOf(input.endAt, tz) !== startsOn) {
-        throw new DomainError('validation', 'Reservas recorrentes precisam começar e terminar no mesmo dia');
-      }
-      let rule;
-      try {
-        rule = parseRRule(input.recurrence.rule);
-      } catch (e) {
-        throw new DomainError('validation', `Recorrência inválida: ${(e as Error).message}`);
-      }
-      const until = input.recurrence.until ?? rule.until;
-      const horizonLimit = addDays(localDateOf(now, tz), SERIES_HORIZON_DAYS);
-      const horizon = until && until < horizonLimit ? until : horizonLimit;
-      const localStart = hhmm(input.startAt, tz);
-      const localEnd = hhmm(input.endAt, tz);
-      intervals = expandDates({ ...rule, until }, startsOn, startsOn, horizon).map((date) => ({
-        start: zonedToUtc(date, localStart, tz),
-        end: zonedToUtc(date, localEnd, tz),
-      }));
-      if (intervals.length === 0) throw new DomainError('validation', 'A recorrência não gera nenhuma data');
-      series = { rule: formatRRule({ ...rule, until: null }), startsOn, localStart, localEnd, until, horizon };
+    assertBookable(space);
+    if (input.hourlyRateCents != null && (!Number.isInteger(input.hourlyRateCents) || input.hourlyRateCents <= 0)) {
+      throw new DomainError('validation', 'Valor da hora inválido');
     }
 
+    const plans = input.weekly ? this.planWeekly(input.weekly, tz, now) : [this.planSingle(input, tz, now)];
+    const intervals = plans.flatMap((p) => p.intervals);
     const conflicts = await this.findConflicts(this.db, space.id, space.availabilityRules, intervals, tz);
     const conflictStarts = new Set(conflicts.map((c) => c.startAt.getTime()));
-    const toCreate = intervals.filter((i) => !conflictStarts.has(i.start.getTime()));
+    const creatable = intervals.filter((i) => !conflictStarts.has(i.start.getTime()));
 
     if (conflicts.length > 0 && (input.onConflict ?? 'fail') === 'fail') {
       throw new DomainError('conflict', conflictMessage(conflicts), { conflicts });
     }
-    if (toCreate.length === 0) throw new DomainError('conflict', conflictMessage(conflicts), { conflicts });
+    if (creatable.length === 0) throw new DomainError('conflict', conflictMessage(conflicts), { conflicts });
+
+    const person = await this.resolvePerson(organizationId, input);
+    const rate = input.hourlyRateCents !== undefined ? input.hourlyRateCents : space.hourlyRateCents;
+    const groupId = plans.length > 1 ? randomUUID() : null;
 
     try {
       return await this.db.$transaction(async (tx) => {
-        const booking = await tx.booking.create({
-          data: {
-            organizationId,
-            spaceId: space.id,
-            title: input.title?.trim() || null,
-            responsibleName: input.responsibleName?.trim() || null,
-            responsiblePhone: input.responsiblePhone ?? null,
-            notes: input.notes?.trim() || null,
-            status: input.status ?? 'confirmed',
-            notifyOneHourBefore: input.notifyOneHourBefore ?? false,
-            createdByPhone: actor.phone ?? null,
-            sourceMessageId: actor.sourceMessageId ?? null,
-            ...(series
-              ? {
-                  recurrenceRule: series.rule,
-                  seriesStartsOn: fromIsoDate(series.startsOn),
-                  seriesUntil: series.until ? fromIsoDate(series.until) : null,
-                  localStartTime: series.localStart,
-                  localEndTime: series.localEnd,
-                  materializedUntil: fromIsoDate(series.horizon),
-                }
-              : {}),
-          },
-        });
-        await tx.bookingOccurrence.createMany({
-          data: toCreate.map((i) => ({
-            organizationId,
-            bookingId: booking.id,
-            spaceId: space.id,
-            startAt: i.start,
-            endAt: i.end,
-            status: booking.status,
-          })),
-        });
+        const bookings = [];
+        for (const plan of plans) {
+          const toCreate = plan.intervals.filter((i) => !conflictStarts.has(i.start.getTime()));
+          const series = plan.series;
+          const booking = await tx.booking.create({
+            data: {
+              organizationId,
+              spaceId: space.id,
+              title: input.title?.trim() || null,
+              contactId: person.contactId,
+              responsibleName: person.name,
+              responsiblePhone: person.phone,
+              hourlyRateCents: rate ?? null,
+              groupId,
+              notes: input.notes?.trim() || null,
+              status: input.status ?? 'confirmed',
+              notifyOneHourBefore: input.notifyOneHourBefore ?? false,
+              createdByPhone: actor.phone ?? null,
+              sourceMessageId: actor.sourceMessageId ?? null,
+              ...(series
+                ? {
+                    recurrenceRule: series.rule,
+                    seriesStartsOn: fromIsoDate(series.startsOn),
+                    seriesUntil: series.until ? fromIsoDate(series.until) : null,
+                    localStartTime: series.localStart,
+                    localEndTime: series.localEnd,
+                    materializedUntil: fromIsoDate(series.horizon),
+                  }
+                : {}),
+            },
+          });
+          if (toCreate.length) {
+            await tx.bookingOccurrence.createMany({
+              data: toCreate.map((i) => ({
+                organizationId,
+                bookingId: booking.id,
+                spaceId: space.id,
+                startAt: i.start,
+                endAt: i.end,
+                status: booking.status,
+              })),
+            });
+          }
+          bookings.push(booking);
+        }
+        // Reserva recorrente faz do contato um residente da casa.
+        if (person.contactId && plans.some((p) => p.series)) {
+          await tx.contact.update({ where: { id: person.contactId }, data: { kind: 'resident' } });
+        }
         const occurrences = await tx.bookingOccurrence.findMany({
-          where: { bookingId: booking.id },
+          where: { bookingId: { in: bookings.map((b) => b.id) } },
           include: occurrenceInclude,
           orderBy: { startAt: 'asc' },
         });
-        await audit(tx, organizationId, actor, 'booking.create', 'booking', booking.id, {
-          after: { booking, occurrences: occurrences.length, skipped: conflicts.length },
+        await audit(tx, organizationId, actor, 'booking.create', 'booking', bookings[0]!.id, {
+          after: { bookings: bookings.map((b) => b.id), groupId, occurrences: occurrences.length, skipped: conflicts.length },
         });
-        return { booking, occurrences, skipped: conflicts };
+        return { booking: bookings[0]!, bookings, occurrences, skipped: conflicts };
       });
     } catch (err) {
       // Outra reserva entrou entre a checagem e o insert: o banco garante a regra.
       if (isBookingOverlapError(err)) {
         throw new DomainError('conflict', 'O horário acabou de ser reservado por outra pessoa. Consulte a agenda novamente.');
+      }
+      throw err;
+    }
+  }
+
+  /** Reserva única ou série com um só horário (RRULE). */
+  private planSingle(input: CreateBookingInput, tz: string, now: Date): BookingPlan {
+    if (!input.startAt || !input.endAt) throw new DomainError('validation', 'Informe início e fim da reserva');
+    assertInterval(input.startAt, input.endAt);
+    if (!input.recurrence) return { intervals: [{ start: input.startAt, end: input.endAt }], series: null };
+    const startsOn = localDateOf(input.startAt, tz);
+    if (localDateOf(input.endAt, tz) !== startsOn) {
+      throw new DomainError('validation', 'Reservas recorrentes precisam começar e terminar no mesmo dia');
+    }
+    let rule;
+    try {
+      rule = parseRRule(input.recurrence.rule);
+    } catch (e) {
+      throw new DomainError('validation', `Recorrência inválida: ${(e as Error).message}`);
+    }
+    const until = input.recurrence.until ?? rule.until;
+    const horizonLimit = addDays(localDateOf(now, tz), SERIES_HORIZON_DAYS);
+    const horizon = until && until < horizonLimit ? until : horizonLimit;
+    const localStart = hhmm(input.startAt, tz);
+    const localEnd = hhmm(input.endAt, tz);
+    const intervals = expandDates({ ...rule, until }, startsOn, startsOn, horizon).map((date) => ({
+      start: zonedToUtc(date, localStart, tz),
+      end: zonedToUtc(date, localEnd, tz),
+    }));
+    if (intervals.length === 0) throw new DomainError('validation', 'A recorrência não gera nenhuma data');
+    return { intervals, series: { rule: formatRRule({ ...rule, until: null }), startsOn, localStart, localEnd, until, horizon } };
+  }
+
+  /** Semanal com horário por dia: agrupa os dias de mesmo horário numa série (BYDAY), uma por horário. */
+  private planWeekly(weekly: NonNullable<CreateBookingInput['weekly']>, tz: string, now: Date): BookingPlan[] {
+    if (!weekly.slots.length) throw new DomainError('validation', 'Escolha pelo menos um dia da semana');
+    const seen = new Set<number>();
+    for (const slot of weekly.slots) {
+      if (!Number.isInteger(slot.weekday) || slot.weekday < 1 || slot.weekday > 7) throw new DomainError('validation', 'Dia da semana inválido');
+      if (seen.has(slot.weekday)) throw new DomainError('validation', 'Cada dia da semana aparece uma vez só');
+      seen.add(slot.weekday);
+      if (!HHMM.test(slot.start) || !HHMM.test(slot.end) || slot.start >= slot.end) {
+        throw new DomainError('validation', `Horário inválido: ${slot.start}–${slot.end}`);
+      }
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekly.startsOn)) throw new DomainError('validation', 'Informe a data de início');
+    const until = weekly.until ?? null;
+    if (until && until < weekly.startsOn) throw new DomainError('validation', 'A data final deve ser depois do início');
+    const horizonLimit = addDays(localDateOf(now, tz), SERIES_HORIZON_DAYS);
+    const horizon = until && until < horizonLimit ? until : horizonLimit;
+
+    const groups = new Map<string, number[]>();
+    for (const slot of weekly.slots) {
+      const key = `${slot.start}-${slot.end}`;
+      groups.set(key, [...(groups.get(key) ?? []), slot.weekday]);
+    }
+    const plans: BookingPlan[] = [];
+    for (const [key, days] of groups) {
+      const [localStart, localEnd] = key.split('-') as [string, string];
+      const byWeekday = [...days].sort((a, b) => a - b);
+      const rule = { freq: 'WEEKLY' as const, interval: 1, byWeekday, byMonthDay: null, until, count: null };
+      const intervals = expandDates(rule, weekly.startsOn, weekly.startsOn, horizon).map((date) => ({
+        start: zonedToUtc(date, localStart, tz),
+        end: zonedToUtc(date, localEnd, tz),
+      }));
+      if (!intervals.length) continue;
+      // A série começa na primeira data real (o dia de início pode não ser um dos dias escolhidos).
+      const startsOn = localDateOf(intervals[0]!.start, tz);
+      plans.push({ intervals, series: { rule: formatRRule({ ...rule, until: null }), startsOn, localStart, localEnd, until, horizon } });
+    }
+    if (!plans.length) throw new DomainError('validation', 'A recorrência não gera nenhuma data');
+    return plans;
+  }
+
+  /**
+   * Quem vai usar a sala. Contato cadastrado (por id) ou nome + telefone digitados, que viram
+   * contato (ou reaproveitam o existente pelo telefone). Sem telefone, fica só o nome.
+   */
+  private async resolvePerson(organizationId: string, input: CreateBookingInput): Promise<{ contactId: string | null; name: string | null; phone: string | null }> {
+    if (input.contactId) {
+      const c = await this.db.contact.findFirst({ where: { id: input.contactId, organizationId } });
+      if (!c) throw new DomainError('not_found', 'Contato não encontrado');
+      return { contactId: c.id, name: c.name ?? c.whatsappName ?? input.responsibleName?.trim() ?? null, phone: c.phone };
+    }
+    const name = input.responsibleName?.trim() || null;
+    if (!input.responsiblePhone) return { contactId: null, name, phone: null };
+    const phone = normalizeBrPhone(input.responsiblePhone);
+    if (!phone || phone.length < 10 || phone.length > 15) throw new DomainError('validation', 'Telefone do contato inválido');
+    const existing = await this.db.contact.findUnique({ where: { organizationId_phone: { organizationId, phone } } });
+    if (existing) return { contactId: existing.id, name: existing.name ?? existing.whatsappName ?? name, phone };
+    try {
+      const created = await this.db.contact.create({ data: { organizationId, phone, name, searchName: normalizeText(name ?? '') } });
+      return { contactId: created.id, name, phone };
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002') {
+        const c = await this.db.contact.findUniqueOrThrow({ where: { organizationId_phone: { organizationId, phone } } });
+        return { contactId: c.id, name: c.name ?? c.whatsappName ?? name, phone };
       }
       throw err;
     }
@@ -254,26 +389,38 @@ export class BookingService {
   }
 
   /** Cancela a série a partir de `fromDate` (local, inclusive) e impede novas ocorrências. */
-  async cancelSeries(organizationId: string, bookingId: string, fromDate: IsoDate, actor: Actor) {
+  /**
+   * Cancela a série a partir de `fromDate` (local, inclusive) e impede novas ocorrências.
+   * `wholeGroup`: numa reserva semanal com horários por dia, cancela todos os dias juntos.
+   */
+  async cancelSeries(organizationId: string, bookingId: string, fromDate: IsoDate, actor: Actor, opts: { wholeGroup?: boolean } = {}) {
     const org = await getOrganization(this.db, organizationId);
     const booking = await this.db.booking.findFirst({ where: { id: bookingId, organizationId } });
     if (!booking) throw new DomainError('not_found', 'Reserva não encontrada');
+    const ids =
+      opts.wholeGroup && booking.groupId
+        ? (await this.db.booking.findMany({ where: { organizationId, groupId: booking.groupId }, select: { id: true } })).map((b) => b.id)
+        : [bookingId];
     const from = localDayBoundsUtc(fromDate, org.timezone).start;
     return this.db.$transaction(async (tx) => {
-      const { count } = await tx.bookingOccurrence.updateMany({
-        where: { bookingId, status: { not: 'cancelled' }, startAt: { gte: from } },
-        data: { status: 'cancelled', cancelledAt: new Date() },
-      });
-      const remaining = await tx.bookingOccurrence.count({ where: { bookingId, status: { not: 'cancelled' } } });
-      await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          seriesUntil: fromIsoDate(addDays(fromDate, -1)),
-          ...(remaining === 0 ? { status: 'cancelled' } : {}),
-        },
-      });
-      await audit(tx, organizationId, actor, 'booking.cancel_series', 'booking', bookingId, { after: { fromDate, cancelled: count } });
-      return { cancelled: count };
+      let cancelled = 0;
+      for (const id of ids) {
+        const { count } = await tx.bookingOccurrence.updateMany({
+          where: { bookingId: id, status: { not: 'cancelled' }, startAt: { gte: from } },
+          data: { status: 'cancelled', cancelledAt: new Date() },
+        });
+        cancelled += count;
+        const remaining = await tx.bookingOccurrence.count({ where: { bookingId: id, status: { not: 'cancelled' } } });
+        await tx.booking.update({
+          where: { id },
+          data: {
+            seriesUntil: fromIsoDate(addDays(fromDate, -1)),
+            ...(remaining === 0 ? { status: 'cancelled' } : {}),
+          },
+        });
+      }
+      await audit(tx, organizationId, actor, 'booking.cancel_series', 'booking', bookingId, { after: { fromDate, cancelled, bookings: ids } });
+      return { cancelled };
     });
   }
 
@@ -288,6 +435,7 @@ export class BookingService {
     const spaceId = input.spaceId ?? occ.spaceId;
     const space = await this.db.space.findFirst({ where: { id: spaceId, organizationId, active: true }, include: { availabilityRules: true } });
     if (!space) throw new DomainError('not_found', 'Sala não encontrada');
+    assertBookable(space);
 
     const conflicts = await this.findConflicts(this.db, spaceId, space.availabilityRules, [{ start: input.startAt, end: input.endAt }], org.timezone, [occurrenceId]);
     if (conflicts.length) throw new DomainError('conflict', conflictMessage(conflicts), { conflicts });
@@ -383,6 +531,8 @@ export class BookingService {
     });
     const report: Array<{ bookingId: string; created: number; skipped: Conflict[] }> = [];
     for (const b of series) {
+      // Sala indisponível ou alugada: não gera datas novas; retoma de onde parou quando voltar a ficar disponível.
+      if (b.space.status !== 'available' || !b.space.active) continue;
       const tz = b.organization.timezone;
       const horizonLimit = addDays(localDateOf(now, tz), SERIES_HORIZON_DAYS);
       const until = b.seriesUntil ? toIsoDate(b.seriesUntil) : null;

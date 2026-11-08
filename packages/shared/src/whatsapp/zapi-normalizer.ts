@@ -92,6 +92,7 @@ export function normalizeZapiWebhook(payload: unknown): InboundMessage | null {
       name: str(p.senderName),
     },
     fromMe,
+    connectedPhone: normalizePhone(str(p.connectedPhone)),
     sentAt,
     text,
     media,

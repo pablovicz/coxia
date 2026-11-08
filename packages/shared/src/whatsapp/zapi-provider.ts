@@ -1,7 +1,9 @@
 import type { InboundMessage } from '@coxia/contracts';
 import { normalizePhone } from '../phone';
 import {
+  type ConnectCode,
   type ConnectionStatus,
+  type ContactProfile,
   type GroupInfo,
   type MediaDownload,
   type SendMediaInput,
@@ -86,14 +88,15 @@ export class ZapiProvider implements WhatsappProvider {
     const raw = (await this.request('GET', `group-metadata/${encodeURIComponent(groupId)}`)) as {
       phone?: string;
       subject?: string;
-      participants?: Array<{ phone?: string; isAdmin?: boolean; isSuperAdmin?: boolean }>;
+      participants?: Array<{ phone?: string; isAdmin?: boolean; isSuperAdmin?: boolean; name?: string; short?: string }>;
     };
     return {
       id: raw.phone ?? groupId,
       name: raw.subject ?? null,
       participants: (raw.participants ?? []).flatMap((pt) => {
         const phone = normalizePhone(pt.phone);
-        return phone ? [{ phone, isAdmin: pt.isAdmin === true || pt.isSuperAdmin === true }] : [];
+        const name = (pt.name ?? pt.short ?? '').trim() || null;
+        return phone ? [{ phone, isAdmin: pt.isAdmin === true || pt.isSuperAdmin === true, name }] : [];
       }),
       raw,
     };
@@ -111,6 +114,39 @@ export class ZapiProvider implements WhatsappProvider {
       error: raw.error ?? null,
       raw,
     };
+  }
+
+  async getQrCode(): Promise<ConnectCode> {
+    const raw = (await this.request('GET', 'qr-code/image')) as { value?: string; connected?: boolean; challenge?: unknown };
+    return toConnectCode(raw, 'qr');
+  }
+
+  async getPhoneCode(phone: string): Promise<ConnectCode> {
+    const digits = normalizePhone(phone);
+    if (!digits) throw new WhatsappProviderError('Telefone inválido', 400, false);
+    const raw = (await this.request('GET', `phone-code/${digits}`)) as { value?: string; connected?: boolean; challenge?: unknown };
+    return toConnectCode(raw, 'code');
+  }
+
+  /** contacts/{phone}: nome (notify = o que a pessoa usa) e foto; 404 = número sem WhatsApp. */
+  async getContactProfile(phone: string): Promise<ContactProfile | null> {
+    const digits = normalizePhone(phone);
+    if (!digits) return null;
+    let raw: { name?: string | null; notify?: string | null; short?: string | null; imgUrl?: string | null };
+    try {
+      raw = (await this.request('GET', `contacts/${digits}`)) as typeof raw;
+    } catch (err) {
+      if (err instanceof WhatsappProviderError && err.status === 404) return null;
+      throw err;
+    }
+    const name = [raw.notify, raw.name, raw.short].map((v) => (typeof v === 'string' ? v.trim() : '')).find(Boolean) ?? null;
+    const photoUrl = typeof raw.imgUrl === 'string' && raw.imgUrl.startsWith('https://') ? raw.imgUrl : null;
+    return { name, photoUrl };
+  }
+
+  async disconnect(): Promise<void> {
+    const raw = (await this.request('GET', 'disconnect')) as { value?: boolean };
+    if (raw.value === false) throw new WhatsappProviderError('Z-API disconnect: a instância recusou', null, true);
   }
 
   private async request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {
@@ -160,4 +196,14 @@ function pickMessageId(raw: unknown): string | null {
   const r = raw as { messageId?: unknown; zaapId?: unknown; id?: unknown } | null;
   const id = r?.messageId ?? r?.id ?? r?.zaapId;
   return typeof id === 'string' ? id : null;
+}
+
+/** Respostas de qr-code/image e phone-code: valor, sessão já conectada ou desafio de passkey. */
+export function toConnectCode(raw: { value?: string; connected?: boolean; challenge?: unknown }, kind: 'qr' | 'code'): ConnectCode {
+  if (raw.challenge) return { kind: 'challenge' };
+  if (raw.connected === true) return { kind: 'connected' };
+  const value = typeof raw.value === 'string' ? raw.value.trim() : '';
+  if (!value) throw new WhatsappProviderError(`Z-API: resposta sem ${kind === 'qr' ? 'QR code' : 'código'}`, null, true);
+  if (kind === 'code') return { kind: 'code', code: value };
+  return { kind: 'qr', image: value.startsWith('data:') ? value : `data:image/png;base64,${value}` };
 }

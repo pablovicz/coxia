@@ -14,6 +14,7 @@ import { IdempotencyInterceptor } from './idempotency/idempotency';
 import { OpsModule } from './ops/ops.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PrismaModule } from './prisma/prisma.service';
+import { StorageModule } from './storage/storage.service';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Global()
@@ -50,6 +51,7 @@ export class AppModule {
         }),
         BullModule.forRoot({ connection: redisConnectionFromUrl(env.REDIS_URL) }),
         PrismaModule,
+        StorageModule,
         AuditModule,
         AuthModule,
         HealthModule,

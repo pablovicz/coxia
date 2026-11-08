@@ -18,7 +18,28 @@ export interface WhatsappProvider {
   getMedia(url: string): Promise<MediaDownload>;
   getGroupInfo(groupId: string): Promise<GroupInfo>;
   checkConnection(): Promise<ConnectionStatus>;
+  /** QR code para conectar o número (expira em ~20 s; pedir de novo a cada 15 s). */
+  getQrCode(): Promise<ConnectCode>;
+  /** Código de pareamento para conectar digitando no celular, em vez de ler o QR. */
+  getPhoneCode(phone: string): Promise<ConnectCode>;
+  /** Nome e foto do perfil de um número no WhatsApp (null se o número não tem WhatsApp). */
+  getContactProfile(phone: string): Promise<ContactProfile | null>;
+  /** Encerra a sessão do número na instância (para conectar outro número ou cortar o acesso). */
+  disconnect(): Promise<void>;
 }
+
+/**
+ * Resultado de um pedido de conexão:
+ * - qr: imagem (data URI) para exibir;
+ * - code: código para digitar em "Conectar com número de telefone";
+ * - connected: a sessão já está ativa;
+ * - challenge: o aparelho pediu a chave de acesso (passkey), que só o painel do provedor conclui.
+ */
+export type ConnectCode =
+  | { kind: 'qr'; image: string }
+  | { kind: 'code'; code: string }
+  | { kind: 'connected' }
+  | { kind: 'challenge' };
 
 export interface SendTextInput {
   /** Telefone (só dígitos) ou ID do grupo. */
@@ -48,8 +69,15 @@ export interface MediaDownload {
 export interface GroupInfo {
   id: string;
   name: string | null;
-  participants: Array<{ phone: string; isAdmin: boolean }>;
+  participants: Array<{ phone: string; isAdmin: boolean; name: string | null }>;
   raw: unknown;
+}
+
+export interface ContactProfile {
+  /** Nome que a pessoa usa no WhatsApp (ou o salvo na agenda do celular da Coxia). */
+  name: string | null;
+  /** URL da foto (temporária, do próprio WhatsApp); null sem foto ou privada. */
+  photoUrl: string | null;
 }
 
 export interface ConnectionStatus {

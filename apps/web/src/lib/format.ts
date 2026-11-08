@@ -57,3 +57,10 @@ export const formatDueDate = (date: string) => {
   return { month: d.toFormat('LLL').replace('.', ''), day: d.toFormat('dd') };
 };
 export const isoDateOnly = (s: string) => s.slice(0, 10);
+
+/** "5511987654321" → "+55 11 98765-4321"; outros formatos ficam com "+" e os dígitos. */
+export function formatPhone(digits: string): string {
+  const br = /^55(\d{2})(\d{4,5})(\d{4})$/.exec(digits);
+  if (br) return `+55 ${br[1]} ${br[2]}-${br[3]}`;
+  return `+${digits}`;
+}

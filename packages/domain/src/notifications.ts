@@ -6,7 +6,7 @@ import { DateTime } from 'luxon';
 import { BillingService } from './bills';
 import { composeMorningBriefing, loadBriefingState } from './briefing';
 import { type Db, fromIsoDate, getOrganization, toIsoDate } from './common';
-import { ReminderService } from './reminders';
+import { ReminderService, reminderPerson, reminderText } from './reminders';
 
 /**
  * Planejamento de notificações — função pura: dado o estado e o "agora", decide o que deve sair.
@@ -34,12 +34,16 @@ export interface PlannerInput {
     dueDate: IsoDate;
     expectedCents: number | null;
     paidCents: number;
+    /** Valor variável: o previsto é estimativa ("cerca de"). */
+    isVariableAmount?: boolean;
+    /** Multa por atraso (mencionada no aviso de atraso). */
+    lateFeeCents?: number | null;
     status: string;
     recipientPhones: string[];
     overdueEveryDays: number;
     lastOverdueNoticeAt: Date | null;
   }>;
-  remindersDue: Array<{ id: string; title: string; message: string | null; recipientPhones: string[]; runAt: Date }>;
+  remindersDue: Array<{ id: string; title: string; text?: string; message: string | null; recipientPhones: string[]; runAt: Date }>;
   /** Projetos ativos com check-in no grupo ligado. `text` null = nada relevante hoje (silêncio). */
   projectCheckIns?: Array<{ projectId: string; groupChatId: string; text: () => string | null }>;
 }
@@ -94,7 +98,12 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
       if (!UNPAID.has(bill.status)) continue;
       const recipients = notBriefed(bill.recipientPhones);
       if (!recipients.length) continue;
-      const amount = bill.expectedCents === null ? 'valor a confirmar' : formatBRL(Math.max(bill.expectedCents - bill.paidCents, 0));
+      const amount =
+        bill.expectedCents === null
+          ? 'valor a confirmar'
+          : bill.isVariableAmount && bill.paidCents === 0
+            ? `cerca de ${formatBRL(bill.expectedCents)}`
+            : formatBRL(Math.max(bill.expectedCents - bill.paidCents, 0));
       if (bill.dueDate === tomorrow) {
         out.push({
           kind: 'bill_day_before',
@@ -122,7 +131,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           targetType: 'bill_occurrence',
           targetId: bill.occurrenceId,
           recipients,
-          text: `A conta de ${bill.name} está atrasada desde ${formatShortDate(bill.dueDate)}: ${amount} em aberto.`,
+          text: `A conta de ${bill.name} está atrasada desde ${formatShortDate(bill.dueDate)}: ${amount} em aberto${bill.lateFeeCents ? ` (+ multa de ${formatBRL(bill.lateFeeCents)})` : ''}.`,
         });
       }
     }
@@ -164,7 +173,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
       targetType: 'reminder',
       targetId: r.id,
       recipients: [...new Set(r.recipientPhones)],
-      text: r.message ? `Lembrete: ${r.title}\n${r.message}` : `Lembrete: ${r.title}`,
+      text: r.text ?? (r.message ? `Lembrete: ${r.title}\n${r.message}` : `Lembrete: ${r.title}`),
     });
   }
   return out;
@@ -257,13 +266,22 @@ export class NotificationService {
         competence: b.competence,
         dueDate: toIsoDate(b.dueDate),
         expectedCents: b.expectedAmountCents,
+        isVariableAmount: b.recurringBill.isVariableAmount,
+        lateFeeCents: b.recurringBill.lateFeeCents,
         paidCents: b.paidAmountCents,
         status: b.status,
         recipientPhones: b.recurringBill.recipientPhones,
         overdueEveryDays: b.recurringBill.overdueReminderEveryDays,
         lastOverdueNoticeAt: b.lastOverdueNoticeAt,
       })),
-      remindersDue: remindersDue.map((r) => ({ id: r.id, title: r.title, message: r.message, recipientPhones: r.recipientPhones, runAt: r.nextRunAt! })),
+      remindersDue: remindersDue.map((r) => ({
+        id: r.id,
+        title: r.title,
+        message: r.message,
+        text: reminderText({ type: r.type, title: r.title, message: r.message, person: reminderPerson(r) }),
+        recipientPhones: r.recipientPhones,
+        runAt: r.nextRunAt!,
+      })),
       projectCheckIns: checkInProjects.flatMap((p) => {
         const state = checkInStates.get(p.id);
         const group = p.channels[0]?.whatsappGroup.externalGroupId;

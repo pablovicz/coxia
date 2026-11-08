@@ -207,3 +207,13 @@ describe('golden: planejamento de notificações', () => {
     expect(planNotifications({ ...base, now: at('2026-11-13T06:00'), bookingsSoon: [soon] })).toEqual([]);
   });
 });
+
+describe('telefone escrito na mensagem (reserva pelo WhatsApp)', () => {
+  it('reconhece os formatos comuns e completa o 55', async () => {
+    const { phoneInText } = await import('./commands');
+    expect(phoneInText('para a Micaela, 11 98765-4321')).toBe('5511987654321');
+    expect(phoneInText('fone (21) 3333-4444 obrigado')).toBe('552133334444');
+    expect(phoneInText('+55 11 912345678')).toBe('5511912345678');
+    expect(phoneInText('sexta 27 das 14h às 17h')).toBeNull();
+  });
+});

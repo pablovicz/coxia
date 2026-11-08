@@ -53,6 +53,8 @@ export const inboundMessage = z.object({
     name: z.string().nullable(),
   }),
   fromMe: z.boolean(),
+  /** Número conectado à instância (o da própria Coxia), quando o provedor informa. */
+  connectedPhone: z.string().nullable(),
   sentAt: isoDateTime,
   text: z.string().nullable(),
   media: inboundMedia.nullable(),

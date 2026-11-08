@@ -399,3 +399,129 @@ describe('projetos pelo grupo (Etapa 3)', () => {
     expect(await prisma.project.count({ where: { organizationId: orgId, title: 'Mostra' } })).toBe(1);
   });
 });
+
+describe('contatos dos grupos (worker)', () => {
+  const OWN = '5511988887777';
+  const A = '5511911110001';
+  const B = '5511911110002';
+  const C = '5511911110003';
+  const chatId = `${randomUUID()}-group`;
+  const groupInfo = (phones: Array<[string, string | null]>) => ({
+    id: chatId,
+    name: 'Amigos da Casa',
+    participants: phones.map(([phone, name]) => ({ phone, isAdmin: false, name })),
+    raw: {},
+  });
+
+  async function groupMessage(opts: { senderPhone: string; senderName?: string; kind?: 'text' | 'notification'; notification?: { type: string; parameters: string[] } }) {
+    const group = await prisma.whatsappGroup.upsert({
+      where: { instanceId_externalGroupId: { instanceId, externalGroupId: chatId } },
+      update: {},
+      create: { organizationId: orgId, instanceId, externalGroupId: chatId, name: 'Amigos da Casa' },
+    });
+    const conv = await prisma.conversation.upsert({
+      where: { instanceId_externalChatId: { instanceId, externalChatId: chatId } },
+      update: {},
+      create: { organizationId: orgId, instanceId, externalChatId: chatId, isGroup: true, groupId: group.id },
+    });
+    const kind = opts.kind ?? 'text';
+    return prisma.message.create({
+      data: {
+        organizationId: orgId,
+        conversationId: conv.id,
+        direction: 'inbound',
+        provider: 'fake',
+        dedupeKey: `fake:${randomUUID()}`,
+        kind,
+        senderPhone: opts.senderPhone,
+        senderName: opts.senderName ?? null,
+        text: kind === 'text' ? 'oi' : null,
+        sentAt: new Date(),
+        processingStatus: 'queued',
+        // O webhook informa o número conectado: a instância aprende qual é o da Coxia.
+        normalized: { connectedPhone: OWN, notification: opts.notification ?? null, flags: {} },
+      },
+    });
+  }
+  const contactOf = (phone: string) =>
+    prisma.contact.findUnique({ where: { organizationId_phone: { organizationId: orgId, phone } }, include: { groups: true } });
+
+  it('primeira mensagem do grupo: registra quem escreveu e lê os participantes (sem o número da Coxia)', async () => {
+    whatsapp.groups.set(chatId, groupInfo([[A, null], [B, 'Bruno Lima'], [OWN, 'Coxia']]));
+    const m = await groupMessage({ senderPhone: A, senderName: 'Ana Paula' });
+    await app.get(InboundProcessor).process(job(m.id));
+
+    expect(await contactOf(A)).toMatchObject({ whatsappName: 'Ana Paula', groups: [expect.objectContaining({ leftAt: null })] });
+    expect(await contactOf(B)).toMatchObject({ whatsappName: 'Bruno Lima' });
+    expect(await contactOf(OWN)).toBeNull();
+    expect((await prisma.whatsappInstance.findUniqueOrThrow({ where: { id: instanceId } })).phone).toBe(OWN);
+    expect((await prisma.whatsappGroup.findFirstOrThrow({ where: { externalGroupId: chatId } })).contactsSyncedAt).not.toBeNull();
+  });
+
+  it('aviso de participante adicionado e removido atualiza os contatos', async () => {
+    whatsapp.groups.set(chatId, groupInfo([[A, null], [B, 'Bruno Lima'], [C, 'Carla'], [OWN, 'Coxia']]));
+    const add = await groupMessage({ senderPhone: A, kind: 'notification', notification: { type: 'GROUP_PARTICIPANT_ADD', parameters: [C] } });
+    await app.get(InboundProcessor).process(job(add.id));
+    expect(await contactOf(C)).toMatchObject({ whatsappName: 'Carla', groups: [expect.objectContaining({ leftAt: null })] });
+
+    whatsapp.groups.set(chatId, groupInfo([[A, null], [C, 'Carla'], [OWN, 'Coxia']]));
+    const remove = await groupMessage({ senderPhone: A, kind: 'notification', notification: { type: 'GROUP_PARTICIPANT_REMOVE', parameters: [B] } });
+    await app.get(InboundProcessor).process(job(remove.id));
+    expect((await contactOf(B))!.groups[0]!.leftAt).not.toBeNull();
+    // Avisos não viram "última mensagem" de quem adicionou.
+    expect((await contactOf(A))!.lastMessageAt).not.toBeNull();
+    expect(await prisma.message.findUniqueOrThrow({ where: { id: remove.id } })).toMatchObject({ processingStatus: 'ignored' });
+  });
+
+  it('falha do provedor ao ler o grupo não derruba a mensagem', async () => {
+    const original = whatsapp.getGroupInfo.bind(whatsapp);
+    whatsapp.getGroupInfo = async () => {
+      throw new WhatsappProviderError('Z-API group-metadata: HTTP 500', 500, true);
+    };
+    try {
+      await prisma.whatsappGroup.updateMany({ where: { externalGroupId: chatId }, data: { contactsSyncedAt: null } });
+      const m = await groupMessage({ senderPhone: '5511911110004', senderName: 'Duda' });
+      await app.get(InboundProcessor).process(job(m.id));
+      expect(await prisma.message.findUniqueOrThrow({ where: { id: m.id } })).toMatchObject({ processingStatus: expect.stringMatching(/processed|ignored/) });
+      expect(await contactOf('5511911110004')).toMatchObject({ whatsappName: 'Duda' });
+    } finally {
+      whatsapp.getGroupInfo = original;
+    }
+  });
+
+  it('sincronização periódica: pula com o WhatsApp desconectado e relê os grupos vencidos', async () => {
+    await prisma.whatsappGroup.updateMany({ where: { externalGroupId: chatId }, data: { contactsSyncedAt: null, lastSeenAt: new Date() } });
+    await prisma.whatsappInstance.updateMany({ data: { connected: false } });
+    expect(await app.get(MaintenanceService).syncGroupContacts()).toMatchObject({ skipped: 'disconnected' });
+
+    await prisma.whatsappInstance.update({ where: { id: instanceId }, data: { connected: true } });
+    whatsapp.groups.set(chatId, groupInfo([[A, null], [C, 'Carla'], [OWN, 'Coxia']]));
+    const res = await app.get(MaintenanceService).syncGroupContacts();
+    expect(res.groups).toBeGreaterThanOrEqual(1);
+    // Duda não está mais na lista do provedor.
+    expect((await contactOf('5511911110004'))!.groups[0]!.leftAt).not.toBeNull();
+  });
+});
+
+describe('perfil dos contatos no WhatsApp', () => {
+  it('lê nome e foto dos contatos novos; nome dado pela equipe não muda; sem WhatsApp não relê logo', async () => {
+    await prisma.whatsappInstance.update({ where: { id: instanceId }, data: { connected: true } });
+    const a = await prisma.contact.create({ data: { organizationId: orgId, phone: '5511966660001', name: 'Rafa (som)', searchName: 'rafa som' } });
+    const b = await prisma.contact.create({ data: { organizationId: orgId, phone: '5511966660002', searchName: '' } });
+    whatsapp.profiles.set('5511966660001', { name: 'Rafael Souza', photoUrl: 'https://pps.whatsapp.net/a.jpg' });
+
+    const res = await app.get(MaintenanceService).refreshContactProfiles(new Date(), 500);
+    expect(res.updated).toBeGreaterThanOrEqual(2);
+    expect(await prisma.contact.findUniqueOrThrow({ where: { id: a.id } })).toMatchObject({
+      name: 'Rafa (som)',
+      whatsappName: 'Rafael Souza',
+      photoUrl: 'https://pps.whatsapp.net/a.jpg',
+      searchName: 'rafa (som) rafael souza',
+    });
+    const after = await prisma.contact.findUniqueOrThrow({ where: { id: b.id } });
+    expect(after.profileFetchedAt).not.toBeNull();
+    // Logo depois, nada a reler.
+    const again = await app.get(MaintenanceService).refreshContactProfiles(new Date(), 500);
+    expect(again.updated).toBe(0);
+  });
+});

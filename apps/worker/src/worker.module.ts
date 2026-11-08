@@ -5,6 +5,7 @@ import { QUEUES } from '@coxia/contracts';
 import type { WhatsappProvider } from '@coxia/shared';
 import { LoggerModule } from 'nestjs-pino';
 import type { WorkerEnv } from './env';
+import { GroupContactsService } from './inbound/group-contacts.service';
 import { InboundProcessor } from './inbound/inbound.processor';
 import { InfraModule, PrismaService, type WorkerAi } from './infra.module';
 import { MaintenanceProcessor, MaintenanceScheduler } from './maintenance/maintenance.processor';
@@ -51,6 +52,7 @@ export class WorkerModule {
       controllers: [HealthController],
       providers: [
         InboundProcessor,
+        GroupContactsService,
         MaintenanceService,
         MaintenanceProcessor,
         ...(overrides.withSchedulers === false ? [] : [MaintenanceScheduler]),

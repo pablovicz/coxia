@@ -5,9 +5,12 @@ import { LoginPage } from '@/features/auth/login-page';
 import { HomePage } from '@/features/dashboard/home-page';
 import { ProjectDetailPage } from '@/features/projects/project-detail-page';
 import { ProjectsPage } from '@/features/projects/projects-page';
+import { ContactsPage } from '@/features/contacts/contacts-page';
 import { BillsPage } from '@/features/reminders/bills-page';
+import { RemindersPage } from '@/features/reminders/reminders-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { AgendaPage } from '@/features/rooms/agenda-page';
+import { RoomsPage } from '@/features/rooms/rooms-page';
 import { useAuth } from '@/providers/auth-provider';
 
 function RequireAuth() {
@@ -33,7 +36,10 @@ export function App() {
           <Route path="projetos" element={<ProjectsPage />} />
           <Route path="projetos/:id" element={<ProjectDetailPage />} />
           <Route path="agenda" element={<AgendaPage />} />
+          <Route path="salas" element={<RoomsPage />} />
           <Route path="contas" element={<BillsPage />} />
+          <Route path="lembretes" element={<RemindersPage />} />
+          <Route path="contatos" element={<ContactsPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
         </Route>
       </Route>

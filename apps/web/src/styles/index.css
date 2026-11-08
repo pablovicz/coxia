@@ -84,3 +84,43 @@
 @utility tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* Paleta das salas: cada sala tem uma cor (chave salva no banco) e a agenda separa as salas por ela.
+   Tons escolhidos para contraste ≥ 3:1 sobre o card nos dois temas; o nome da sala sempre acompanha a cor. */
+:root {
+  --room-floresta: #42634a;
+  --room-terracota: #b9532f;
+  --room-azul: #386c8b;
+  --room-mostarda: #9a6f12;
+  --room-ameixa: #7a4e86;
+  --room-petroleo: #2c6e68;
+  --room-rosa: #a9506d;
+  --room-grafite: #5a645d;
+}
+.dark {
+  --room-floresta: #a5caa9;
+  --room-terracota: #eea08a;
+  --room-azul: #96b9cf;
+  --room-mostarda: #deb965;
+  --room-ameixa: #c9a9d6;
+  --room-petroleo: #8ccbc2;
+  --room-rosa: #e3a3b8;
+  --room-grafite: #b9c6ba;
+}
+
+/* Usar com style={roomStyle(cor)} no elemento (define --room). */
+@utility room-bar {
+  border-left: 4px solid var(--room);
+}
+@utility room-soft {
+  background-color: color-mix(in oklab, var(--room) 14%, var(--card));
+}
+@utility room-fill {
+  background-color: var(--room);
+}
+@utility room-text {
+  color: var(--room);
+}
+@utility room-ring {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--room);
+}

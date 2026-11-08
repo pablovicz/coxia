@@ -1,6 +1,8 @@
 import type { InboundMessage } from '@coxia/contracts';
 import type {
+  ConnectCode,
   ConnectionStatus,
+  ContactProfile,
   GroupInfo,
   MediaDownload,
   SendMediaInput,
@@ -47,5 +49,27 @@ export class FakeWhatsappProvider implements WhatsappProvider {
 
   async checkConnection(): Promise<ConnectionStatus> {
     return { connected: this.connected, smartphoneConnected: this.connected, error: null, raw: {} };
+  }
+
+  /** QR de mentira (desenvolvimento): um quadriculado SVG. Conectado → não há o que ler. */
+  async getQrCode(): Promise<ConnectCode> {
+    if (this.connected) return { kind: 'connected' };
+    const cells = Array.from({ length: 21 * 21 }, (_, i) => ((i * 7919) % 11 < 5 ? `<rect x="${i % 21}" y="${Math.floor(i / 21)}" width="1" height="1"/>` : '')).join('');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 25 25" shape-rendering="crispEdges"><rect x="-2" y="-2" width="25" height="25" fill="#fff"/>${cells}</svg>`;
+    return { kind: 'qr', image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` };
+  }
+
+  profiles = new Map<string, ContactProfile>();
+
+  async getContactProfile(phone: string): Promise<ContactProfile | null> {
+    return this.profiles.get(phone) ?? null;
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+  }
+
+  async getPhoneCode(): Promise<ConnectCode> {
+    return this.connected ? { kind: 'connected' } : { kind: 'code', code: 'FAKE1234' };
   }
 }

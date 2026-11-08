@@ -8,6 +8,7 @@ import type { Job } from 'bullmq';
 import { createHash } from 'node:crypto';
 import { AI_CLIENT, PrismaService, WHATSAPP_PROVIDER, type WorkerAi } from '../infra.module';
 import { StorageService } from '../storage/storage.service';
+import { GroupContactsService } from './group-contacts.service';
 import { type MessageRoute, routeMessage } from './message-router';
 
 /**
@@ -28,6 +29,7 @@ export class InboundProcessor extends WorkerHost {
     @Inject(AI_CLIENT) private readonly ai: WorkerAi,
     private readonly commands: CommandService,
     private readonly workspace: ProjectWorkspaceService,
+    private readonly groupContacts: GroupContactsService,
   ) {
     super();
   }
@@ -74,6 +76,8 @@ export class InboundProcessor extends WorkerHost {
         new Set(members.filter(filter).flatMap((m) => (m.user.phone ? [normalizePhone(m.user.phone)!] : [])));
 
       const normalized = message.normalized as unknown as InboundMessage | null;
+      // Contatos: quem escreveu, quem entrou ou saiu do grupo (nunca derruba o processamento).
+      await this.groupContacts.fromMessage(message, normalized);
       const project = message.conversation.group?.projectChannel?.project ?? null;
       const route = routeMessage({
         kind: message.kind,

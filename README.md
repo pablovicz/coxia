@@ -9,6 +9,66 @@ Planejamento completo em [docs/PLANO_MVP.md](docs/PLANO_MVP.md) · identidade vi
 
 O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [docs/PILOTO.md](docs/PILOTO.md).
 
+### Salas e agenda (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| Tela **Salas** (`/salas`): a administração cadastra nome, descrição, fotos (até 8, JPG/PNG/WebP até 5 MB), situação, cor, ícone e horário de funcionamento; a equipe consulta | `apps/web/src/features/rooms/rooms-page.tsx`, `room-form.tsx` |
+| Situação da sala: **disponível** (recebe reservas), **não disponível** e **alugada mensal** (recusam reserva avulsa com o motivo, no painel e no WhatsApp; séries param de gerar datas e retomam ao voltar a disponível; reservas futuras não são canceladas, voltam para a administração decidir) | `packages/domain/src/spaces.ts` (`assertBookable`) |
+| Fotos em bucket privado, servidas pela api a quem está logado; tipo conferido pelos bytes iniciais | `apps/api/src/domain/controllers.ts`, `apps/api/src/storage` |
+| Agenda com visões **semana** (padrão), **mês**, **trimestre**, **semestre** e **ano**; cada sala com cor e ícone próprios, filtro que serve de legenda, uso por sala no período; a visão fica no endereço (`/agenda?visao=mes`) | `apps/web/src/features/rooms/agenda-page.tsx`, `calendar.ts` |
+
+### Contatos e conexão do WhatsApp (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| Tela **Contatos** (`/contatos`): quem está nos grupos do WhatsApp da casa, com busca por nome (sem acento) ou trecho do telefone, filtro por grupo, histórico de entrada/saída dos grupos, marca de quem é da equipe, nome e observações dados pela equipe; perfil leitura não vê (telefone é dado pessoal) | `apps/web/src/features/contacts`, `packages/domain/src/contacts.ts` |
+| Contatos entram sozinhos: quem escreve (grupo ou conversa direta), avisos de participante adicionado/removido e a lista completa de participantes da Z-API (`group-metadata`, que traz os nomes) — na primeira mensagem do grupo, a cada aviso de entrada/saída e a cada 6 h (grupos com movimento nos últimos 90 dias); o número da própria Coxia fica de fora | `apps/worker/src/inbound/group-contacts.service.ts` |
+| WhatsApp desconectado: a tela de operação mostra o **QR code** (renovado a cada 15 s, até 3 vezes) e a opção de **código de pareamento** pelo número; fecha sozinha quando a sessão volta e retoma a fila. Só administração; pedidos auditados, sem cache | `apps/web/src/features/settings/whatsapp-connect.tsx`, `GET /whatsapp/qr-code`, `POST /whatsapp/phone-code` |
+
+| Botão **Desconectar** na operação (com confirmação): encerra a sessão na Z-API, pausa a fila na hora e mostra o QR code para conectar de novo | `POST /whatsapp/disconnect` |
+
+### Contas e lembretes separados (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| **Contas** (`/contas`) só com o financeiro; valor sempre informado (obrigatório na conta fixa, estimado na variável) e edição de contas cadastradas | `apps/web/src/features/reminders/bills-page.tsx` |
+| Conta variável com estimativa: entra no previsto do mês, mas o pagamento pede o valor real e o primeiro pagamento define o valor (não fica "parcial") | `BillingService.registerPayment` |
+| **Lembretes** (`/lembretes`) em tela própria: geral, **ligar** ou **mandar mensagem** para alguém (contato dos Contatos ou nome/telefone digitados), repetição (todo dia, dias úteis, semanal, mensal) e destinatários da equipe; o aviso no WhatsApp traz o telefone (e o link wa.me na mensagem). A equipe também cria lembretes | `apps/web/src/features/reminders/reminders-page.tsx`, `reminder-form.tsx`, `packages/domain/src/reminders.ts` |
+| Cada conta ativa aparece em Lembretes como **automático**: avisos na véspera e no dia do vencimento (e reavisos se atrasar), até ser paga — os mesmos avisos que as contas já disparavam, sem duplicar | `GET /reminders/automatic` |
+
+### Financeiro: entradas e saídas (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| Tela **Financeiro** (`/contas`): resumo do mês com entradas, saídas, saldo previsto e atrasadas; abas **Contas a pagar** e **Entradas** (`?aba=entradas`) | `apps/web/src/features/reminders/bills-page.tsx`, `apps/web/src/features/finance` |
+| **Entradas** previstas e recebidas: de projeto (patrocínio, parcela, bilheteria — com data prevista de pagamento), aluguel avulso de sala ou outra; "Recebi" com valor e data reais (sem receber duas vezes); "atrasada" = prevista com data passada | `packages/domain/src/incomes.ts`, `/incomes` |
+| **Aluguel mensal** das salas: a sala "alugada mensal" tem valor, dia de pagamento e inquilino; a entrada do mês (e do próximo) é gerada sozinha, ajustada quando o valor muda e cancelada se a sala deixa de ser alugada | `IncomeService.generateRentals`, `syncRentalsOfSpace` |
+| Card **Entradas** na página do projeto (previsto × recebido) | `ProjectIncomesCard`, `GET /projects/:id/incomes` |
+
+### Reservas, residentes e equipe (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| Reserva: sala, atividade, **recorrente?** (não: data, horário e duração; sim: dias da semana em botões, horário, duração, repetir até), **responsável obrigatório** (contato ou cadastro na hora, que vira contato) e **valor da hora** (o da sala, editável para desconto pontual; a reserva guarda o valor) | `apps/web/src/features/rooms/booking-form.tsx`, `BookingService.create` |
+| A api também aceita semanal com horário diferente por dia (`weekly.slots`): uma série por horário, no mesmo grupo; cancelar "todos os dias" encerra o grupo | `planWeekly`, `cancelSeries({ wholeGroup })` |
+| Pelo WhatsApp: telefone escrito na mensagem; senão o contato com esse nome; sem nome, quem pediu; sem telefone, a Coxia pergunta | `CommandService.bookingPerson`, `phoneInText` |
+| Contato com reserva recorrente vira **Residente** (selo e filtro em Contatos); **nome e foto do WhatsApp** lidos a cada 15 min (novos primeiro, renovados a cada 3 dias) | `ContactKind`, `MaintenanceService.refreshContactProfiles` |
+| **Equipe** em Configurações (administração): cadastrar com senha inicial, papel, coordena projetos, briefing e **WhatsApp** de cada pessoa (identifica no WhatsApp); cada um edita o próprio telefone em "Sua conta" | `apps/api/src/organization`, `apps/web/src/features/settings/team-panel.tsx` |
+| Telefones digitados no painel ganham o 55 (mesmo formato do WhatsApp), para não duplicar contatos | `normalizeBrPhone` |
+
+### Contas: tipo e categorias (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| **Tipo** da conta: **Mensal** (dia de vencimento, valor fixo e **multa por atraso** opcional, somada ao valor sugerido no pagamento e citada no aviso de atraso) ou **Outros** (lançamento pontual numa data, valor fixo ou variável; a ocorrência nasce na hora, mesmo meses à frente) | `BillingService.createBill`, `bills-page.tsx` |
+| **Categorias de gasto** cadastráveis com ícone e cor (iniciais: Casa, Estoque, Manutenção), selo em cada conta e quadro "Por categoria" do mês | `packages/domain/src/expense-categories.ts`, `apps/web/src/features/finance/expense-categories.tsx` |
+| O antigo campo "categoria" (aluguel, energia…) virou interno: é deduzido do nome e só serve para o WhatsApp entender "paguei a luz" | `inferUtility` |
+
+Os avisos de participante (`GROUP_PARTICIPANT_*`) ainda não foram confirmados com payload real da Z-API: a sincronização pela lista de participantes cobre o que eles não trouxerem.
+
+As séries semanais são geradas até 182 dias à frente: nas visões de semestre e ano, as datas além disso aparecem quando o job diário as materializa.
+
 ### Etapa 4 — estabilização
 
 | Entregue | Onde |
@@ -47,7 +107,7 @@ Cada evento grava mensagem de origem, autor, modelo, versão de prompt/parser e 
 | Briefing matinal (texto gerado do estado estruturado), avisos D-1/no dia/atrasada com reaviso configurável, véspera e 1h antes da reserva, lembretes | `briefing.ts`, `notifications.ts` |
 | Comandos de administradoras pelo WhatsApp (texto ou áudio): disponibilidade, reservar, cancelar com confirmação SIM, pagar conta com comprovante, resumo | `packages/domain/src/commands.ts`, `apps/worker` |
 | REST: salas, reservas, disponibilidade, contas, pagamentos, lembretes, visão geral | `apps/api/src/domain` |
-| Painel: agenda (dia no celular, semana no desktop), formulário com conflitos, contas do mês, pagamento, cadastro de contas e lembretes | `apps/web/src/features` |
+| Painel: agenda das salas, formulário com conflitos, contas do mês, pagamento, cadastro de contas e lembretes | `apps/web/src/features` |
 
 Política anti-spam: quem recebe o briefing matinal vê nele as contas e reservas do dia; avisos avulsos vão só para os demais destinatários. Nada diário sai antes do horário do briefing.
 

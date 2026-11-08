@@ -8,9 +8,9 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 const SPACES = [
-  { slug: 'sala-grande', name: 'Sala Grande', aliases: ['sala grande', 'salão', 'grande'], sortOrder: 1 },
-  { slug: 'sala-media', name: 'Sala Média', aliases: ['sala média', 'sala media', 'média', 'media'], sortOrder: 2 },
-  { slug: 'sala-pequena', name: 'Sala Pequena', aliases: ['sala pequena', 'pequena'], sortOrder: 3 },
+  { slug: 'sala-grande', name: 'Sala Grande', aliases: ['sala grande', 'salão', 'grande'], sortOrder: 1, color: 'floresta', icon: 'palco' },
+  { slug: 'sala-media', name: 'Sala Média', aliases: ['sala média', 'sala media', 'média', 'media'], sortOrder: 2, color: 'terracota', icon: 'musica' },
+  { slug: 'sala-pequena', name: 'Sala Pequena', aliases: ['sala pequena', 'pequena'], sortOrder: 3, color: 'azul', icon: 'poltrona' },
 ];
 
 const BILLS = [
@@ -31,15 +31,14 @@ async function main() {
   for (const s of SPACES) {
     const space = await prisma.space.upsert({
       where: { organizationId_slug: { organizationId: org.id, slug: s.slug } },
-      update: { name: s.name, aliases: s.aliases, sortOrder: s.sortOrder },
+      // Salas existentes são da administração (tela Salas): o seed só cria as que faltam.
+      update: {},
       create: { ...s, organizationId: org.id },
     });
-    // Seg–sáb, 08:00–22:00 (placeholder).
-    for (let weekday = 1; weekday <= 6; weekday++) {
-      await prisma.spaceAvailabilityRule.upsert({
-        where: { spaceId_weekday_opensAt: { spaceId: space.id, weekday, opensAt: '08:00' } },
-        update: {},
-        create: { spaceId: space.id, weekday, opensAt: '08:00', closesAt: '22:00' },
+    // Seg–sáb, 08:00–22:00 (placeholder). Só para sala sem horário: não desfaz o que a administração ajustou.
+    if ((await prisma.spaceAvailabilityRule.count({ where: { spaceId: space.id } })) === 0) {
+      await prisma.spaceAvailabilityRule.createMany({
+        data: [1, 2, 3, 4, 5, 6].map((weekday) => ({ spaceId: space.id, weekday, opensAt: '08:00', closesAt: '22:00' })),
       });
     }
   }

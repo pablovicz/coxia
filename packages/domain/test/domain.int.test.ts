@@ -347,7 +347,7 @@ describe('golden: comandos pelo WhatsApp', () => {
   });
 
   it('reserva pela conversa e relata conflito', async () => {
-    responses.set('Reserva a sala grande na sexta 27 das 14h às 17h para a Micaela', {
+    responses.set('Reserva a sala grande na sexta 27 das 14h às 17h para a Micaela, 11 98765-4321', {
       intent: 'booking.create',
       spaceHint: 'sala grande',
       startAt: '2026-11-27T14:00:00-03:00',
@@ -356,9 +356,9 @@ describe('golden: comandos pelo WhatsApp', () => {
       notes: null,
       recurrence: null,
     });
-    const ok = await send('Reserva a sala grande na sexta 27 das 14h às 17h para a Micaela');
+    const ok = await send('Reserva a sala grande na sexta 27 das 14h às 17h para a Micaela, 11 98765-4321');
     expect(ok.reply).toBe('Reservado: Sala Grande, sex, 27/11, 14h–17h para Micaela.');
-    const again = await send('Reserva a sala grande na sexta 27 das 14h às 17h para a Micaela');
+    const again = await send('Reserva a sala grande na sexta 27 das 14h às 17h para a Micaela, 11 98765-4321');
     expect(again.reply).toBe('Não consegui reservar: já existe uma reserva (Micaela) das 14h–17h.');
   });
 

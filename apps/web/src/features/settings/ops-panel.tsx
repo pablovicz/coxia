@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, TriangleAlert } from 'lucide-react';
+import { RefreshCw, TriangleAlert, Unplug } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@/components/ui/card';
+import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/input';
 import { api, apiSend, type DeadDelivery, type FailedMessage, type OpsOverview } from '@/lib/api';
 import { local } from '@/lib/format';
+import { WhatsappConnect } from './whatsapp-connect';
 
 const AI_LABEL: Record<string, string> = {
   transcribe: 'Transcrição de áudio',
@@ -50,6 +53,17 @@ export function OpsPanel({ tz }: { tz: string }) {
     },
     onError: (e) => toast.error(e.message),
   });
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const disconnect = useMutation({
+    mutationFn: () => apiSend('/whatsapp/disconnect', 'POST'),
+    onSuccess: () => {
+      setConfirmDisconnect(false);
+      qc.removeQueries({ queryKey: ['whatsapp'] });
+      refresh();
+      toast.success('WhatsApp desconectado. Para conectar de novo, use o QR code abaixo.');
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const checkNow = useMutation({
     mutationFn: () => apiSend('/ops/whatsapp/check', 'POST'),
     onSuccess: () => {
@@ -75,10 +89,42 @@ export function OpsPanel({ tz }: { tz: string }) {
           </h2>
           <p className="text-sm text-muted-foreground">WhatsApp, filas e IA nas últimas 24 horas.</p>
         </div>
-        <Button variant="outline" onClick={refresh} aria-label="Atualizar operação">
-          <RefreshCw aria-hidden /> <span className="hidden sm:inline">Atualizar</span>
-        </Button>
+        <div className="flex gap-2">
+          {o && wa?.connected ? (
+            <Button variant="outline" className="text-destructive" onClick={() => setConfirmDisconnect(true)}>
+              <Unplug aria-hidden /> Desconectar
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={refresh} aria-label="Atualizar operação">
+            <RefreshCw aria-hidden /> <span className="hidden sm:inline">Atualizar</span>
+          </Button>
+        </div>
       </div>
+
+      {confirmDisconnect ? (
+        <Dialog
+          open
+          onOpenChange={(v) => !v && setConfirmDisconnect(false)}
+          title="Desconectar o WhatsApp?"
+          description="A Coxia para de receber e responder mensagens até alguém conectar de novo pelo QR code."
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setConfirmDisconnect(false)}>
+                Manter conectado
+              </Button>
+              <Button variant="destructive" loading={disconnect.isPending} onClick={() => disconnect.mutate()}>
+                Desconectar
+              </Button>
+            </>
+          }
+        >
+          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+            <li>Avisos, lembretes e o briefing ficam em espera e saem quando a conexão voltar.</li>
+            <li>Mensagens mandadas para a Coxia enquanto isso não são lidas.</li>
+            <li>Use para trocar o número da Coxia ou cortar o acesso de um celular perdido.</li>
+          </ul>
+        </Dialog>
+      ) : null}
 
       {overview.isError ? (
         <p role="alert" className="text-sm text-destructive">
@@ -99,7 +145,7 @@ export function OpsPanel({ tz }: { tz: string }) {
                 <div className="text-sm">
                   <p className="font-semibold">WhatsApp desconectado</p>
                   <p className="text-muted-foreground">
-                    Os avisos ficam em espera e saem quando a sessão voltar. Reconecte o número no painel da Z-API.
+                    Os avisos ficam em espera e saem quando a sessão voltar. Conecte de novo pelo QR code ou pelo código abaixo.
                     {wa.lastError ? ` Último erro: ${wa.lastError}.` : ''}
                   </p>
                 </div>
@@ -109,6 +155,7 @@ export function OpsPanel({ tz }: { tz: string }) {
               </Button>
             </div>
           ) : null}
+          {down && wa ? <WhatsappConnect phone={wa.phone} /> : null}
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <MetricCard

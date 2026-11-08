@@ -16,6 +16,8 @@ export async function createApp(env: ApiEnv): Promise<NestExpressApplication> {
   app.set('trust proxy', 1);
   app.use(helmet());
   app.useBodyParser('json', { limit: '1mb' });
+  // Fotos de sala chegam como corpo bruto; o controller confere tipo (bytes iniciais) e tamanho.
+  app.useBodyParser('raw', { type: ['image/jpeg', 'image/png', 'image/webp'], limit: '6mb' });
   app.enableCors({
     origin: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
     credentials: false,

@@ -6,6 +6,7 @@ import {
   formatShortDate,
   formatTimeRange,
   localDateOf,
+  normalizeText,
 } from '@coxia/shared';
 import { trackAi } from './ai-tracking';
 import { BillingService, resolveBillHint } from './bills';
@@ -111,6 +112,32 @@ export class CommandService {
     }
   }
 
+  /**
+   * Quem vai usar a sala, pelo WhatsApp: telefone escrito na mensagem; senão o contato com esse
+   * nome (um só); sem nome, quem pediu. Null = não dá para saber o telefone (a Coxia pergunta).
+   */
+  private async bookingPerson(
+    ctx: CommandContext,
+    responsibleName: string | null,
+  ): Promise<{ contactId: string | null; name: string | null; phone: string | null } | null> {
+    const typed = phoneInText(ctx.text);
+    if (typed) return { contactId: null, name: responsibleName, phone: typed };
+    if (!responsibleName) {
+      const member = await this.db.user.findFirst({
+        where: { phone: ctx.senderPhone, memberships: { some: { organizationId: ctx.organizationId } } },
+        select: { name: true },
+      });
+      return { contactId: null, name: member?.name ?? null, phone: ctx.senderPhone };
+    }
+    const q = normalizeText(responsibleName);
+    const matches = await this.db.contact.findMany({
+      where: { organizationId: ctx.organizationId, searchName: { contains: q } },
+      take: 2,
+    });
+    if (matches.length === 1) return { contactId: matches[0]!.id, name: responsibleName, phone: matches[0]!.phone };
+    return null;
+  }
+
   private async execute(
     cmd: CommandIntent,
     ctx: CommandContext,
@@ -143,13 +170,23 @@ export class CommandService {
         const recurrence = cmd.recurrence
           ? { rule: `FREQ=WEEKLY;BYDAY=${cmd.recurrence.byWeekday.map((d) => ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'][d - 1]).join(',')}` }
           : null;
+        // Toda reserva tem nome e telefone de quem vai usar a sala.
+        const person = await this.bookingPerson(ctx, cmd.responsibleName);
+        if (!person) {
+          return {
+            reply: `Para reservar, preciso do telefone de ${cmd.responsibleName}. Mande de novo com o número, por exemplo: "…para ${cmd.responsibleName}, 11 98765-4321".`,
+            action: 'clarify_contact',
+          };
+        }
         const result = await this.bookings.create(
           ctx.organizationId,
           {
             spaceId: r.match.id,
             startAt: new Date(cmd.startAt),
             endAt: new Date(cmd.endAt),
-            responsibleName: cmd.responsibleName,
+            contactId: person.contactId,
+            responsibleName: person.name,
+            responsiblePhone: person.phone,
             notes: cmd.notes,
             recurrence,
             onConflict: recurrence ? 'skip' : 'fail',
@@ -311,3 +348,10 @@ function friendlyError(err: DomainError, tz: string): string {
   return err.message.endsWith('.') ? err.message : `${err.message}.`;
 }
 
+
+/** Telefone brasileiro escrito na mensagem ("11 98765-4321", "(11) 3333-4444", "+55 11 9…"). */
+export function phoneInText(text: string): string | null {
+  const m = /(?:\+?55[\s.-]*)?\(?\b(\d{2})\)?[\s.-]*(9?\d{4})[\s.-]?(\d{4})\b/.exec(text);
+  if (!m) return null;
+  return `55${m[1]}${m[2]}${m[3]}`;
+}

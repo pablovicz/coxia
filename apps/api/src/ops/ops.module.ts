@@ -32,7 +32,7 @@ export class OpsController {
       await Promise.all([
         this.prisma.whatsappInstance.findMany({
           where: { organizationId: org },
-          select: { provider: true, connected: true, lastCheckedAt: true, lastConnectedAt: true, lastError: true },
+          select: { provider: true, phone: true, connected: true, lastCheckedAt: true, lastConnectedAt: true, lastError: true },
         }),
         this.prisma.message.groupBy({ by: ['processingStatus'], where: { organizationId: org, receivedAt: { gte: since } }, _count: true }),
         this.prisma.message.findFirst({

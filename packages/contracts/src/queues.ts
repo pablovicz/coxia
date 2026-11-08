@@ -22,5 +22,9 @@ export const MAINTENANCE_JOBS = {
   extendBookingSeries: 'extend-booking-series',
   /** Expurga conteúdo de mensagens e mídias mais antigas que organizations.retention_days. */
   applyRetention: 'apply-retention',
+  /** Relê os participantes dos grupos ativos no provedor (contatos: entradas, saídas e nomes). */
+  syncGroupContacts: 'sync-group-contacts',
+  /** Nome e foto dos contatos no WhatsApp (novos primeiro; renova a cada 3 dias). */
+  refreshContactProfiles: 'refresh-contact-profiles',
 } as const;
 export type MaintenanceJobName = (typeof MAINTENANCE_JOBS)[keyof typeof MAINTENANCE_JOBS];

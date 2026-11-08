@@ -32,11 +32,18 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantPr
 }
 
 export function Button({ className, variant, size, asChild, loading, disabled, children, ...props }: ButtonProps) {
-  const Comp = asChild ? Slot : 'button';
+  // asChild (ex.: <Link>): o Slot exige um único filho, então sem o spinner de carregamento.
+  if (asChild) {
+    return (
+      <Slot className={cn(buttonVariants({ variant, size }), className)} {...props}>
+        {children}
+      </Slot>
+    );
+  }
   return (
-    <Comp className={cn(buttonVariants({ variant, size }), className)} disabled={disabled || loading} {...props}>
+    <button className={cn(buttonVariants({ variant, size }), className)} disabled={disabled || loading} {...props}>
       {loading ? <Loader2 className="animate-spin" aria-hidden /> : null}
       {children}
-    </Comp>
+    </button>
   );
 }

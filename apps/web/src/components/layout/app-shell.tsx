@@ -1,7 +1,8 @@
-import { CalendarDays, FolderKanban, House, LogOut, ReceiptText, Settings } from 'lucide-react';
+import { Bell, CalendarDays, DoorOpen, FolderKanban, House, LogOut, ReceiptText, Settings, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { ThemeSwitch } from '@/components/theme-switch';
 import { Button } from '@/components/ui/button';
+import { canSeeContacts } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -9,7 +10,12 @@ export const NAV_ITEMS = [
   { to: '/', label: 'Visão geral', short: 'Início', icon: House, mobile: true },
   { to: '/projetos', label: 'Projetos', short: 'Projetos', icon: FolderKanban, mobile: true },
   { to: '/agenda', label: 'Agenda das salas', short: 'Agenda', icon: CalendarDays, mobile: true },
-  { to: '/contas', label: 'Lembretes e contas', short: 'Contas', icon: ReceiptText, mobile: true },
+  // No celular, Salas abre pelo botão no topo da Agenda (a barra inferior tem 4 itens).
+  { to: '/salas', label: 'Salas', short: 'Salas', icon: DoorOpen, mobile: false },
+  { to: '/contas', label: 'Financeiro', short: 'Finanças', icon: ReceiptText, mobile: true },
+  { to: '/lembretes', label: 'Lembretes', short: 'Lembretes', icon: Bell, mobile: true },
+  // Telefones são dado pessoal: perfil leitura não vê Contatos.
+  { to: '/contatos', label: 'Contatos', short: 'Contatos', icon: Users, mobile: true, team: true },
   { to: '/configuracoes', label: 'Configurações', short: 'Ajustes', icon: Settings, mobile: false },
 ] as const;
 
@@ -32,6 +38,8 @@ function Brand() {
  */
 export function AppShell() {
   const { session, logout } = useAuth();
+  const items = NAV_ITEMS.filter((i) => !('team' in i) || canSeeContacts(session?.user.role));
+  const mobileItems = items.filter((i) => i.mobile);
   const initials = (session?.user.name ?? '?')
     .split(/\s+/)
     .map((p) => p[0])
@@ -47,7 +55,7 @@ export function AppShell() {
       >
         <Brand />
         <nav className="flex flex-col gap-1">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+          {items.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -106,16 +114,20 @@ export function AppShell() {
 
       <nav
         aria-label="Navegação"
-        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className={cn(
+          'fixed inset-x-0 bottom-0 z-20 grid border-t bg-card pb-[env(safe-area-inset-bottom)] lg:hidden',
+          mobileItems.length === 6 ? 'grid-cols-6' : mobileItems.length === 5 ? 'grid-cols-5' : 'grid-cols-4',
+        )}
       >
-        {NAV_ITEMS.filter((i) => i.mobile).map(({ to, short, icon: Icon }) => (
+        {mobileItems.map(({ to, short, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
               cn(
-                'flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground',
+                'flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 font-medium text-muted-foreground',
+                mobileItems.length > 5 ? 'text-[11px]' : 'text-xs',
                 isActive && 'text-primary',
               )
             }

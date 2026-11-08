@@ -25,11 +25,11 @@ function renderAt(path: string) {
 }
 
 describe('AppShell', () => {
-  it('navegação inferior tem 4 destinos com alvo de toque ≥ 44px', () => {
+  it('navegação inferior (sem sessão: sem Contatos) tem alvo de toque ≥ 44px', () => {
     renderAt('/');
     const bottom = screen.getByRole('navigation', { name: 'Navegação' });
     const links = within(bottom).getAllByRole('link');
-    expect(links.map((l) => l.textContent)).toEqual(['Início', 'Projetos', 'Agenda', 'Contas']);
+    expect(links.map((l) => l.textContent)).toEqual(['Início', 'Projetos', 'Agenda', 'Finanças', 'Lembretes']);
     for (const l of links) expect(l.className).toContain('min-h-16');
   });
 

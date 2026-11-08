@@ -2,10 +2,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type InboundMessageJob, QUEUES } from '@coxia/contracts';
 import { claimDueDeliveries, markDeliveryFailed, markDeliverySent, Prisma, reclaimStaleDeliveries } from '@coxia/database';
-import { audit, BillingService, BookingService, NotificationService, ProjectService, SYSTEM_ACTOR } from '@coxia/domain';
+import { audit, BillingService, BookingService, ContactService, IncomeService, NotificationService, ProjectService, SYSTEM_ACTOR } from '@coxia/domain';
 import { type WhatsappProvider, WhatsappProviderError } from '@coxia/shared';
 import type { Queue } from 'bullmq';
 import { PrismaService, WHATSAPP_PROVIDER } from '../infra.module';
+import { GROUP_SYNC_TTL_MS, GroupContactsService } from '../inbound/group-contacts.service';
 import { StorageService } from '../storage/storage.service';
 
 export interface DispatchResult {
@@ -37,6 +38,7 @@ export class MaintenanceService {
     private readonly bookings: BookingService,
     private readonly projects: ProjectService,
     private readonly storage: StorageService,
+    private readonly groupContacts: GroupContactsService,
   ) {}
 
   private organizations() {
@@ -60,10 +62,16 @@ export class MaintenanceService {
     return { planned, failed };
   }
 
-  async generateBillOccurrences(now = new Date()): Promise<{ created: number }> {
+  /** Contas do mês (e do próximo) e o aluguel mensal das salas alugadas (entradas previstas). */
+  async generateBillOccurrences(now = new Date()): Promise<{ created: number; rentals: number }> {
     let created = 0;
-    for (const org of await this.organizations()) created += await this.billing.generateOccurrences(org.id, now);
-    return { created };
+    let rentals = 0;
+    const incomes = new IncomeService(this.prisma);
+    for (const org of await this.organizations()) {
+      created += await this.billing.generateOccurrences(org.id, now);
+      rentals += await incomes.generateRentals(org.id, now);
+    }
+    return { created, rentals };
   }
 
   async extendBookingSeries(now = new Date()) {
@@ -150,6 +158,64 @@ export class MaintenanceService {
    * Atualiza o estado da sessão do WhatsApp. Mudanças (caiu/voltou) viram evento de auditoria e
    * log de erro/aviso: base para alerta nos logs do Railway e para o painel de operação.
    */
+  /**
+   * Relê os participantes dos grupos com movimento nos últimos 90 dias e não sincronizados há um dia.
+   * Pula tudo com o WhatsApp desconectado; um grupo com erro não impede os outros.
+   */
+  async syncGroupContacts(now = new Date()): Promise<{ groups: number; failed: number; skipped?: 'disconnected' }> {
+    const instances = await this.prisma.whatsappInstance.findMany({ select: { id: true, phone: true, connected: true } });
+    if (instances.length && instances.every((i) => !i.connected)) return { groups: 0, failed: 0, skipped: 'disconnected' };
+    const groups = await this.prisma.whatsappGroup.findMany({
+      where: {
+        lastSeenAt: { gte: new Date(now.getTime() - 90 * 24 * 60 * 60_000) },
+        OR: [{ contactsSyncedAt: null }, { contactsSyncedAt: { lt: new Date(now.getTime() - GROUP_SYNC_TTL_MS + 60 * 60_000) } }],
+      },
+      select: { id: true, organizationId: true, externalGroupId: true, instanceId: true },
+      take: 200,
+    });
+    let failed = 0;
+    for (const g of groups) {
+      try {
+        await this.groupContacts.syncGroup(g.organizationId, g, instances.find((i) => i.id === g.instanceId)?.phone ?? null, now);
+      } catch (err) {
+        failed++;
+        this.logger.warn({ group_id: g.id, err: (err as Error).message }, 'contatos: falha ao sincronizar grupo');
+      }
+    }
+    if (groups.length) this.logger.log({ groups: groups.length, failed }, 'contatos: grupos sincronizados');
+    return { groups: groups.length, failed };
+  }
+
+  /**
+   * Nome e foto do WhatsApp dos contatos: primeiro os nunca lidos, depois os com mais de 3 dias
+   * (a URL da foto expira). Poucos por rodada, para não pesar na Z-API; pula desconectado.
+   */
+  async refreshContactProfiles(now = new Date(), batch = 30): Promise<{ updated: number; failed: number; skipped?: 'disconnected' }> {
+    const instances = await this.prisma.whatsappInstance.findMany({ select: { connected: true } });
+    if (instances.length && instances.every((i) => !i.connected)) return { updated: 0, failed: 0, skipped: 'disconnected' };
+    const stale = new Date(now.getTime() - 3 * 24 * 60 * 60_000);
+    const contacts = await this.prisma.contact.findMany({
+      where: { OR: [{ profileFetchedAt: null }, { profileFetchedAt: { lt: stale } }] },
+      orderBy: [{ profileFetchedAt: { sort: 'asc', nulls: 'first' } }, { createdAt: 'asc' }],
+      select: { id: true, phone: true },
+      take: batch,
+    });
+    const service = new ContactService(this.prisma);
+    let updated = 0;
+    let failed = 0;
+    for (const c of contacts) {
+      try {
+        const profile = await this.whatsapp.getContactProfile(c.phone);
+        await service.applyWhatsappProfile(c.id, profile ?? { name: null, photoUrl: null }, now);
+        updated++;
+      } catch (err) {
+        failed++;
+        this.logger.warn({ contact_id: c.id, err: (err as Error).message }, 'contatos: falha ao ler perfil no WhatsApp');
+      }
+    }
+    return { updated, failed };
+  }
+
   async checkConnection(now = new Date()): Promise<{ connected: boolean; changed: boolean }> {
     let connected = false;
     let error: string | null = null;

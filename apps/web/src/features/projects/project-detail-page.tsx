@@ -7,6 +7,7 @@ import { EmptyState, PageHeader } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@/components/ui/card';
+import { ProjectIncomesCard } from '@/features/finance/incomes';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field } from '@/components/ui/field';
 import { Input, Skeleton } from '@/components/ui/input';
@@ -127,13 +128,14 @@ export function ProjectDetailPage() {
         />
       </section>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-[3fr_2fr]">
-        <div className="grid content-start gap-4">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] [&>*]:min-w-0">
+        <div className="grid min-w-0 content-start gap-4 [&>*]:min-w-0">
           <ReviewCard project={p} tz={tz} canReviewTasks={staff} canReviewMoney={admin} />
           <TasksCard project={p} today={today} canEdit={staff} closed={closed} onNew={() => setNewTask(true)} />
           <FinanceCard project={p} tz={tz} canEdit={admin} />
+          <ProjectIncomesCard projectId={p.id} tz={tz} canEdit={admin} />
         </div>
-        <div className="grid content-start gap-4">
+        <div className="grid min-w-0 content-start gap-4 [&>*]:min-w-0">
           <BriefingCard project={p} />
           <Card>
             <CardHeader>

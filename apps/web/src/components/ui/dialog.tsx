@@ -14,6 +14,7 @@ export function Dialog({
   description,
   children,
   footer,
+  size = 'default',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -21,6 +22,8 @@ export function Dialog({
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** wide: formulários longos em duas colunas no desktop. */
+  size?: 'default' | 'wide';
 }) {
   // Diálogos controlados (sem DialogTrigger): o Radix não sabe para onde devolver o foco.
   // Guardamos o elemento focado na abertura — antes do foco ir para dentro do diálogo.
@@ -41,7 +44,8 @@ export function Dialog({
           }}
           className={cn(
             'fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-xl border bg-popover text-popover-foreground shadow-popover',
-            'sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl',
+            'sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl',
+            size === 'wide' ? 'sm:max-w-2xl lg:max-w-5xl' : 'sm:max-w-lg',
           )}
         >
           <div className="flex items-start justify-between gap-4 border-b p-5">

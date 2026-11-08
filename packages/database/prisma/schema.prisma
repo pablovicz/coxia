@@ -33,6 +33,13 @@ enum ProjectStatus {
   closed
 }
 
+/// Situação da sala: só "available" recebe reservas avulsas.
+enum SpaceStatus {
+  available
+  unavailable
+  monthly_rental
+}
+
 enum BookingStatus {
   tentative
   confirmed
@@ -52,6 +59,32 @@ enum ProjectExpenseStatus {
   confirmed
   paid
   rejected
+}
+
+/// Conta mensal (vencimento todo mês) ou lançamento pontual numa data.
+enum BillKind {
+  monthly
+  one_time
+}
+
+/// Tipo do contato: contato comum ou residente (tem reserva recorrente de sala).
+enum ContactKind {
+  contact
+  resident
+}
+
+/// Origem de uma entrada de dinheiro.
+enum IncomeSource {
+  project
+  room_rental
+  other
+}
+
+/// "Atrasada" não é guardada: é uma entrada prevista com data já passada.
+enum IncomeStatus {
+  expected
+  received
+  cancelled
 }
 
 enum ProjectExpenseKind {
@@ -108,6 +141,13 @@ enum MessageProcessingStatus {
 enum ReminderKind {
   one_time
   recurring
+}
+
+/// O que o lembrete pede: geral, ligar para alguém ou mandar mensagem para alguém.
+enum ReminderType {
+  general
+  call
+  message
 }
 
 enum NotificationKind {
@@ -181,6 +221,10 @@ model Organization {
   projectSummaries       ProjectSummary[]
   spaces                 Space[]
   spaceBlocks            SpaceBlock[]
+  spacePhotos            SpacePhoto[]
+  contacts               Contact[]
+  incomes                Income[]
+  expenseCategories      ExpenseCategory[]
   bookings               Booking[]
   bookingOccurrences     BookingOccurrence[]
   reminders              Reminder[]
@@ -251,22 +295,75 @@ model WhatsappInstance {
 }
 
 model WhatsappGroup {
-  id              String   @id @default(cuid())
-  organizationId  String   @map("organization_id")
-  instanceId      String   @map("instance_id")
+  id               String    @id @default(cuid())
+  organizationId   String    @map("organization_id")
+  instanceId       String    @map("instance_id")
   /// ID estável do grupo no provedor. Nunca usar o nome como chave.
-  externalGroupId String   @map("external_group_id")
-  name            String?
-  lastSeenAt      DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  externalGroupId  String    @map("external_group_id")
+  name             String?
+  lastSeenAt       DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  /// Última leitura da lista de participantes no provedor (contatos).
+  contactsSyncedAt DateTime? @map("contacts_synced_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   instance       WhatsappInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
   conversation   Conversation?
   projectChannel ProjectChannel?
+  members        ContactGroup[]
 
   @@unique([instanceId, externalGroupId])
   @@map("whatsapp_groups")
+}
+
+/// Pessoa vista nos grupos (ou em conversa direta) do WhatsApp da organização. Chave: telefone.
+model Contact {
+  id               String      @id @default(cuid())
+  organizationId   String      @map("organization_id")
+  /// Só dígitos (E.164 sem '+').
+  phone            String
+  /// Nome definido pela equipe; tem prioridade sobre o nome do WhatsApp.
+  name             String?
+  /// Nome que a pessoa usa no WhatsApp (último visto).
+  whatsappName     String?     @map("whatsapp_name")
+  notes            String?
+  kind             ContactKind @default(contact)
+  /// Foto do perfil no WhatsApp (URL temporária do provedor, renovada pelo worker).
+  photoUrl         String?     @map("photo_url")
+  /// Última leitura de nome/foto no WhatsApp.
+  profileFetchedAt DateTime?   @map("profile_fetched_at") @db.Timestamptz(6)
+  /// Nome e nome do WhatsApp sem acentos e em minúsculas (busca "joao" acha "João").
+  searchName       String      @default("") @map("search_name")
+  /// Última mensagem enviada pela pessoa.
+  lastMessageAt    DateTime?   @map("last_message_at") @db.Timestamptz(6)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  groups       ContactGroup[]
+  reminders    Reminder[]
+  bookings     Booking[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId, lastMessageAt])
+  @@map("contacts")
+}
+
+/// Participação de um contato num grupo. Saída do grupo marca leftAt (o histórico fica).
+model ContactGroup {
+  contactId String    @map("contact_id")
+  groupId   String    @map("group_id")
+  isAdmin   Boolean   @default(false) @map("is_admin")
+  joinedAt  DateTime  @default(now()) @map("joined_at") @db.Timestamptz(6)
+  leftAt    DateTime? @map("left_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  contact Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  group   WhatsappGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, groupId])
+  @@index([groupId])
+  @@map("contact_groups")
 }
 
 model Conversation {
@@ -374,6 +471,7 @@ model Project {
   tasks        ProjectTask[]
   decisions    ProjectDecision[]
   expenses     ProjectExpense[]
+  incomes      Income[]
   summaries    ProjectSummary[]
 
   @@index([organizationId, status])
@@ -470,6 +568,37 @@ model ProjectDecision {
 }
 
 /// Cotações e despesas do projeto. Cotação não é pagamento; `paid` exige comprovação ou confirmação.
+/// Entrada de dinheiro prevista ou recebida: de projeto (patrocínio, parcela, bilheteria),
+/// aluguel de sala (o mensal é gerado sozinho) ou outra.
+model Income {
+  id                  String       @id @default(cuid())
+  organizationId      String       @map("organization_id")
+  source              IncomeSource
+  description         String
+  amountCents         Int          @map("amount_cents")
+  expectedOn          DateTime     @map("expected_on") @db.Date
+  status              IncomeStatus @default(expected)
+  receivedOn          DateTime?    @map("received_on") @db.Date
+  receivedAmountCents Int?         @map("received_amount_cents")
+  payerName           String?      @map("payer_name")
+  notes               String?
+  projectId           String?      @map("project_id")
+  spaceId             String?      @map("space_id")
+  /// Aluguel mensal gerado (YYYY-MM): um por sala e mês, mesmo com o job rodando várias vezes.
+  competence          String?
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  space        Space?       @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+
+  @@unique([spaceId, competence])
+  @@index([organizationId, expectedOn])
+  @@index([projectId])
+  @@map("incomes")
+}
+
 model ProjectExpense {
   id                String               @id @default(cuid())
   organizationId    String               @map("organization_id")
@@ -522,26 +651,59 @@ model ProjectSummary {
 // ───────────────────────────── Salas e reservas ─────────────────────────────
 
 model Space {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  name           String
-  slug           String
+  id              String      @id @default(cuid())
+  organizationId  String      @map("organization_id")
+  name            String
+  slug            String
+  description     String?
   /// Apelidos usados nos comandos ("sala grande", "salão").
-  aliases        String[] @default([])
-  capacity       Int?
-  active         Boolean  @default(true)
-  sortOrder      Int      @default(0) @map("sort_order")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  aliases         String[]    @default([])
+  capacity        Int?
+  /// false = sala removida do cadastro (arquivada). Situação de uso fica em `status`.
+  active          Boolean     @default(true)
+  status          SpaceStatus @default(available)
+  /// Chave da paleta de salas (web: lib/rooms.ts) — cor na agenda.
+  color           String      @default("floresta")
+  /// Chave do ícone da sala (web: lib/rooms.ts).
+  icon            String      @default("porta")
+  /// Aluguel mensal (status monthly_rental): valor, dia de pagamento e quem aluga.
+  /// Preço da hora de locação (reserva avulsa).
+  hourlyRateCents Int?        @map("hourly_rate_cents")
+  rentAmountCents Int?        @map("rent_amount_cents")
+  rentDueDay      Int?        @map("rent_due_day")
+  tenantName      String?     @map("tenant_name")
+  sortOrder       Int         @default(0) @map("sort_order")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   availabilityRules SpaceAvailabilityRule[]
   blocks            SpaceBlock[]
+  photos            SpacePhoto[]
+  incomes           Income[]
   bookings          Booking[]
   occurrences       BookingOccurrence[]
 
   @@unique([organizationId, slug])
   @@map("spaces")
+}
+
+/// Foto da sala no bucket (privado). Servida pela api a quem está logado.
+model SpacePhoto {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  spaceId        String   @map("space_id")
+  storageKey     String   @unique @map("storage_key")
+  contentType    String   @map("content_type")
+  sizeBytes      Int      @map("size_bytes")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space        Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@index([spaceId, sortOrder])
+  @@map("space_photos")
 }
 
 /// Horário de funcionamento por dia da semana, em hora local da organização.
@@ -594,6 +756,12 @@ model Booking {
   localEndTime        String?       @map("local_end_time")
   materializedUntil   DateTime?     @map("materialized_until") @db.Date
   notifyOneHourBefore Boolean       @default(false) @map("notify_one_hour_before")
+  /// Quem vai usar a sala (contato): nome e telefone também ficam em responsible_*.
+  contactId           String?       @map("contact_id")
+  /// Valor da hora desta reserva (o da sala ou um desconto pontual).
+  hourlyRateCents     Int?          @map("hourly_rate_cents")
+  /// Reserva semanal com horários diferentes por dia: uma série por horário, mesmo grupo.
+  groupId             String?       @map("group_id")
   createdByPhone      String?       @map("created_by_phone")
   sourceMessageId     String?       @map("source_message_id")
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -601,8 +769,10 @@ model Booking {
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   space        Space               @relation(fields: [spaceId], references: [id])
+  contact      Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
   occurrences  BookingOccurrence[]
 
+  @@index([groupId])
   @@map("bookings")
 }
 
@@ -636,8 +806,14 @@ model Reminder {
   id              String       @id @default(cuid())
   organizationId  String       @map("organization_id")
   kind            ReminderKind
+  type            ReminderType @default(general)
   title           String
   message         String?
+  /// Para ligar/mandar mensagem: contato cadastrado ou, se não houver, nome e telefone digitados.
+  contactId       String?      @map("contact_id")
+  personName      String?      @map("person_name")
+  personPhone     String?      @map("person_phone")
+  createdByUserId String?      @map("created_by_user_id")
   /// Para one_time: instante do aviso.
   dueAt           DateTime?    @map("due_at") @db.Timestamptz(6)
   /// Para recurring: RRULE em hora local da organização.
@@ -650,6 +826,7 @@ model Reminder {
   updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@index([active, nextRunAt])
   @@map("reminders")
@@ -659,7 +836,13 @@ model RecurringBill {
   id                       String    @id @default(cuid())
   organizationId           String    @map("organization_id")
   name                     String
-  /// aluguel | energia | agua | internet | telefone | outros
+  /// Mensal (vencimento todo mês) ou pontual (uma data).
+  kind                     BillKind  @default(monthly)
+  /// Categoria cadastrada pela casa (Casa, Estoque, Manutenção…).
+  expenseCategoryId        String?   @map("expense_category_id")
+  /// Multa por atraso (valor fixo somado quando a conta vence sem pagamento).
+  lateFeeCents             Int?      @map("late_fee_cents")
+  /// Uso interno: tipo de serviço deduzido do nome (aluguel, energia…), para o WhatsApp entender "paguei a luz".
   category                 String
   responsibleName          String?   @map("responsible_name")
   responsiblePhone         String?   @map("responsible_phone")
@@ -678,10 +861,32 @@ model RecurringBill {
   createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  occurrences  BillOccurrence[]
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  expenseCategory ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)
+  occurrences     BillOccurrence[]
 
   @@map("recurring_bills")
+}
+
+/// Categoria de gasto, cadastrada pela casa, com ícone e cor (Casa, Estoque, Manutenção…).
+model ExpenseCategory {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  name           String
+  /// Chave do ícone (web: lib/expense-categories.tsx).
+  icon           String   @default("outros")
+  /// Chave da paleta (a mesma das salas).
+  color          String   @default("grafite")
+  sortOrder      Int      @default(0) @map("sort_order")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bills        RecurringBill[]
+
+  @@unique([organizationId, name])
+  @@map("expense_categories")
 }
 
 /// Uma ocorrência por conta e competência (unique) — o job mensal pode rodar várias vezes sem duplicar.
