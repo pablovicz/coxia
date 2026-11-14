@@ -598,7 +598,7 @@ export function PaymentDialog({ occ: initial, tz, onClose }: { occ: BillOccurren
             Cancelar
           </Button>
           <Button type="submit" form="payment-form" loading={pay.isPending}>
-            {choosing ? 'Salvar pagamento' : 'Confirmar pagamento'}
+            {file ? 'Salvar com comprovante' : 'Marcar como paga'}
           </Button>
         </>
       }

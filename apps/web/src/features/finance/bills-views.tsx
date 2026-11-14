@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, FileText, Paperclip, Pencil } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, ChevronLeft, ChevronRight, FileText, Paperclip, Pencil } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { type ReactNode, useRef } from 'react';
 import { toast } from 'sonner';
@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/input';
 import { monthGrid, WEEKDAY_HEADERS } from '@/features/rooms/calendar';
-import { api, type BillDetails, type BillOccurrence, type ExpenseCategory, fetchPaymentProof, MAX_PROOF_BYTES, PAYMENT_METHODS, payWithProof, PROOF_TYPES, type RecurringBill } from '@/lib/api';
+import { api, apiSend, type BillDetails, type BillOccurrence, type ExpenseCategory, fetchPaymentProof, MAX_PROOF_BYTES, PAYMENT_METHODS, payWithProof, PROOF_TYPES, type RecurringBill } from '@/lib/api';
 import { CategoryIcon } from '@/lib/expense-categories';
 import { formatBRL, formatCompetence, formatDayTitle, formatDueDate, formatShortDay, todayIn } from '@/lib/format';
 import { roomStyle } from '@/lib/rooms';
@@ -336,6 +336,21 @@ export function BillDetailsDialog({
   // Ocorrência a pagar: a clicada (se em aberto) ou a mais antiga em aberto.
   const openOcc = d?.occurrences.filter((o) => o.status === 'pending' || o.status === 'partially_paid' || o.status === 'overdue') ?? [];
   const target = focus && focus.status !== 'paid' && focus.status !== 'cancelled' ? focus.id : openOcc[0]?.id;
+  // Marcar como paga sem comprovante: quita o restante (com multa, se atrasada) com a data de hoje.
+  // Valor variável ainda sem valor: abre o pagamento para informar quanto foi pago.
+  const qc = useQueryClient();
+  const targetOcc = d?.occurrences.find((x) => x.id === target);
+  const amountKnown = !!targetOcc && !!b && targetOcc.expectedAmountCents !== null && !(b.isVariableAmount && targetOcc.paidAmountCents === 0);
+  const markPaid = useMutation({
+    mutationFn: (id: string) => apiSend(`/bills/occurrences/${id}/payments`, 'POST', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bills'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+      qc.invalidateQueries({ queryKey: ['overview'] });
+      toast.success('Conta marcada como paga.');
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const payTarget = () => {
     const o = d?.occurrences.find((x) => x.id === target);
     if (!o || !b) return;
@@ -384,9 +399,14 @@ export function BillDetailsDialog({
             </Button>
           ) : null}
           {admin && target ? (
-            <Button onClick={payTarget}>
-              <Paperclip aria-hidden /> Adicionar comprovante
-            </Button>
+            <>
+              <Button variant="outline" loading={markPaid.isPending} onClick={() => (amountKnown ? markPaid.mutate(target) : payTarget())}>
+                <Check aria-hidden /> Marcar como paga
+              </Button>
+              <Button onClick={payTarget}>
+                <Paperclip aria-hidden /> Adicionar comprovante
+              </Button>
+            </>
           ) : null}
         </>
       }

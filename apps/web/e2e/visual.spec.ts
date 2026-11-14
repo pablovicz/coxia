@@ -647,6 +647,7 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/bills/occurrences') return respond(empty ? [] : [...BILLS, ONE_OFF, PARCELADA]);
     if (path === '/finance/overview')
       return respond(empty ? { ...FINANCE_OVERVIEW, months: FINANCE_OVERVIEW.months.map((m) => financeMonth(Number(m.competence.slice(5)), 0, 0, 0)), totals: { ...FINANCE_OVERVIEW.totals, incomeExpectedCents: 0, billsExpectedCents: 0 } } : FINANCE_OVERVIEW);
+    if (/^\/bills\/occurrences\/[\w-]+\/payments$/.test(path) && method === 'POST') return route.fulfill({ status: 201, json: { amountCents: 0, remainingCents: 0 } });
     if (/^\/bills\/occurrences\/[\w-]+\/payments\/with-proof$/.test(path)) return route.fulfill({ status: 201, json: { amountCents: 7500, remainingCents: 0 } });
     if (/^\/bills\/payments\/[\w-]+\/proof$/.test(path)) return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
     if (path === '/bills/upcoming')
@@ -1687,7 +1688,7 @@ test.describe('interação acessível', () => {
     await expect(dialog.getByText('comprovante-agua.png')).toBeVisible();
     const [req] = await Promise.all([
       page.waitForRequest((r) => r.url().includes('/bills/occurrences/c3/payments/with-proof') && r.method() === 'POST'),
-      dialog.getByRole('button', { name: 'Salvar pagamento' }).click(),
+      dialog.getByRole('button', { name: 'Salvar com comprovante' }).click(),
     ]);
     const url = new URL(req.url());
     expect(Object.fromEntries(url.searchParams)).toEqual({ amountCents: '7500', paidOn: '2026-11-06' });
@@ -1706,10 +1707,34 @@ test.describe('interação acessível', () => {
     await pay.getByLabel('Comprovante (foto ou PDF, opcional)').setInputFiles({ name: 'recibo.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 recibo') });
     const [req] = await Promise.all([
       page.waitForRequest((r) => r.url().includes('/bills/occurrences/c7/payments/with-proof') && r.method() === 'POST'),
-      pay.getByRole('button', { name: 'Confirmar pagamento' }).click(),
+      pay.getByRole('button', { name: 'Salvar com comprovante' }).click(),
     ]);
     expect(req.headers()['content-type']).toBe('application/pdf');
     expect(new URL(req.url()).searchParams.get('amountCents')).toBe('50000');
+  });
+
+  test('marcar como paga sem comprovante: pelo detalhe da conta e pelo botão Pagar', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    // Pelo detalhe: um clique, sem valor (a API quita o restante com a multa).
+    await page.getByRole('tabpanel').getByRole('button', { name: 'Água', exact: true }).click();
+    const details = page.getByRole('dialog', { name: 'Água' });
+    const [quick] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/bills/occurrences/c3/payments') && r.method() === 'POST'),
+      details.getByRole('button', { name: 'Marcar como paga' }).click(),
+    ]);
+    expect(quick.postDataJSON()).toEqual({});
+    await expect(page.getByText('Conta marcada como paga.')).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Pelo botão Pagar da lista, sem anexar arquivo.
+    await page.getByRole('listitem').filter({ hasText: 'Internet' }).getByRole('button', { name: 'Pagar' }).click();
+    const pay = page.getByRole('dialog', { name: 'Registrar pagamento — Internet' });
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/bills/occurrences/c4/payments') && r.method() === 'POST'),
+      pay.getByRole('button', { name: 'Marcar como paga' }).click(),
+    ]);
+    expect(req.postDataJSON()).toEqual({ amountCents: 14990, paidOn: '2026-11-06' });
   });
 
   test('comprovante em formato não aceito é recusado antes de enviar', async ({ page }) => {
