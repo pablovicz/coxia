@@ -64,6 +64,12 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 |---|---|
 | **Tipo** da conta: **Mensal** (dia de vencimento, valor fixo e **multa por atraso** opcional, somada ao valor sugerido no pagamento e citada no aviso de atraso) ou **Outros** (lançamento pontual numa data, valor fixo ou variável; a ocorrência nasce na hora, mesmo meses à frente) | `BillingService.createBill`, `bills-page.tsx` |
 | **Categorias de gasto** cadastráveis com ícone e cor (iniciais: Casa, Estoque, Manutenção), selo em cada conta e quadro "Por categoria" do mês | `packages/domain/src/expense-categories.ts`, `apps/web/src/features/finance/expense-categories.tsx` |
+| **Parcelas** na conta mensal (opcional): número de parcelas e mês da primeira; gera uma conta por mês até a última ("Parcela 3/10" na lista, no calendário e nos avisos). Reduzir as parcelas cancela as já geradas que sobraram e não foram pagas | `installmentsEnd`, `installmentOf`, `BillingService.updateBill` |
+| **Pagar para** e **Como pagar** (PIX, conta, código de barras…) em qualquer conta: aparecem na lista, no pagamento e no calendário; os avisos do WhatsApp citam para quem pagar e, na véspera e no dia, como pagar | `billLabel`, `planNotifications` |
+| **Financeiro em duas camadas**: `/contas` é a visão unificada do ano (entradas, saídas e saldo mês a mês, mês atual em destaque, próximas contas no topo); cada mês tem página própria `/contas/AAAA-MM`, com navegação entre meses | `apps/web/src/features/finance/finance-overview.tsx`, `GET /finance/overview`, `FinanceService.year` |
+| **Próximas contas**: em aberto nos próximos 10 dias, com as atrasadas primeiro | `GET /bills/upcoming`, `BillingService.upcoming` |
+| No mês: visão **Lista, Mês ou Semana** (calendário das contas pela data de vencimento) e **filtro por categoria** | `apps/web/src/features/finance/bills-views.tsx` |
+| **Detalhe da conta** (clique em qualquer conta): total pago, saldo devedor (inclui parcelas ainda não geradas), parcelas restantes, parcelas atrasadas com mês e valor, configuração, quem cadastrou e quando (pela auditoria), histórico mês a mês; Pagar e Editar | `GET /bills/:id/details`, `BillingService.details` |
 | O antigo campo "categoria" (aluguel, energia…) virou interno: é deduzido do nome e só serve para o WhatsApp entender "paguei a luz" | `inferUtility` |
 
 ### Calendário da equipe: compromissos, lembretes e contas (pós-Etapa 4)

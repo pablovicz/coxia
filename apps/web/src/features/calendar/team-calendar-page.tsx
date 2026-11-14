@@ -743,7 +743,7 @@ function ItemDialog({ item, tz, mayEdit, onClose, onEdit }: { item: Item; tz: st
             Fechar
           </Button>
           <Button asChild>
-            <Link to="/contas">Abrir no Financeiro</Link>
+            <Link to={`/contas/${b.dueDate.slice(0, 7)}`}>Abrir no Financeiro</Link>
           </Button>
         </>
       }
@@ -764,6 +764,13 @@ function ItemDialog({ item, tz, mayEdit, onClose, onEdit }: { item: Item; tz: st
             <Badge variant="pending">A vencer</Badge>
           )}
         </Row>
+        {b.installment ? <Row label="Parcela">{`${b.installment.number} de ${b.installment.total}`}</Row> : null}
+        {b.payeeName ? <Row label="Pagar para">{b.payeeName}</Row> : null}
+        {b.paymentDetails ? (
+          <Row label="Como pagar">
+            <span className="whitespace-pre-line break-words">{b.paymentDetails}</span>
+          </Row>
+        ) : null}
         {b.category ? (
           <Row label="Categoria">
             <CategoryBadge category={b.category} />

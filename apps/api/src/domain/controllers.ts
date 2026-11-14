@@ -4,6 +4,7 @@ import {
   BillingService,
   BookingService,
   CalendarService,
+  FinanceService,
   competenceOf,
   ContactService,
   ExpenseCategoryService,
@@ -282,6 +283,19 @@ export class BillsController {
     return this.billing.reactivateBill(user.organizationId, id, webActor(user));
   }
 
+  /** Em aberto que vencem nos próximos dias (padrão 10), mais as atrasadas. */
+  @Get('upcoming')
+  upcoming(@CurrentUser() user: AuthUser, @Query(v(z.object({ days: z.coerce.number().int().min(1).max(60).default(10) }))) q: { days: number }) {
+    return this.billing.upcoming(user.organizationId, q.days);
+  }
+
+  @Get(':id/details')
+  async details(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const d = await this.billing.details(user.organizationId, id);
+    // Telefones são dado pessoal: perfil leitura não vê quem recebe os avisos.
+    return user.role === 'viewer' ? { ...d, bill: { ...d.bill, recipientPhones: [], responsiblePhone: null } } : d;
+  }
+
   @Get('occurrences')
   occurrences(@CurrentUser() user: AuthUser, @Query(v(z.object({ competence }))) q: { competence: string }) {
     return this.billing.listOccurrences(user.organizationId, q.competence);
@@ -457,6 +471,17 @@ export class AppointmentsController {
   @HttpCode(200)
   cancel(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.appointments.cancel(user.organizationId, id, webActor(user));
+  }
+}
+
+@Controller('finance')
+export class FinanceController {
+  constructor(private readonly finance: FinanceService) {}
+
+  /** Visão unificada: entradas e saídas mês a mês no ano, com o mês atual marcado. */
+  @Get('overview')
+  overview(@CurrentUser() user: AuthUser, @Query(v(z.object({ year: z.coerce.number().int().min(2000).max(2100).optional() }))) q: { year?: number }) {
+    return this.finance.year(user.organizationId, q.year ?? new Date().getFullYear());
   }
 }
 

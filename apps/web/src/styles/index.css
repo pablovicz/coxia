@@ -71,6 +71,31 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  /* Tudo que é clicável mostra a mãozinha; o que está desabilitado, não. */
+  button:not(:disabled),
+  a[href],
+  summary,
+  select:not(:disabled),
+  label:has(> input:not(:disabled)[type='checkbox']),
+  label:has(> input:not(:disabled)[type='radio']),
+  input:not(:disabled):is([type='checkbox'], [type='radio'], [type='file'], [type='color']),
+  [role='button']:not([aria-disabled='true']),
+  [role='radio']:not([aria-disabled='true']),
+  [role='checkbox']:not([aria-disabled='true']),
+  [role='switch']:not([aria-disabled='true']),
+  [role='tab']:not([aria-disabled='true']),
+  [role='option']:not([aria-disabled='true']),
+  [role='menuitem']:not([aria-disabled='true']),
+  ::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  textarea:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

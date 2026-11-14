@@ -9,6 +9,7 @@ export * from './bills';
 export * from './reminders';
 export * from './appointments';
 export * from './calendar';
+export * from './finance';
 export * from './briefing';
 export * from './notifications';
 export * from './commands';

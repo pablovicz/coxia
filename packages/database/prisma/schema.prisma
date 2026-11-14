@@ -846,6 +846,12 @@ model RecurringBill {
   expenseCategoryId        String?   @map("expense_category_id")
   /// Multa por atraso (valor fixo somado quando a conta vence sem pagamento).
   lateFeeCents             Int?      @map("late_fee_cents")
+  /// Mensal parcelada: total de parcelas (a última vence no mês `endsOn`); null = sem fim.
+  installments             Int?
+  /// Para quem pagar (ex.: imobiliária, concessionária).
+  payeeName                String?   @map("payee_name")
+  /// Como pagar: PIX, conta, código de barras…
+  paymentDetails           String?   @map("payment_details")
   /// Uso interno: tipo de serviço deduzido do nome (aluguel, energia…), para o WhatsApp entender "paguei a luz".
   category                 String
   responsibleName          String?   @map("responsible_name")

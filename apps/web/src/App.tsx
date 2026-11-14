@@ -7,6 +7,7 @@ import { ProjectDetailPage } from '@/features/projects/project-detail-page';
 import { ProjectsPage } from '@/features/projects/projects-page';
 import { ContactsPage } from '@/features/contacts/contacts-page';
 import { BillsPage } from '@/features/reminders/bills-page';
+import { FinanceOverviewPage } from '@/features/finance/finance-overview';
 import { TeamCalendarPage } from '@/features/calendar/team-calendar-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { AgendaPage } from '@/features/rooms/agenda-page';
@@ -37,7 +38,8 @@ export function App() {
           <Route path="projetos/:id" element={<ProjectDetailPage />} />
           <Route path="agenda" element={<AgendaPage />} />
           <Route path="salas" element={<RoomsPage />} />
-          <Route path="contas" element={<BillsPage />} />
+          <Route path="contas" element={<FinanceOverviewPage />} />
+          <Route path="contas/:competence" element={<BillsPage />} />
           <Route path="lembretes" element={<TeamCalendarPage />} />
           <Route path="contatos" element={<ContactsPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />

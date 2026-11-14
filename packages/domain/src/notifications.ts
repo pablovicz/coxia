@@ -3,7 +3,7 @@ import { enqueueDelivery, isUniqueViolation } from '@coxia/database';
 import { composeProjectCheckIn, loadProjectState, type ProjectState } from './projects';
 import { addDays, formatBRL, formatShortDate, formatTimeRange, type IsoDate, localDateOf, localDayBoundsUtc } from '@coxia/shared';
 import { DateTime } from 'luxon';
-import { BillingService } from './bills';
+import { BillingService, billLabel, installmentOf } from './bills';
 import { APPOINTMENT_KIND_LABEL, AppointmentService, appointmentInclude } from './appointments';
 import { composeMorningBriefing, loadBriefingState, participantNames } from './briefing';
 import { type Db, fromIsoDate, getOrganization, toIsoDate } from './common';
@@ -39,6 +39,10 @@ export interface PlannerInput {
     isVariableAmount?: boolean;
     /** Multa por atraso (mencionada no aviso de atraso). */
     lateFeeCents?: number | null;
+    /** Para quem pagar, como, e a parcela (contas parceladas). */
+    payeeName?: string | null;
+    paymentDetails?: string | null;
+    installment?: { number: number; total: number } | null;
     status: string;
     recipientPhones: string[];
     overdueEveryDays: number;
@@ -117,6 +121,8 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           : bill.isVariableAmount && bill.paidCents === 0
             ? `cerca de ${formatBRL(bill.expectedCents)}`
             : formatBRL(Math.max(bill.expectedCents - bill.paidCents, 0));
+      const label = billLabel(bill.name, bill);
+      const howTo = bill.paymentDetails ? `\nComo pagar: ${bill.paymentDetails}` : '';
       if (bill.dueDate === tomorrow) {
         out.push({
           kind: 'bill_day_before',
@@ -124,7 +130,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           targetType: 'bill_occurrence',
           targetId: bill.occurrenceId,
           recipients,
-          text: `A conta de ${bill.name} vence amanhã (${formatShortDate(bill.dueDate)}): ${amount}. Quando pagar, me mande o comprovante.`,
+          text: `A conta de ${label} vence amanhã (${formatShortDate(bill.dueDate)}): ${amount}. Quando pagar, me mande o comprovante.${howTo}`,
         });
       } else if (bill.dueDate === today) {
         out.push({
@@ -133,7 +139,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           targetType: 'bill_occurrence',
           targetId: bill.occurrenceId,
           recipients,
-          text: `A conta de ${bill.name} vence hoje: ${amount}. Se já pagou, me mande o comprovante.`,
+          text: `A conta de ${label} vence hoje: ${amount}. Se já pagou, me mande o comprovante.${howTo}`,
         });
       } else if (bill.dueDate < today) {
         const last = bill.lastOverdueNoticeAt ? localDateOf(bill.lastOverdueNoticeAt, tz) : null;
@@ -144,7 +150,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           targetType: 'bill_occurrence',
           targetId: bill.occurrenceId,
           recipients,
-          text: `A conta de ${bill.name} está atrasada desde ${formatShortDate(bill.dueDate)}: ${amount} em aberto${bill.lateFeeCents ? ` (+ multa de ${formatBRL(bill.lateFeeCents)})` : ''}.`,
+          text: `A conta de ${label} está atrasada desde ${formatShortDate(bill.dueDate)}: ${amount} em aberto${bill.lateFeeCents ? ` (+ multa de ${formatBRL(bill.lateFeeCents)})` : ''}.`,
         });
       }
     }
@@ -314,6 +320,9 @@ export class NotificationService {
         expectedCents: b.expectedAmountCents,
         isVariableAmount: b.recurringBill.isVariableAmount,
         lateFeeCents: b.recurringBill.lateFeeCents,
+        payeeName: b.recurringBill.payeeName,
+        paymentDetails: b.recurringBill.paymentDetails,
+        installment: installmentOf(b.recurringBill, b.competence),
         paidCents: b.paidAmountCents,
         status: b.status,
         recipientPhones: b.recurringBill.recipientPhones,

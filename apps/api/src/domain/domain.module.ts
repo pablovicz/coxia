@@ -7,13 +7,14 @@ import {
   Module,
 } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
-import { AppointmentService, BillingService, BookingService, CalendarService, ContactService, DomainError, ExpenseCategoryService, IncomeService, ProjectService, ReminderService, SpaceService } from '@coxia/domain';
+import { AppointmentService, BillingService, BookingService, CalendarService, ContactService, FinanceService, DomainError, ExpenseCategoryService, IncomeService, ProjectService, ReminderService, SpaceService } from '@coxia/domain';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AppointmentsController,
   BillsController,
   CalendarController,
+  FinanceController,
   BookingsController,
   ContactsController,
   ExpenseCategoriesController,
@@ -49,17 +50,18 @@ export class DomainErrorFilter implements ExceptionFilter {
     { provide: ReminderService, inject: [PrismaService], useFactory: (db: PrismaService) => new ReminderService(db) },
     { provide: AppointmentService, inject: [PrismaService], useFactory: (db: PrismaService) => new AppointmentService(db) },
     { provide: CalendarService, inject: [PrismaService], useFactory: (db: PrismaService) => new CalendarService(db) },
+    { provide: FinanceService, inject: [PrismaService], useFactory: (db: PrismaService) => new FinanceService(db) },
     { provide: ProjectService, inject: [PrismaService], useFactory: (db: PrismaService) => new ProjectService(db) },
     { provide: ContactService, inject: [PrismaService], useFactory: (db: PrismaService) => new ContactService(db) },
     { provide: IncomeService, inject: [PrismaService], useFactory: (db: PrismaService) => new IncomeService(db) },
     { provide: ExpenseCategoryService, inject: [PrismaService], useFactory: (db: PrismaService) => new ExpenseCategoryService(db) },
     { provide: APP_FILTER, useClass: DomainErrorFilter },
   ],
-  exports: [SpaceService, BookingService, BillingService, ReminderService, AppointmentService, CalendarService, ProjectService, ContactService, IncomeService, ExpenseCategoryService],
+  exports: [SpaceService, BookingService, BillingService, ReminderService, AppointmentService, CalendarService, FinanceService, ProjectService, ContactService, IncomeService, ExpenseCategoryService],
 })
 export class DomainModule {}
 
 @Module({
-  controllers: [SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController],
+  controllers: [SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController],
 })
 export class DomainHttpModule {}

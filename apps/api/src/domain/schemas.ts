@@ -98,6 +98,10 @@ export const billSchema = z.object({
   isVariableAmount: z.boolean().optional(),
   responsibleName: z.string().max(120).nullish(),
   responsiblePhone: phone.nullish(),
+  /** Mensal parcelada: total de parcelas a partir do mês de `startsOn`. */
+  installments: z.number().int().min(1).max(120).nullish(),
+  payeeName: z.string().max(120).nullish(),
+  paymentDetails: z.string().max(500).nullish(),
   recipientPhones: z.array(phone).max(10).optional(),
   overdueReminderEveryDays: z.number().int().min(1).max(30).optional(),
   startsOn: isoDate,

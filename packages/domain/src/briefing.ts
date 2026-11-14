@@ -9,6 +9,7 @@ import {
   localDayBoundsUtc,
 } from '@coxia/shared';
 import { APPOINTMENT_KIND_LABEL, appointmentInclude } from './appointments';
+import { billLabel, installmentOf } from './bills';
 import { type Db, fromIsoDate, getOrganization, toIsoDate } from './common';
 
 /** Estado estruturado do briefing — o texto é gerado a partir dele, nunca relendo conversas. */
@@ -161,7 +162,7 @@ export async function loadBriefingState(db: Db, organizationId: string, date: Is
     responsibleName: o.booking.responsibleName,
   });
   const toBill = (o: (typeof bills)[number]): BriefingBill => ({
-    name: o.recurringBill.name,
+    name: billLabel(o.recurringBill.name, { payeeName: o.recurringBill.payeeName, installment: installmentOf(o.recurringBill, o.competence) }),
     dueDate: toIsoDate(o.dueDate),
     expectedCents: o.expectedAmountCents,
     paidCents: o.paidAmountCents,

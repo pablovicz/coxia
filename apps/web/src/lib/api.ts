@@ -147,6 +147,10 @@ export interface BillOccurrence {
     category: string;
     isVariableAmount: boolean;
     lateFeeCents?: number | null;
+    installments?: number | null;
+    startsOn?: string;
+    payeeName?: string | null;
+    paymentDetails?: string | null;
     expenseCategory?: ExpenseCategoryRef | null;
   };
   payments: Array<{ id: string; amountCents: number | null; paidOn: string | null; storageKey: string | null }>;
@@ -184,12 +188,75 @@ export interface RecurringBill {
   expenseCategory?: ExpenseCategoryRef | null;
   lateFeeCents?: number | null;
   startsOn?: string;
+  endsOn?: string | null;
+  /** Mensal parcelada: total de parcelas; null = sem fim. */
+  installments?: number | null;
+  payeeName?: string | null;
+  paymentDetails?: string | null;
+  overdueReminderEveryDays?: number;
   dueDay: number;
   estimatedAmountCents: number | null;
   isVariableAmount: boolean;
   active: boolean;
   suspendedAt: string | null;
   recipientPhones: string[];
+}
+
+/** Um mês na visão unificada do Financeiro. */
+export interface FinanceMonth {
+  competence: string;
+  incomeExpectedCents: number;
+  incomeReceivedCents: number;
+  billsExpectedCents: number;
+  billsPaidCents: number;
+  billsOverdue: number;
+  incomesOverdue: number;
+  variableWithoutAmount: number;
+}
+
+export interface FinanceOverview {
+  year: number;
+  currentCompetence: string;
+  months: FinanceMonth[];
+  totals: {
+    incomeExpectedCents: number;
+    incomeReceivedCents: number;
+    billsExpectedCents: number;
+    billsPaidCents: number;
+    billsOverdue: number;
+    incomesOverdue: number;
+  };
+}
+
+/** Detalhe de uma conta (GET /bills/:id/details). */
+export interface BillDetails {
+  bill: RecurringBill & { createdAt: string };
+  createdAt: string;
+  createdBy: { name: string | null; channel: string } | null;
+  paidCents: number;
+  /** null quando há valor variável sem estimativa. */
+  outstandingCents: number | null;
+  installments: { total: number; paid: number; remaining: number } | null;
+  overdue: Array<{
+    occurrenceId: string;
+    competence: string;
+    dueDate: string;
+    openCents: number | null;
+    lateFeeCents: number | null;
+    installment: { number: number; total: number } | null;
+  }>;
+  overdueCents: number | null;
+  occurrences: Array<{
+    id: string;
+    competence: string;
+    dueDate: string;
+    status: BillOccurrence['status'];
+    expectedAmountCents: number | null;
+    paidAmountCents: number;
+    paidAt: string | null;
+    installment: { number: number; total: number } | null;
+    proofs: number;
+  }>;
 }
 
 export type ReminderType = 'general' | 'call' | 'message';
@@ -282,6 +349,9 @@ export interface CalendarBill {
   paidAmountCents: number;
   isVariableAmount: boolean;
   lateFeeCents: number | null;
+  payeeName: string | null;
+  paymentDetails: string | null;
+  installment: { number: number; total: number } | null;
   category: ExpenseCategoryRef | null;
 }
 

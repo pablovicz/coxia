@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownLeft, ChevronLeft, ChevronRight, Pencil, Plus, ReceiptText, Tags } from 'lucide-react';
-import { useSearchParams } from 'react-router';
-import { type FormEvent, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, PageHeader } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
-import { Input, Skeleton } from '@/components/ui/input';
+import { Input, Skeleton, Textarea } from '@/components/ui/input';
 import {
   api,
   apiSend,
@@ -30,6 +30,8 @@ import {
 import { cn } from '@/lib/utils';
 import { IncomeDialog, IncomeList } from '@/features/finance/incomes';
 import { CategoryBadge, ExpenseCategoriesDialog, useExpenseCategories } from '@/features/finance/expense-categories';
+import { BillDetailsDialog, BillsCalendar, CategoryFilter, type CategoryFilterValue, matchesCategory, UpcomingBills } from '@/features/finance/bills-views';
+import { DateTime } from 'luxon';
 import { CategoryIcon } from '@/lib/expense-categories';
 import { roomStyle } from '@/lib/rooms';
 import {
@@ -70,14 +72,31 @@ export function BillsPage() {
   const { session } = useAuth();
   const tz = session?.organization.timezone ?? 'America/Sao_Paulo';
   const admin = canManage(session?.user.role);
-  const [competence, setCompetence] = useState(() => todayIn(tz).slice(0, 7));
+  // Cada mês tem a própria página: /contas/AAAA-MM (a visão unificada fica em /contas).
+  const { competence: routeCompetence } = useParams();
+  const navigate = useNavigate();
+  const currentMonth = todayIn(tz).slice(0, 7);
+  const competence = routeCompetence && /^\d{4}-(0[1-9]|1[0-2])$/.test(routeCompetence) ? routeCompetence : currentMonth;
   const [paying, setPaying] = useState<BillOccurrence | null>(null);
   // null = fechado; 'new' = cadastro; RecurringBill = edição.
   const [billForm, setBillForm] = useState<RecurringBill | 'new' | null>(null);
   const [incomeForm, setIncomeForm] = useState<Income | 'new' | null>(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterValue>('all');
+  const [billsView, setBillsView] = useState<'lista' | 'mes' | 'semana'>('lista');
+  const [week, setWeek] = useState(() => DateTime.fromISO(competence === currentMonth ? todayIn(tz) : `${competence}-01`).startOf('week').toISODate()!);
+  const [details, setDetails] = useState<{ billId: string; focus: BillOccurrence | null } | null>(null);
+  const categoryList = useExpenseCategories();
+  const openDetails = (o: BillOccurrence) => setDetails({ billId: o.recurringBill.id, focus: o });
   const [params, setParams] = useSearchParams();
   const tab = params.get('aba') === 'entradas' ? 'entradas' : 'contas';
+  // Trocou de mês pelas setas: a semana do calendário vai para a primeira semana do mês.
+  useEffect(() => {
+    if (DateTime.fromISO(week).plus({ days: 3 }).toFormat('yyyy-LL') !== competence) {
+      setWeek(DateTime.fromISO(competence === currentMonth ? todayIn(tz) : `${competence}-01`).startOf('week').toISODate()!);
+    }
+  }, [competence]);
+  const setCompetence = (c: string, replace = false) => navigate({ pathname: `/contas/${c}`, search: params.toString() ? `?${params}` : '' }, { replace });
   const setTab = (t: 'contas' | 'entradas') =>
     setParams(t === 'contas' ? {} : { aba: t }, { replace: true });
 
@@ -107,8 +126,8 @@ export function BillsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Dinheiro da casa"
-        title="Financeiro."
+        eyebrow={competence === currentMonth ? 'Financeiro · mês atual' : 'Financeiro'}
+        title={`${formatCompetence(competence).charAt(0).toUpperCase()}${formatCompetence(competence).slice(1)}.`}
         description="Entradas e saídas do mês: contas a pagar e o que vem de projetos e aluguéis das salas."
         action={
           admin ? (
@@ -127,7 +146,14 @@ export function BillsPage() {
         }
       />
 
-      <div className="mb-4 flex items-center gap-2">
+      {competence === currentMonth ? <UpcomingBills tz={tz} filter={categoryFilter} onOpen={openDetails} /> : null}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Button variant="ghost" asChild>
+          <Link to="/contas">
+            <ChevronLeft aria-hidden /> Visão do ano
+          </Link>
+        </Button>
         <Button
           variant="outline"
           size="icon"
@@ -248,7 +274,47 @@ export function BillsPage() {
         </Card>
       ) : (
         <div id="panel-contas" role="tabpanel" aria-labelledby="tab-contas">
-          <Card className="mt-4">
+          <div className="mt-4 flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div role="radiogroup" aria-label="Visão das contas" className="grid grid-cols-3 gap-1 rounded-md border bg-card p-1 lg:inline-grid">
+              {(
+                [
+                  ['lista', 'Lista'],
+                  ['mes', 'Mês'],
+                  ['semana', 'Semana'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={billsView === id}
+                  onClick={() => setBillsView(id)}
+                  className={cn('min-h-11 rounded-sm px-4 text-sm font-medium text-muted-foreground lg:min-h-9', billsView === id && 'bg-primary text-primary-foreground')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <CategoryFilter categories={categoryList.data ?? []} value={categoryFilter} onChange={setCategoryFilter} />
+          </div>
+          {billsView !== 'lista' ? (
+            <div className="mt-4">
+              <BillsCalendar
+                view={billsView}
+                competence={competence}
+                week={week}
+                onWeekChange={(start) => {
+                  setWeek(start);
+                  // O resumo do mês acompanha a semana (o mês da quinta-feira).
+                  setCompetence(DateTime.fromISO(start).plus({ days: 3 }).toFormat('yyyy-LL'), true);
+                }}
+                today={todayIn(tz)}
+                filter={categoryFilter}
+                onOpen={openDetails}
+              />
+            </div>
+          ) : null}
+          <Card className={cn('mt-4', billsView !== 'lista' && 'hidden')}>
             <CardHeader>
               <CardTitle>Obrigações do mês</CardTitle>
               <CardDescription>Competência: {formatCompetence(competence)}</CardDescription>
@@ -260,13 +326,13 @@ export function BillsPage() {
                 <p role="alert" className="text-sm text-destructive">
                   Não foi possível carregar as contas.
                 </p>
-              ) : occurrences.data.length === 0 ? (
+              ) : occurrences.data.filter((o) => matchesCategory(o, categoryFilter)).length === 0 ? (
                 <EmptyState icon={ReceiptText} title="Nenhuma conta neste mês">
                   As ocorrências são geradas automaticamente para o mês atual e o próximo.
                 </EmptyState>
               ) : (
                 <ul className="divide-y">
-                  {occurrences.data.map((o) => {
+                  {occurrences.data.filter((o) => matchesCategory(o, categoryFilter)).map((o) => {
                     const due = formatDueDate(o.dueDate);
                     const status = STATUS[o.status];
                     return (
@@ -278,7 +344,12 @@ export function BillsPage() {
                           <span className="tabular text-lg font-semibold">{due.day}</span>
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate font-medium">{o.recurringBill.name}</p>
+                          <button type="button" onClick={() => openDetails(o)} className="-my-3 block min-h-11 max-w-full truncate text-left font-medium leading-[2.75rem] underline-offset-4 hover:underline">
+                            {o.recurringBill.name}
+                          </button>
+                          {o.recurringBill.payeeName ? (
+                            <p className="truncate text-sm text-muted-foreground">Para {o.recurringBill.payeeName}</p>
+                          ) : null}
                           <p className="truncate text-sm text-muted-foreground">
                             {billNote(o)}
                             {o.status === 'overdue' && o.recurringBill.lateFeeCents
@@ -290,6 +361,7 @@ export function BillsPage() {
                             {o.recurringBill.kind === 'one_time' ? (
                               <Badge variant="neutral">Pontual</Badge>
                             ) : null}
+                            {installmentLabel(o) ? <Badge variant="info">{installmentLabel(o)}</Badge> : null}
                           </span>
                         </div>
                         <Badge variant={status.variant}>{status.label}</Badge>
@@ -317,9 +389,10 @@ export function BillsPage() {
             </CardHeader>
             <CardContent>
               <BillsList
-                bills={(bills.data ?? []).filter((b) => b.kind !== 'one_time')}
+                bills={(bills.data ?? []).filter((b) => b.kind !== 'one_time').filter((b) => matchesCategory({ recurringBill: b }, categoryFilter))}
                 admin={admin}
                 onEdit={(b) => setBillForm(b)}
+                onOpen={(b) => setDetails({ billId: b.id, focus: null })}
               />
             </CardContent>
           </Card>
@@ -327,6 +400,22 @@ export function BillsPage() {
       )}
 
       {paying ? <PaymentDialog occ={paying} tz={tz} onClose={() => setPaying(null)} /> : null}
+      {details ? (
+        <BillDetailsDialog
+          billId={details.billId}
+          focus={details.focus}
+          admin={admin}
+          onClose={() => setDetails(null)}
+          onPay={(o) => {
+            setDetails(null);
+            setPaying(o);
+          }}
+          onEdit={(b) => {
+            setDetails(null);
+            setBillForm(b);
+          }}
+        />
+      ) : null}
       {categoriesOpen ? <ExpenseCategoriesDialog onClose={() => setCategoriesOpen(false)} /> : null}
       {incomeForm ? (
         <IncomeDialog
@@ -346,6 +435,15 @@ export function BillsPage() {
   );
 }
 
+/** "Parcela 3/10" quando a conta é parcelada. */
+function installmentLabel(o: BillOccurrence): string | null {
+  const rb = o.recurringBill;
+  if (!rb.installments || !rb.startsOn) return null;
+  const [sy, sm] = rb.startsOn.slice(0, 7).split('-').map(Number) as [number, number];
+  const [cy, cm] = o.competence.split('-').map(Number) as [number, number];
+  return `Parcela ${(cy - sy) * 12 + (cm - sm) + 1}/${rb.installments}`;
+}
+
 /** "R$ 149,90", "cerca de R$ 300,00 (variável)" ou "valor variável". */
 export function billAmountLabel(
   b: Pick<RecurringBill, 'isVariableAmount' | 'estimatedAmountCents'>,
@@ -360,10 +458,12 @@ function BillsList({
   bills,
   admin,
   onEdit,
+  onOpen,
 }: {
   bills: RecurringBill[];
   admin: boolean;
   onEdit: (b: RecurringBill) => void;
+  onOpen: (b: RecurringBill) => void;
 }) {
   const qc = useQueryClient();
   const toggle = useMutation({
@@ -382,11 +482,15 @@ function BillsList({
       {bills.map((b) => (
         <li key={b.id} className="flex min-h-14 items-center justify-between gap-3 py-3">
           <div className="min-w-0">
-            <p className="truncate font-medium">{b.name}</p>
+            <button type="button" onClick={() => onOpen(b)} className="-my-3 block min-h-11 max-w-full truncate text-left font-medium leading-[2.75rem] underline-offset-4 hover:underline">
+              {b.name}
+            </button>
             <p className="text-sm text-muted-foreground">
               Dia {b.dueDay} · {billAmountLabel(b)}
               {b.lateFeeCents ? ` · multa ${formatBRL(b.lateFeeCents)}` : ''}
+              {b.installments ? ` · ${b.installments} parcelas${b.endsOn ? `, até ${formatCompetence(b.endsOn.slice(0, 7))}` : ''}` : ''}
             </p>
+            {b.payeeName ? <p className="truncate text-sm text-muted-foreground">Para {b.payeeName}</p> : null}
             <CategoryBadge category={b.expenseCategory} className="mt-1" />
           </div>
           <div className="flex items-center gap-2">
@@ -418,7 +522,7 @@ function BillsList({
   );
 }
 
-function PaymentDialog({
+export function PaymentDialog({
   occ,
   tz,
   onClose,
@@ -491,6 +595,20 @@ function PaymentDialog({
             <Input id={id} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
           )}
         </Field>
+        {occ.recurringBill.payeeName || occ.recurringBill.paymentDetails ? (
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+            {occ.recurringBill.payeeName ? (
+              <p>
+                <span className="text-muted-foreground">Pagar para:</span> {occ.recurringBill.payeeName}
+              </p>
+            ) : null}
+            {occ.recurringBill.paymentDetails ? (
+              <p className="whitespace-pre-line break-words">
+                <span className="text-muted-foreground">Como pagar:</span> {occ.recurringBill.paymentDetails}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           Comprovantes enviados pelo WhatsApp são anexados automaticamente.
         </p>
@@ -499,7 +617,7 @@ function PaymentDialog({
   );
 }
 
-function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | null; onClose: () => void }) {
+export function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | null; onClose: () => void }) {
   const qc = useQueryClient();
   const categories = useExpenseCategories();
   const [kind, setKind] = useState<'monthly' | 'one_time'>(bill?.kind ?? 'monthly');
@@ -510,6 +628,10 @@ function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | n
   const [amount, setAmount] = useState(bill?.estimatedAmountCents != null ? centsToInput(bill.estimatedAmountCents) : '');
   const [lateFee, setLateFee] = useState(bill?.lateFeeCents != null ? centsToInput(bill.lateFeeCents) : '');
   const [variable, setVariable] = useState(bill?.kind === 'one_time' ? bill.isVariableAmount : false);
+  const [payee, setPayee] = useState(bill?.payeeName ?? '');
+  const [howToPay, setHowToPay] = useState(bill?.paymentDetails ?? '');
+  const [installments, setInstallments] = useState(bill?.installments ? String(bill.installments) : '');
+  const [firstMonth, setFirstMonth] = useState(bill?.startsOn ? bill.startsOn.slice(0, 7) : todayIn(tz).slice(0, 7));
   const [manage, setManage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Categoria padrão: a primeira (Casa) num cadastro novo.
@@ -538,6 +660,9 @@ function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | n
       const day = Number(dueDay);
       if (!Number.isInteger(day) || day < 1 || day > 31) return setError('Dia de vencimento entre 1 e 31.');
       if (!cents) return setError('Informe o valor fixo da conta mensal.');
+      const parts = installments.trim() ? Number(installments) : null;
+      if (parts !== null && (!Number.isInteger(parts) || parts < 1 || parts > 120)) return setError('Número de parcelas entre 1 e 120 (ou deixe vazio).');
+      if (parts !== null && !/^\d{4}-\d{2}$/.test(firstMonth)) return setError('Informe o mês da primeira parcela.');
       return save.mutate({
         kind,
         name: name.trim(),
@@ -546,7 +671,10 @@ function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | n
         estimatedAmountCents: cents,
         isVariableAmount: false,
         lateFeeCents: fee,
-        ...(bill ? {} : { startsOn: `${todayIn(tz).slice(0, 7)}-01` }),
+        payeeName: payee.trim() || null,
+        paymentDetails: howToPay.trim() || null,
+        installments: parts,
+        ...(bill ? {} : { startsOn: `${parts !== null ? firstMonth : todayIn(tz).slice(0, 7)}-01` }),
       });
     }
     if (!dueOn) return setError('Informe a data do lançamento.');
@@ -559,6 +687,8 @@ function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | n
       dueDay: Number(dueOn.slice(8, 10)),
       estimatedAmountCents: cents,
       isVariableAmount: variable,
+      payeeName: payee.trim() || null,
+      paymentDetails: howToPay.trim() || null,
       ...(bill ? {} : { startsOn: dueOn }),
     });
   }
@@ -644,6 +774,18 @@ function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | n
                 <Input id={id} inputMode="decimal" className="tabular" value={lateFee} aria-describedby={describedBy} onChange={(e) => setLateFee(e.target.value)} placeholder="0,00" />
               )}
             </Field>
+            <Field label="Parcelas (opcional)" hint="Vazio = todo mês, sem fim">
+              {(id, describedBy) => (
+                <Input id={id} inputMode="numeric" className="tabular" value={installments} aria-describedby={describedBy} onChange={(e) => setInstallments(e.target.value)} placeholder="Ex.: 10" />
+              )}
+            </Field>
+            {installments.trim() ? (
+              <Field label="Primeira parcela" hint={bill ? 'O mês da primeira não muda na edição' : undefined}>
+                {(id, describedBy) => (
+                  <Input id={id} type="month" value={firstMonth} disabled={!!bill} aria-describedby={describedBy} onChange={(e) => setFirstMonth(e.target.value)} />
+                )}
+              </Field>
+            ) : null}
           </>
         ) : (
           <>
@@ -656,6 +798,14 @@ function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringBill | n
             </div>
           </>
         )}
+        <Field label="Pagar para (opcional)" className="sm:col-span-2">
+          {(id) => <Input id={id} value={payee} maxLength={120} onChange={(e) => setPayee(e.target.value)} placeholder="Ex.: Imobiliária Lopes, Copel" />}
+        </Field>
+        <Field label="Como pagar (opcional)" hint="PIX, conta, código de barras… Vai junto no aviso do vencimento" className="sm:col-span-2">
+          {(id, describedBy) => (
+            <Textarea id={id} rows={2} value={howToPay} maxLength={500} aria-describedby={describedBy} onChange={(e) => setHowToPay(e.target.value)} placeholder="Ex.: PIX 12.345.678/0001-90" />
+          )}
+        </Field>
         {error ? (
           <p role="alert" className="text-sm text-destructive sm:col-span-2">
             {error}

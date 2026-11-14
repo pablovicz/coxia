@@ -1,6 +1,6 @@
 import type { BillOccurrenceStatus, Prisma } from '@coxia/database';
 import { isUniqueViolation } from '@coxia/database';
-import { competenceKey, dueDateForCompetence, type IsoDate, localDateOf, normalizeText, zonedToUtc } from '@coxia/shared';
+import { addDays, competenceKey, dueDateForCompetence, type IsoDate, localDateOf, normalizeText, zonedToUtc } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError, fromIsoDate, getOrganization, toIsoDate } from './common';
 
 export const BILL_CATEGORIES = ['aluguel', 'energia', 'agua', 'internet', 'telefone', 'outros'] as const;
@@ -22,6 +22,11 @@ export interface BillInput {
   isVariableAmount?: boolean;
   responsibleName?: string | null;
   responsiblePhone?: string | null;
+  /** Mensal parcelada: total de parcelas a partir do mês de `startsOn`; null = sem fim. */
+  installments?: number | null;
+  /** Para quem pagar e como (PIX, conta, código de barras…). */
+  payeeName?: string | null;
+  paymentDetails?: string | null;
   recipientPhones?: string[];
   overdueReminderEveryDays?: number;
   startsOn: IsoDate;
@@ -65,6 +70,12 @@ function validateBill(input: Partial<BillInput>) {
   if (input.kind === 'one_time' && input.dueOn !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueOn ?? '')) {
     throw new DomainError('validation', 'Informe a data do lançamento');
   }
+  if (input.installments != null) {
+    if (!Number.isInteger(input.installments) || input.installments < 1 || input.installments > 120) {
+      throw new DomainError('validation', 'Número de parcelas entre 1 e 120');
+    }
+    if (input.kind === 'one_time') throw new DomainError('validation', 'Parcelas só valem para conta mensal');
+  }
   if (input.overdueReminderEveryDays !== undefined && input.overdueReminderEveryDays < 1) {
     throw new DomainError('validation', 'Intervalo de reaviso deve ser de pelo menos 1 dia');
   }
@@ -80,6 +91,10 @@ const occurrenceInclude = {
       isVariableAmount: true,
       lateFeeCents: true,
       recipientPhones: true,
+      installments: true,
+      startsOn: true,
+      payeeName: true,
+      paymentDetails: true,
       expenseCategory: { select: { id: true, name: true, icon: true, color: true } },
     },
   },
@@ -112,6 +127,10 @@ export class BillingService {
     await this.assertCategory(organizationId, input.expenseCategoryId);
     // Pontual: vale só para o mês da data (início e fim = a data; vencimento = o dia dela).
     const dueOn = oneTime ? input.dueOn! : null;
+    // Parcelada: começa no 1º dia do mês da primeira parcela e termina no mês da última.
+    const installments = oneTime ? null : (input.installments ?? null);
+    const startsOn = dueOn ?? (installments ? `${input.startsOn.slice(0, 7)}-01` : input.startsOn);
+    const endsOn = dueOn ?? (installments ? installmentsEnd(startsOn, installments) : (input.endsOn ?? null));
     const bill = await this.db.$transaction(async (tx) => {
       const created = await tx.recurringBill.create({
         data: {
@@ -126,10 +145,13 @@ export class BillingService {
           isVariableAmount: input.isVariableAmount ?? false,
           responsibleName: input.responsibleName ?? null,
           responsiblePhone: input.responsiblePhone ?? null,
+          installments,
+          payeeName: input.payeeName?.trim() || null,
+          paymentDetails: input.paymentDetails?.trim() || null,
           recipientPhones: input.recipientPhones ?? [],
           overdueReminderEveryDays: input.overdueReminderEveryDays ?? 3,
-          startsOn: fromIsoDate(dueOn ?? input.startsOn),
-          endsOn: dueOn ? fromIsoDate(dueOn) : input.endsOn ? fromIsoDate(input.endsOn) : null,
+          startsOn: fromIsoDate(startsOn),
+          endsOn: endsOn ? fromIsoDate(endsOn) : null,
         },
       });
       if (dueOn) {
@@ -172,6 +194,10 @@ export class BillingService {
     if (before.kind === 'one_time' && patch.dueOn) {
       patch = { ...patch, dueDay: Number(patch.dueOn.slice(8, 10)) };
     }
+    if (before.kind === 'one_time' && patch.installments != null) throw new DomainError('validation', 'Parcelas só valem para conta mensal');
+    // Mudou o número de parcelas: o fim é recalculado a partir do mês da primeira.
+    const installmentsChanged = before.kind === 'monthly' && patch.installments !== undefined && patch.installments !== before.installments;
+    const newEnd = installmentsChanged ? (patch.installments ? installmentsEnd(toIsoDate(before.startsOn), patch.installments) : null) : undefined;
 
     return this.db.$transaction(async (tx) => {
       const bill = await tx.recurringBill.update({
@@ -191,9 +217,22 @@ export class BillingService {
           ...(patch.responsiblePhone !== undefined ? { responsiblePhone: patch.responsiblePhone } : {}),
           ...(patch.recipientPhones !== undefined ? { recipientPhones: patch.recipientPhones } : {}),
           ...(patch.overdueReminderEveryDays !== undefined ? { overdueReminderEveryDays: patch.overdueReminderEveryDays } : {}),
-          ...(patch.endsOn !== undefined ? { endsOn: patch.endsOn ? fromIsoDate(patch.endsOn) : null } : {}),
+          ...(patch.payeeName !== undefined ? { payeeName: patch.payeeName?.trim() || null } : {}),
+          ...(patch.paymentDetails !== undefined ? { paymentDetails: patch.paymentDetails?.trim() || null } : {}),
+          ...(newEnd !== undefined
+            ? { installments: patch.installments ?? null, endsOn: newEnd ? fromIsoDate(newEnd) : null }
+            : patch.endsOn !== undefined
+              ? { endsOn: patch.endsOn ? fromIsoDate(patch.endsOn) : null }
+              : {}),
         },
       });
+      // Menos parcelas: as que sobraram (geradas e não pagas) são canceladas.
+      if (newEnd) {
+        await tx.billOccurrence.updateMany({
+          where: { recurringBillId: billId, competence: { gt: newEnd.slice(0, 7) }, paidAmountCents: 0, status: { in: UNPAID } },
+          data: { status: 'cancelled' },
+        });
+      }
 
       if (before.kind === 'one_time' && patch.dueOn) {
         const today = localDateOf(now, org.timezone);
@@ -317,6 +356,89 @@ export class BillingService {
       include: occurrenceInclude,
       orderBy: { dueDate: 'asc' },
     });
+  }
+
+  /** Contas em aberto que vencem nos próximos `days` dias, mais as atrasadas (no topo). */
+  async upcoming(organizationId: string, days = 10, now = new Date()) {
+    const org = await getOrganization(this.db, organizationId);
+    const today = localDateOf(now, org.timezone);
+    return this.db.billOccurrence.findMany({
+      where: { organizationId, status: { in: UNPAID }, dueDate: { lte: fromIsoDate(addDays(today, days)) } },
+      include: occurrenceInclude,
+      orderBy: [{ dueDate: 'asc' }, { recurringBill: { name: 'asc' } }],
+    });
+  }
+
+  /**
+   * Detalhe de uma conta: configuração, quem cadastrou e quando, total pago, saldo devedor,
+   * parcelas restantes e atrasadas (mês e valor), e o histórico mês a mês.
+   */
+  async details(organizationId: string, billId: string) {
+    const bill = await this.db.recurringBill.findFirst({
+      where: { id: billId, organizationId },
+      include: {
+        expenseCategory: { select: { id: true, name: true, icon: true, color: true } },
+        occurrences: { orderBy: { competence: 'asc' }, include: { payments: { orderBy: { createdAt: 'asc' } } } },
+      },
+    });
+    if (!bill) throw new DomainError('not_found', 'Conta não encontrada');
+    const created = await this.db.auditEvent.findFirst({
+      where: { organizationId, entityType: 'recurring_bill', entityId: billId, action: 'bill.create' },
+      orderBy: { createdAt: 'asc' },
+    });
+    const author = created?.actorUserId
+      ? await this.db.user.findUnique({ where: { id: created.actorUserId }, select: { name: true } })
+      : null;
+
+    const live = bill.occurrences.filter((o) => o.status !== 'cancelled');
+    const open = live.filter((o) => UNPAID.includes(o.status));
+    const openCents = (o: (typeof live)[number]) => (o.expectedAmountCents === null ? null : Math.max(o.expectedAmountCents - o.paidAmountCents, 0));
+    const paidCents = live.reduce((sum, o) => sum + o.paidAmountCents, 0);
+
+    // Parcelada: as parcelas ainda não geradas também entram no saldo devedor.
+    const installments = bill.installments
+      ? (() => {
+          const paid = live.filter((o) => o.status === 'paid').length;
+          const notGenerated = Math.max(bill.installments - live.length, 0);
+          return { total: bill.installments, paid, remaining: bill.installments - paid, notGenerated };
+        })()
+      : null;
+    const unknownAmount = open.some((o) => o.expectedAmountCents === null) || (!!installments?.notGenerated && bill.estimatedAmountCents === null);
+    const outstandingCents = unknownAmount
+      ? null
+      : open.reduce((sum, o) => sum + (openCents(o) ?? 0), 0) + (installments?.notGenerated ?? 0) * (bill.estimatedAmountCents ?? 0);
+    const overdue = open
+      .filter((o) => o.status === 'overdue')
+      .map((o) => ({
+        occurrenceId: o.id,
+        competence: o.competence,
+        dueDate: toIsoDate(o.dueDate),
+        openCents: openCents(o),
+        lateFeeCents: bill.lateFeeCents,
+        installment: installmentOf(bill, o.competence),
+      }));
+    const { occurrences, ...config } = bill;
+    return {
+      bill: config,
+      createdAt: bill.createdAt,
+      createdBy: created ? { name: author?.name ?? null, channel: created.actorChannel } : null,
+      paidCents,
+      outstandingCents,
+      installments: installments ? { total: installments.total, paid: installments.paid, remaining: installments.remaining } : null,
+      overdue,
+      overdueCents: overdue.some((o) => o.openCents === null) ? null : overdue.reduce((s, o) => s + (o.openCents ?? 0) + (o.lateFeeCents ?? 0), 0),
+      occurrences: occurrences.map((o) => ({
+        id: o.id,
+        competence: o.competence,
+        dueDate: toIsoDate(o.dueDate),
+        status: o.status,
+        expectedAmountCents: o.expectedAmountCents,
+        paidAmountCents: o.paidAmountCents,
+        paidAt: o.paidAt,
+        installment: installmentOf(bill, o.competence),
+        proofs: o.payments.filter((p) => !!p.storageKey).length,
+      })),
+    };
   }
 
   async summary(organizationId: string, competence: string) {
@@ -458,6 +580,31 @@ const SYNONYMS: Record<string, string[]> = {
   telefone: ['telefone', 'celular', 'linha'],
   aluguel: ['aluguel', 'locacao'],
 };
+
+/** Último dia do mês da última parcela (`startsOn` no mês da primeira). */
+export function installmentsEnd(startsOn: IsoDate, installments: number): IsoDate {
+  const [y, m] = startsOn.split('-').map(Number) as [number, number];
+  const last = (m - 1) + (installments - 1);
+  return dueDateForCompetence(y + Math.floor(last / 12), (last % 12) + 1, 31);
+}
+
+/** Número da parcela de uma competência (1 = mês de `startsOn`); null se a conta não é parcelada. */
+export function installmentOf(bill: { installments: number | null; startsOn: Date }, competence: string): { number: number; total: number } | null {
+  if (!bill.installments) return null;
+  const start = toIsoDate(bill.startsOn);
+  const [sy, sm] = start.split('-').map(Number) as [number, number];
+  const [cy, cm] = competence.split('-').map(Number) as [number, number];
+  return { number: (cy - sy) * 12 + (cm - sm) + 1, total: bill.installments };
+}
+
+/** "Aluguel (parcela 3/10, para Imobiliária Lopes)" — nome da conta nos avisos e no briefing. */
+export function billLabel(name: string, extra: { payeeName?: string | null; installment?: { number: number; total: number } | null }): string {
+  const parts = [
+    extra.installment ? `parcela ${extra.installment.number}/${extra.installment.total}` : null,
+    extra.payeeName ? `para ${extra.payeeName}` : null,
+  ].filter(Boolean);
+  return parts.length ? `${name} (${parts.join(', ')})` : name;
+}
 
 /** Tipo de serviço pelo nome ("Conta de luz" → energia), para o WhatsApp achar a conta por sinônimo. */
 export function inferUtility(name: string): string {

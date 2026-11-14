@@ -1,6 +1,7 @@
 import { addDays, expandDates, localDateOf, parseRRule, zonedToUtc } from '@coxia/shared';
 import { DateTime } from 'luxon';
 import { AppointmentService } from './appointments';
+import { installmentOf } from './bills';
 import { type Db, DomainError, fromIsoDate, getOrganization, toIsoDate } from './common';
 import { reminderPerson } from './reminders';
 
@@ -31,6 +32,9 @@ export interface CalendarBill {
   paidAmountCents: number;
   isVariableAmount: boolean;
   lateFeeCents: number | null;
+  payeeName: string | null;
+  paymentDetails: string | null;
+  installment: { number: number; total: number } | null;
   category: { id: string; name: string; icon: string; color: string } | null;
 }
 
@@ -125,6 +129,9 @@ export class CalendarService {
       paidAmountCents: b.paidAmountCents,
       isVariableAmount: b.recurringBill.isVariableAmount,
       lateFeeCents: b.recurringBill.lateFeeCents,
+      payeeName: b.recurringBill.payeeName,
+      paymentDetails: b.recurringBill.paymentDetails,
+      installment: installmentOf(b.recurringBill, b.competence),
       category: b.recurringBill.expenseCategory,
     }));
 

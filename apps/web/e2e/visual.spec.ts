@@ -127,6 +127,22 @@ const ONE_OFF = {
   recurringBill: { id: 'rb-c6', name: 'Compra de copos', kind: 'one_time', category: 'outros', isVariableAmount: false, lateFeeCents: null, expenseCategory: CAT_ESTOQUE },
 };
 
+const PARCELADA = {
+  ...bill('c7', 'Equipamento de som', '12', 50000, 0, 'pending'),
+  recurringBill: {
+    id: 'rb-c7',
+    name: 'Equipamento de som',
+    kind: 'monthly',
+    category: 'outros',
+    isVariableAmount: false,
+    lateFeeCents: null,
+    installments: 10,
+    startsOn: '2026-09-01T00:00:00.000Z',
+    payeeName: 'Loja do Som',
+    paymentDetails: 'PIX 11.222.333/0001-44',
+    expenseCategory: CAT_MANUT,
+  },
+};
 const BILLS = [
   bill('c1', 'Aluguel', '05', 250000, 250000, 'paid'),
   bill('c2', 'Energia elétrica', '07', null, 0, 'pending'),
@@ -134,6 +150,80 @@ const BILLS = [
   bill('c4', 'Internet', '20', 14990, 0, 'pending'),
   bill('c5', 'Telefone', '30', 9900, 0, 'pending'),
 ];
+/** Detalhe (GET /bills/:id/details) montado a partir das ocorrências simuladas. */
+function billDetails(billId: string) {
+  const occ = [...BILLS, ONE_OFF, PARCELADA].find((o) => o.recurringBill.id === billId)!;
+  const rb = occ.recurringBill as Record<string, unknown>;
+  const parcelada = billId === 'rb-c7';
+  const row = (id: string, competence: string, status: string, paid: number, n: number | null) => ({
+    id,
+    competence,
+    dueDate: `${competence}-12`,
+    status,
+    expectedAmountCents: 50000,
+    paidAmountCents: paid,
+    paidAt: paid ? `${competence}-12T15:00:00.000Z` : null,
+    installment: n ? { number: n, total: 10 } : null,
+    proofs: paid ? 1 : 0,
+  });
+  const open = occ.expectedAmountCents === null ? null : occ.expectedAmountCents - occ.paidAmountCents;
+  return {
+    bill: {
+      ...rb,
+      dueDay: Number(occ.dueDate.slice(8, 10)),
+      estimatedAmountCents: occ.expectedAmountCents,
+      active: true,
+      suspendedAt: null,
+      recipientPhones: [],
+      overdueReminderEveryDays: 3,
+      endsOn: parcelada ? '2027-06-30T00:00:00.000Z' : null,
+      createdAt: '2026-09-01T13:00:00.000Z',
+    },
+    createdAt: '2026-09-01T13:00:00.000Z',
+    createdBy: { name: 'Ana Admin', channel: 'web' },
+    paidCents: parcelada ? 50000 : occ.paidAmountCents,
+    outstandingCents: parcelada ? 450000 : open,
+    installments: parcelada ? { total: 10, paid: 1, remaining: 9 } : null,
+    overdue: parcelada
+      ? [{ occurrenceId: 'h2', competence: '2026-10', dueDate: '2026-10-12', openCents: 50000, lateFeeCents: null, installment: { number: 2, total: 10 } }]
+      : occ.status === 'overdue'
+        ? [{ occurrenceId: occ.id, competence: '2026-11', dueDate: occ.dueDate.slice(0, 10), openCents: open, lateFeeCents: rb.lateFeeCents, installment: null }]
+        : [],
+    overdueCents: parcelada ? 50000 : occ.status === 'overdue' ? (open ?? 0) + ((rb.lateFeeCents as number | null) ?? 0) : 0,
+    occurrences: parcelada
+      ? [row('h1', '2026-09', 'paid', 50000, 1), row('h2', '2026-10', 'overdue', 0, 2), row('c7', '2026-11', 'pending', 0, 3)]
+      : [{ id: occ.id, competence: occ.competence, dueDate: occ.dueDate.slice(0, 10), status: occ.status, expectedAmountCents: occ.expectedAmountCents, paidAmountCents: occ.paidAmountCents, paidAt: null, installment: null, proofs: 0 }],
+  };
+}
+const financeMonth = (m: number, income: number, bills: number, paid: number, overdue = 0) => ({
+  competence: `2026-${String(m).padStart(2, '0')}`,
+  incomeExpectedCents: income,
+  incomeReceivedCents: m < 11 ? income : 500000,
+  billsExpectedCents: bills,
+  billsPaidCents: paid,
+  billsOverdue: overdue,
+  incomesOverdue: m === 10 ? 1 : 0,
+  variableWithoutAmount: m === 11 ? 1 : 0,
+});
+const FINANCE_OVERVIEW = {
+  year: 2026,
+  currentCompetence: '2026-11',
+  months: [
+    financeMonth(1, 0, 0, 0),
+    financeMonth(2, 0, 0, 0),
+    financeMonth(3, 0, 0, 0),
+    financeMonth(4, 0, 0, 0),
+    financeMonth(5, 0, 0, 0),
+    financeMonth(6, 0, 0, 0),
+    financeMonth(7, 0, 0, 0),
+    financeMonth(8, 0, 0, 0),
+    financeMonth(9, 820000, 312000, 312000),
+    financeMonth(10, 960000, 318500, 268500, 1),
+    financeMonth(11, 1060000, 333890, 253000, 2),
+    financeMonth(12, 320000, 50000, 0),
+  ],
+  totals: { incomeExpectedCents: 3160000, incomeReceivedCents: 2280000, billsExpectedCents: 1014390, billsPaidCents: 833500, billsOverdue: 3, incomesOverdue: 1 },
+};
 const SUMMARY = { competence: '2026-11', expectedCents: 283890, paidCents: 253000, total: 5, paid: 1, pending: 3, overdue: 1, variableWithoutAmount: 1 };
 const RECURRING = [
   { id: 'rb1', name: 'Aluguel', kind: 'monthly', category: 'aluguel', dueDay: 5, estimatedAmountCents: 250000, lateFeeCents: 5000, isVariableAmount: false, active: true, suspendedAt: null, recipientPhones: [], expenseCategoryId: 'ec1', expenseCategory: CAT_CASA },
@@ -551,7 +641,12 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
         },
       });
     }
-    if (path === '/bills/occurrences') return respond(empty ? [] : [...BILLS, ONE_OFF]);
+    if (path === '/bills/occurrences') return respond(empty ? [] : [...BILLS, ONE_OFF, PARCELADA]);
+    if (path === '/finance/overview')
+      return respond(empty ? { ...FINANCE_OVERVIEW, months: FINANCE_OVERVIEW.months.map((m) => financeMonth(Number(m.competence.slice(5)), 0, 0, 0)), totals: { ...FINANCE_OVERVIEW.totals, incomeExpectedCents: 0, billsExpectedCents: 0 } } : FINANCE_OVERVIEW);
+    if (path === '/bills/upcoming')
+      return respond(empty ? [] : [...BILLS, ONE_OFF, PARCELADA].filter((o) => o.status !== 'paid' && o.dueDate.slice(0, 10) <= '2026-11-16').sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
+    if (/^\/bills\/[\w-]+\/details$/.test(path)) return respond(billDetails(path.split('/')[2]!));
     if (path === '/bills/summary') return respond(empty ? { ...SUMMARY, expectedCents: 0, paidCents: 0, total: 0, paid: 0, pending: 0, overdue: 0, variableWithoutAmount: 0 } : SUMMARY);
     if (path === '/bills') return respond(empty ? [] : RECURRING);
     if (path === '/reminders' && method === 'POST') return route.fulfill({ status: 201, json: reminder({ id: 'r9', ...route.request().postDataJSON() }) });
@@ -669,21 +764,21 @@ test.describe('golden visual', () => {
 
   test('contas do mês', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas');
+    await page.goto('/contas/2026-11');
     await expect(page.getByText('Água')).toBeVisible();
     await snap(page, 'bills.png', { fullPage: true });
   });
 
   test('financeiro: entradas', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas?aba=entradas');
+    await page.goto('/contas/2026-11?aba=entradas');
     await expect(page.getByText('Patrocínio — 2ª parcela')).toBeVisible();
     await snap(page, 'incomes.png', { fullPage: true });
   });
 
   test('financeiro: nova entrada', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas?aba=entradas');
+    await page.goto('/contas/2026-11?aba=entradas');
     await page.getByRole('button', { name: 'Nova entrada' }).click();
     const dialog = page.getByRole('dialog', { name: 'Nova entrada' });
     await dialog.getByLabel('Projeto').selectOption({ label: 'XPO' });
@@ -694,7 +789,7 @@ test.describe('golden visual', () => {
 
   test('contas: registrar pagamento', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas');
+    await page.goto('/contas/2026-11');
     await page.getByRole('listitem').filter({ hasText: 'Internet' }).getByRole('button', { name: 'Pagar' }).click();
     const dialog = page.getByRole('dialog', { name: 'Registrar pagamento — Internet' });
     await expect(dialog.getByLabel('Valor pago (R$)')).toHaveValue('149,90');
@@ -826,7 +921,7 @@ test.describe('golden visual', () => {
 
   test('contas: editar valor', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas');
+    await page.goto('/contas/2026-11');
     await page.getByRole('button', { name: 'Editar Energia elétrica' }).click();
     await expect(page.getByLabel('Valor (R$)')).toHaveValue('320,00');
     await expect(page.getByLabel('Multa por atraso (R$, opcional)')).toBeVisible();
@@ -848,9 +943,33 @@ test.describe('golden visual', () => {
     await snap(page, 'booking-recurring.png');
   });
 
-  test('contas: nova conta (tipo e categoria)', async ({ page }) => {
+  test('financeiro: visão unificada do ano', async ({ page }) => {
     await mockApi(page);
     await page.goto('/contas');
+    await expect(page.getByRole('heading', { name: 'Financeiro.' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Novembro \(mês atual\)/ })).toBeVisible();
+    await snap(page, 'finance-overview.png', { fullPage: true });
+  });
+
+  test('financeiro: calendário do mês', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    await page.getByRole('radio', { name: 'Mês', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Equipamento de som/ }).last()).toBeVisible();
+    await snap(page, 'bills-calendar.png', { fullPage: true });
+  });
+
+  test('financeiro: detalhe da conta', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    await page.getByRole('tabpanel').getByRole('button', { name: 'Equipamento de som', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Equipamento de som' }).getByText('Parcelas restantes')).toBeVisible();
+    await snap(page, 'bill-details.png');
+  });
+
+  test('contas: nova conta (tipo e categoria)', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
     await page.getByRole('button', { name: 'Nova conta' }).click();
     const dialog = page.getByRole('dialog', { name: 'Nova conta' });
     await dialog.getByLabel('Nome').fill('Aluguel do depósito');
@@ -860,7 +979,7 @@ test.describe('golden visual', () => {
 
   test('contas: categorias', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas');
+    await page.goto('/contas/2026-11');
     await page.getByRole('button', { name: 'Categorias' }).click();
     await expect(page.getByRole('dialog', { name: 'Categorias de gasto' }).getByText('Manutenção', { exact: true })).toBeVisible();
     await snap(page, 'expense-categories.png');
@@ -905,7 +1024,7 @@ test.describe('golden visual', () => {
     ['/agenda', 'Agenda das salas.', 'agenda'],
     ['/salas', 'Salas.', 'rooms'],
     ['/contatos', 'Contatos.', 'contacts'],
-    ['/contas', 'Financeiro.', 'bills'],
+    ['/contas/2026-11', 'Novembro de 2026.', 'bills'],
     ['/lembretes', 'Lembretes.', 'reminders'],
   ] as const) {
     test(`estado vazio: ${name}`, async ({ page }) => {
@@ -944,8 +1063,8 @@ test.describe('interação acessível', () => {
 
   test('perfil leitura não vê ações de escrita', async ({ page }) => {
     await mockApi(page, { role: 'viewer' });
-    await page.goto('/contas');
-    await expect(page.getByText('Água')).toBeVisible();
+    await page.goto('/contas/2026-11');
+    await expect(page.getByRole('tabpanel').getByText('Água', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Pagar' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Nova conta' })).toHaveCount(0);
     await page.goto('/agenda');
@@ -985,7 +1104,7 @@ test.describe('interação acessível', () => {
 
   test('sem rolagem horizontal', async ({ page }) => {
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/lembretes', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -1021,7 +1140,7 @@ test.describe('interação acessível', () => {
   test('alvos de toque têm pelo menos 44px no celular', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'só no celular');
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/lembretes', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
@@ -1263,7 +1382,7 @@ test.describe('interação acessível', () => {
 
   test('conta mensal: valor obrigatório quando não é variável', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas');
+    await page.goto('/contas/2026-11');
     await page.getByRole('button', { name: 'Nova conta' }).click();
     const dialog = page.getByRole('dialog', { name: 'Nova conta' });
     await dialog.getByLabel('Nome').fill('Seguro');
@@ -1292,7 +1411,7 @@ test.describe('interação acessível', () => {
 
   test('entrada de projeto: envia projeto, valor e data prevista; recebimento pede valor e data', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas?aba=entradas');
+    await page.goto('/contas/2026-11?aba=entradas');
     await page.getByRole('button', { name: 'Nova entrada' }).click();
     const dialog = page.getByRole('dialog', { name: 'Nova entrada' });
     await dialog.getByLabel('Projeto').selectOption({ label: 'XPO' });
@@ -1450,7 +1569,7 @@ test.describe('interação acessível', () => {
 
   test('conta mensal com multa e categoria; lançamento pontual numa data', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas');
+    await page.goto('/contas/2026-11');
     await page.getByRole('button', { name: 'Nova conta' }).click();
     let dialog = page.getByRole('dialog', { name: 'Nova conta' });
     await dialog.getByLabel('Nome').fill('Aluguel do depósito');
@@ -1470,6 +1589,9 @@ test.describe('interação acessível', () => {
       estimatedAmountCents: 90000,
       isVariableAmount: false,
       lateFeeCents: 4500,
+      payeeName: null,
+      paymentDetails: null,
+      installments: null,
       startsOn: '2026-11-01',
     });
 
@@ -1492,13 +1614,104 @@ test.describe('interação acessível', () => {
       dueDay: 20,
       estimatedAmountCents: null,
       isVariableAmount: true,
+      payeeName: null,
+      paymentDetails: null,
       startsOn: '2026-11-20',
     });
   });
 
-  test('categorias de gasto: criar com ícone e cor', async ({ page }) => {
+  test('conta parcelada com para quem pagar e como', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    await page.getByRole('button', { name: 'Nova conta' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Nova conta' });
+    await dialog.getByLabel('Nome').fill('Equipamento de som');
+    await dialog.getByLabel('Dia do vencimento').fill('15');
+    await dialog.getByLabel('Valor (R$)').fill('500,00');
+    await dialog.getByLabel('Parcelas (opcional)').fill('10');
+    await dialog.getByLabel('Primeira parcela').fill('2026-12');
+    await dialog.getByLabel('Pagar para (opcional)').fill('Loja do Som');
+    await dialog.getByLabel('Como pagar (opcional)').fill('PIX 11.222.333/0001-44');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/bills') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Cadastrar' }).click(),
+    ]);
+    expect(req.postDataJSON()).toEqual({
+      kind: 'monthly',
+      name: 'Equipamento de som',
+      expenseCategoryId: 'ec1',
+      dueDay: 15,
+      estimatedAmountCents: 50000,
+      isVariableAmount: false,
+      lateFeeCents: null,
+      payeeName: 'Loja do Som',
+      paymentDetails: 'PIX 11.222.333/0001-44',
+      installments: 10,
+      startsOn: '2026-12-01',
+    });
+  });
+
+  test('financeiro: visão do ano destaca o mês atual e abre a página do mês', async ({ page }) => {
     await mockApi(page);
     await page.goto('/contas');
+    await expect(page.getByText('Mês atual', { exact: true })).toBeVisible();
+    await expect(page.getByText('Próximas contas', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: /^Outubro:/ }).click();
+    await expect(page).toHaveURL(/\/contas\/2026-10$/);
+    await expect(page.getByRole('heading', { name: 'Outubro de 2026.' })).toBeVisible();
+    await page.getByRole('button', { name: 'Próximo mês' }).click();
+    await expect(page).toHaveURL(/\/contas\/2026-11$/);
+    await expect(page.getByRole('heading', { name: 'Novembro de 2026.' })).toBeVisible();
+    await page.getByRole('link', { name: 'Visão do ano' }).click();
+    await expect(page).toHaveURL(/\/contas$/);
+  });
+
+  test('financeiro: filtro por categoria', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    const panel = page.getByRole('tabpanel');
+    await expect(panel.getByText('Internet', { exact: true }).first()).toBeVisible();
+    await page.getByRole('radiogroup', { name: 'Filtrar por categoria' }).getByRole('radio', { name: 'Estoque' }).click();
+    await expect(panel.getByRole('button', { name: 'Compra de copos', exact: true })).toBeVisible();
+    await expect(panel.getByText('Internet', { exact: true })).toHaveCount(0);
+    await expect(panel.getByText('Água', { exact: true })).toHaveCount(0);
+  });
+
+  test('financeiro: próximas contas no topo e detalhe da conta parcelada', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    const upcoming = page.locator('section, div').filter({ has: page.getByText('Próximas contas', { exact: true }) }).first();
+    await expect(upcoming.getByText('Atrasada há 2 dias')).toBeVisible();
+    await expect(upcoming.getByText('Em 6 dias · para Loja do Som')).toBeVisible();
+
+    await page.getByRole('tabpanel').getByRole('button', { name: 'Equipamento de som', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Equipamento de som' });
+    await expect(dialog.getByText('9 de 10')).toBeVisible();
+    await expect(dialog.getByText('R$ 4.500,00')).toBeVisible();
+    await expect(dialog.getByText(/outubro de 2026 · parcela 2\/10/i)).toBeVisible();
+    await expect(dialog.getByText('Ana Admin pelo painel')).toBeVisible();
+    await expect(dialog.getByText('Loja do Som')).toBeVisible();
+    await expect(dialog.getByText('PIX 11.222.333/0001-44')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Pagar' }).click();
+    const pay = page.getByRole('dialog', { name: 'Registrar pagamento — Equipamento de som' });
+    await expect(pay.getByLabel('Valor pago (R$)')).toHaveValue('500,00');
+    await expect(pay.getByText('Loja do Som')).toBeVisible();
+  });
+
+  test('financeiro: calendário semanal navega e abre o detalhe', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    await page.getByRole('radio', { name: 'Semana', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Semana de 02/11 a 08/11' })).toBeVisible();
+    await page.getByRole('button', { name: 'Próxima semana' }).click();
+    await expect(page.getByRole('heading', { name: 'Semana de 09/11 a 15/11' })).toBeVisible();
+    await page.getByRole('button', { name: /Equipamento de som/ }).first().click();
+    await expect(page.getByRole('dialog', { name: 'Equipamento de som' })).toBeVisible();
+  });
+
+  test('categorias de gasto: criar com ícone e cor', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
     await page.getByRole('button', { name: 'Categorias' }).click();
     await page.getByRole('button', { name: 'Nova categoria' }).click();
     const dialog = page.getByRole('dialog', { name: 'Nova categoria' });
@@ -1514,7 +1727,7 @@ test.describe('interação acessível', () => {
 
   test('conta atrasada com multa: pagamento sugere valor + multa', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas');
+    await page.goto('/contas/2026-11');
     await page.getByRole('listitem').filter({ hasText: 'Água' }).getByRole('button', { name: 'Pagar' }).click();
     // Água: R$ 90 previstos, R$ 30 pagos, multa R$ 15 → R$ 75.
     await expect(page.getByRole('dialog').getByLabel('Valor pago (R$)')).toHaveValue('75,00');
