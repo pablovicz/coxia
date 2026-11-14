@@ -94,7 +94,8 @@ export default defineRailway((ctx) => {
       ...storageEnv,
       JWT_SECRET: preserve(),
       JWT_EXPIRES_IN: '12h',
-      CORS_ORIGINS: 'https://${{web.RAILWAY_PUBLIC_DOMAIN}}',
+      // Domínio próprio do web + o gerado pelo Railway (lista separada por vírgula).
+      CORS_ORIGINS: 'https://coxia.up.railway.app,https://${{web.RAILWAY_PUBLIC_DOMAIN}}',
     },
   });
 
