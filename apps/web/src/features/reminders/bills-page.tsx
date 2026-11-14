@@ -108,10 +108,6 @@ export function BillsPage() {
     queryKey: ['bills', 'summary', competence],
     queryFn: () => api<BillsSummary>(`/bills/summary?competence=${competence}`),
   });
-  const bills = useQuery({
-    queryKey: ['bills', 'list'],
-    queryFn: () => api<RecurringBill[]>('/bills'),
-  });
   const incomes = useQuery({
     queryKey: ['incomes', 'list', competence],
     queryFn: () => api<Income[]>(`/incomes?competence=${competence}`),
@@ -125,6 +121,11 @@ export function BillsPage() {
 
   return (
     <>
+      <Button variant="outline" asChild className="mb-4">
+        <Link to="/contas">
+          <ChevronLeft aria-hidden /> Voltar ao Financeiro
+        </Link>
+      </Button>
       <PageHeader
         eyebrow={competence === currentMonth ? 'Financeiro · mês atual' : 'Financeiro'}
         title={`${formatCompetence(competence).charAt(0).toUpperCase()}${formatCompetence(competence).slice(1)}.`}
@@ -149,11 +150,6 @@ export function BillsPage() {
       {competence === currentMonth ? <UpcomingBills tz={tz} filter={categoryFilter} onOpen={openDetails} /> : null}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button variant="ghost" asChild>
-          <Link to="/contas">
-            <ChevronLeft aria-hidden /> Visão do ano
-          </Link>
-        </Button>
         <Button
           variant="outline"
           size="icon"
@@ -380,22 +376,6 @@ export function BillsPage() {
 
           {occurrences.data?.length ? <ByCategory occurrences={occurrences.data} /> : null}
 
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Contas mensais cadastradas</CardTitle>
-              <CardDescription>
-                Vencimentos em dias 29–31 caem no último dia dos meses curtos
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BillsList
-                bills={(bills.data ?? []).filter((b) => b.kind !== 'one_time').filter((b) => matchesCategory({ recurringBill: b }, categoryFilter))}
-                admin={admin}
-                onEdit={(b) => setBillForm(b)}
-                onOpen={(b) => setDetails({ billId: b.id, focus: null })}
-              />
-            </CardContent>
-          </Card>
         </div>
       )}
 
@@ -454,7 +434,7 @@ export function billAmountLabel(
     : formatBRL(b.estimatedAmountCents);
 }
 
-function BillsList({
+export function BillsList({
   bills,
   admin,
   onEdit,

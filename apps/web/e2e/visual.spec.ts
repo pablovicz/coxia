@@ -921,7 +921,7 @@ test.describe('golden visual', () => {
 
   test('contas: editar valor', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/contas/2026-11');
+    await page.goto('/contas');
     await page.getByRole('button', { name: 'Editar Energia elétrica' }).click();
     await expect(page.getByLabel('Valor (R$)')).toHaveValue('320,00');
     await expect(page.getByLabel('Multa por atraso (R$, opcional)')).toBeVisible();
@@ -1662,7 +1662,7 @@ test.describe('interação acessível', () => {
     await page.getByRole('button', { name: 'Próximo mês' }).click();
     await expect(page).toHaveURL(/\/contas\/2026-11$/);
     await expect(page.getByRole('heading', { name: 'Novembro de 2026.' })).toBeVisible();
-    await page.getByRole('link', { name: 'Visão do ano' }).click();
+    await page.getByRole('link', { name: 'Voltar ao Financeiro' }).click();
     await expect(page).toHaveURL(/\/contas$/);
   });
 

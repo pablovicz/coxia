@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Plus, Tags } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -8,12 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/input';
-import { BillDialog, PaymentDialog } from '@/features/reminders/bills-page';
+import { BillDialog, BillsList, PaymentDialog } from '@/features/reminders/bills-page';
 import { api, type BillOccurrence, canManage, type FinanceMonth, type FinanceOverview, type RecurringBill } from '@/lib/api';
 import { formatBRL, formatCompetence, todayIn } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { BillDetailsDialog, UpcomingBills } from './bills-views';
+import { ExpenseCategoriesDialog } from './expense-categories';
 
 const monthName = (competence: string) => DateTime.fromISO(`${competence}-01`).setLocale('pt-BR').toFormat('LLLL');
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -32,7 +33,10 @@ export function FinanceOverviewPage() {
   const setYear = (y: number) => setParams(y === Number(current.slice(0, 4)) ? {} : { ano: String(y) }, { replace: true });
   const [details, setDetails] = useState<{ billId: string; focus: BillOccurrence | null } | null>(null);
   const [paying, setPaying] = useState<BillOccurrence | null>(null);
-  const [editing, setEditing] = useState<RecurringBill | null>(null);
+  // null = fechado; 'new' = cadastro; RecurringBill = edição.
+  const [editing, setEditing] = useState<RecurringBill | 'new' | null>(null);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const bills = useQuery({ queryKey: ['bills', 'list'], queryFn: () => api<RecurringBill[]>('/bills') });
 
   const overview = useQuery({ queryKey: ['finance', 'overview', year], queryFn: () => api<FinanceOverview>(`/finance/overview?year=${year}`) });
   // O destaque é sempre o mês atual (mesmo navegando por outros anos).
@@ -49,11 +53,23 @@ export function FinanceOverviewPage() {
         title="Financeiro."
         description="O ano num lugar só. Abra um mês para ver e lançar contas e entradas."
         action={
-          <Button asChild>
-            <Link to={`/contas/${current}`}>
-              Abrir {monthName(current)} <ArrowRight aria-hidden />
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {admin ? (
+              <>
+                <Button variant="outline" onClick={() => setCategoriesOpen(true)}>
+                  <Tags aria-hidden /> Categorias
+                </Button>
+                <Button variant="outline" onClick={() => setEditing('new')}>
+                  <Plus aria-hidden /> Nova conta
+                </Button>
+              </>
+            ) : null}
+            <Button asChild>
+              <Link to={`/contas/${current}`}>
+                Abrir {monthName(current)} <ArrowRight aria-hidden />
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -103,6 +119,29 @@ export function FinanceOverviewPage() {
         </p>
       </section>
 
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Contas mensais cadastradas</CardTitle>
+          <CardDescription>Vencimentos em dias 29–31 caem no último dia dos meses curtos</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {bills.isPending ? (
+            <Skeleton className="h-32" />
+          ) : bills.isError ? (
+            <p role="alert" className="text-sm text-destructive">
+              Não foi possível carregar as contas.
+            </p>
+          ) : (
+            <BillsList
+              bills={bills.data.filter((b) => b.kind !== 'one_time')}
+              admin={admin}
+              onEdit={(b) => setEditing(b)}
+              onOpen={(b) => setDetails({ billId: b.id, focus: null })}
+            />
+          )}
+        </CardContent>
+      </Card>
+
       {details ? (
         <BillDetailsDialog
           billId={details.billId}
@@ -120,7 +159,8 @@ export function FinanceOverviewPage() {
         />
       ) : null}
       {paying ? <PaymentDialog occ={paying} tz={tz} onClose={() => setPaying(null)} /> : null}
-      {editing ? <BillDialog tz={tz} bill={editing} onClose={() => setEditing(null)} /> : null}
+      {editing ? <BillDialog tz={tz} bill={editing === 'new' ? null : editing} onClose={() => setEditing(null)} /> : null}
+      {categoriesOpen ? <ExpenseCategoriesDialog onClose={() => setCategoriesOpen(false)} /> : null}
     </>
   );
 }
