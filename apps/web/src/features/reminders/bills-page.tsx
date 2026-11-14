@@ -761,6 +761,7 @@ export function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringB
   return (
     <Dialog
       open
+      size="wide"
       onOpenChange={(v) => !v && onClose()}
       title={bill ? `Editar ${bill.name}` : 'Nova conta'}
       footer={
@@ -774,124 +775,136 @@ export function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringB
         </>
       }
     >
-      <form id="bill-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2" noValidate>
-        <fieldset className="sm:col-span-2">
-          <legend className="mb-1.5 text-sm font-medium">Tipo</legend>
-          <div role="radiogroup" aria-label="Tipo" className="grid grid-cols-2 gap-1 rounded-md border bg-card p-1">
-            {(
-              [
-                ['monthly', 'Mensal', 'Vence todo mês'],
-                ['one_time', 'Outros', 'Lançamento numa data'],
-              ] as const
-            ).map(([value, label, hint]) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={kind === value}
-                disabled={!!bill && bill.kind !== undefined && (bill.kind ?? 'monthly') !== value}
-                onClick={() => setKind(value)}
-                className={cn(
-                  'flex min-h-11 flex-col items-center justify-center rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground disabled:opacity-40',
-                  kind === value && 'bg-primary text-primary-foreground',
-                )}
-              >
-                {label}
-                <span className={cn('text-[11px] font-normal', kind === value ? 'opacity-85' : 'text-muted-foreground')}>{hint}</span>
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <Field label="Nome" className="sm:col-span-2">
-          {(id) => (
-            <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'monthly' ? 'Ex.: Aluguel, Internet' : 'Ex.: Compra de copos'} />
-          )}
-        </Field>
-        <Field label="Categoria" className="sm:col-span-2">
-          {(id) => (
-            <div className="flex gap-2">
-              <Select id={id} value={effectiveCategory} onChange={(e) => setCategoryId(e.target.value)}>
-                <option value="">Sem categoria</option>
-                {(categories.data ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
-              <Button variant="outline" onClick={() => setManage(true)} aria-label="Gerenciar categorias">
-                <Tags aria-hidden />
-              </Button>
+      <form id="bill-form" onSubmit={submit} className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0" noValidate>
+        {/* Esquerda: o que é, quando vence e quanto custa. */}
+        <div className="flex flex-col gap-4">
+          <fieldset>
+            <legend className="mb-1.5 text-sm font-medium">Tipo</legend>
+            <div role="radiogroup" aria-label="Tipo" className="grid grid-cols-2 gap-1 rounded-md border bg-card p-1">
+              {(
+                [
+                  ['monthly', 'Mensal', 'Vence todo mês'],
+                  ['one_time', 'Outros', 'Lançamento numa data'],
+                ] as const
+              ).map(([value, label, hint]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === value}
+                  disabled={!!bill && bill.kind !== undefined && (bill.kind ?? 'monthly') !== value}
+                  onClick={() => setKind(value)}
+                  className={cn(
+                    'flex min-h-11 flex-col items-center justify-center rounded-sm px-2 py-1 text-sm font-medium text-muted-foreground disabled:opacity-40',
+                    kind === value && 'bg-primary text-primary-foreground',
+                  )}
+                >
+                  {label}
+                  <span className={cn('text-[11px] font-normal', kind === value ? 'opacity-85' : 'text-muted-foreground')}>{hint}</span>
+                </button>
+              ))}
             </div>
-          )}
-        </Field>
+          </fieldset>
 
-        {kind === 'monthly' ? (
-          <>
-            <Field label="Dia do vencimento">{(id) => <Input id={id} inputMode="numeric" value={dueDay} onChange={(e) => setDueDay(e.target.value)} />}</Field>
-            <Field label="Valor (R$)">
-              {(id) => <Input id={id} inputMode="decimal" className="tabular" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />}
-            </Field>
-            <Field label="Multa por atraso (R$, opcional)" hint="Somada ao valor quando a conta vence sem pagamento" className="sm:col-span-2">
-              {(id, describedBy) => (
-                <Input id={id} inputMode="decimal" className="tabular" value={lateFee} aria-describedby={describedBy} onChange={(e) => setLateFee(e.target.value)} placeholder="0,00" />
-              )}
-            </Field>
-            <Field label="Parcelas (opcional)" hint="Vazio = todo mês, sem fim">
-              {(id, describedBy) => (
-                <Input id={id} inputMode="numeric" className="tabular" value={installments} aria-describedby={describedBy} onChange={(e) => setInstallments(e.target.value)} placeholder="Ex.: 10" />
-              )}
-            </Field>
-            {installments.trim() ? (
-              <Field label="Primeira parcela" hint={bill ? 'O mês da primeira não muda na edição' : undefined}>
+          <Field label="Nome">
+            {(id) => (
+              <Input id={id} value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'monthly' ? 'Ex.: Aluguel, Internet' : 'Ex.: Compra de copos'} />
+            )}
+          </Field>
+          <Field label="Categoria">
+            {(id) => (
+              <div className="flex gap-2">
+                <Select id={id} value={effectiveCategory} onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">Sem categoria</option>
+                  {(categories.data ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button type="button" variant="outline" onClick={() => setManage(true)} aria-label="Gerenciar categorias">
+                  <Tags aria-hidden />
+                </Button>
+              </div>
+            )}
+          </Field>
+
+          {kind === 'monthly' ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Dia do vencimento">{(id) => <Input id={id} inputMode="numeric" value={dueDay} onChange={(e) => setDueDay(e.target.value)} />}</Field>
+                <Field label="Valor (R$)">
+                  {(id) => <Input id={id} inputMode="decimal" className="tabular" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />}
+                </Field>
+              </div>
+              <Field label="Multa por atraso (R$, opcional)" hint="Somada ao valor quando a conta vence sem pagamento">
                 {(id, describedBy) => (
-                  <Input id={id} type="month" value={firstMonth} disabled={!!bill} aria-describedby={describedBy} onChange={(e) => setFirstMonth(e.target.value)} />
+                  <Input id={id} inputMode="decimal" className="tabular" value={lateFee} aria-describedby={describedBy} onChange={(e) => setLateFee(e.target.value)} placeholder="0,00" />
                 )}
               </Field>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Field label="Data">{(id) => <Input id={id} type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />}</Field>
-            <Field label={variable ? 'Valor estimado (R$, opcional)' : 'Valor (R$)'}>
-              {(id) => <Input id={id} inputMode="decimal" className="tabular" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />}
-            </Field>
-            <div className="sm:col-span-2">
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Data">{(id) => <Input id={id} type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />}</Field>
+                <Field label={variable ? 'Valor estimado (R$, opcional)' : 'Valor (R$)'}>
+                  {(id) => <Input id={id} inputMode="decimal" className="tabular" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" />}
+                </Field>
+              </div>
               <Checkbox label="Valor variável (informado no pagamento)" checked={variable} onChange={setVariable} />
-            </div>
-          </>
-        )}
-        <Field label="Pagar para (opcional)" className="sm:col-span-2">
-          {(id) => <Input id={id} value={payee} maxLength={120} onChange={(e) => setPayee(e.target.value)} placeholder="Ex.: Imobiliária Lopes, Copel" />}
-        </Field>
-        <fieldset className="sm:col-span-2">
-          <legend className="mb-1.5 text-sm font-medium">Meio de pagamento</legend>
-          <div role="radiogroup" aria-label="Meio de pagamento" className="grid grid-cols-2 gap-1 rounded-md border bg-card p-1 sm:grid-cols-4">
-            {([['', 'Não definido'], ...Object.entries(PAYMENT_METHODS)] as Array<[PaymentMethod | '', string]>).map(([value, label]) => (
-              <button
-                key={value || 'none'}
-                type="button"
-                role="radio"
-                aria-checked={method === value}
-                onClick={() => setMethod(value)}
-                className={cn('min-h-11 rounded-sm px-2 text-sm font-medium text-muted-foreground', method === value && 'bg-primary text-primary-foreground')}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-        <Field
-          label={method === 'pix' ? 'Chave PIX e dados (opcional)' : method === 'boleto' ? 'Código de barras ou onde achar o boleto (opcional)' : method === 'credit_card' ? 'Qual cartão (opcional)' : 'Como pagar (opcional)'}
-          hint="Vai junto no aviso do vencimento"
-          className="sm:col-span-2"
-        >
-          {(id, describedBy) => (
-            <Textarea id={id} rows={2} value={howToPay} maxLength={500} aria-describedby={describedBy} onChange={(e) => setHowToPay(e.target.value)} placeholder="Ex.: PIX 12.345.678/0001-90" />
+            </>
           )}
-        </Field>
+        </div>
+
+        {/* Direita: parcelas, para quem e como pagar. */}
+        <div className="flex flex-col gap-4">
+          {kind === 'monthly' ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Parcelas (opcional)" hint="Vazio = todo mês, sem fim">
+                {(id, describedBy) => (
+                  <Input id={id} inputMode="numeric" className="tabular" value={installments} aria-describedby={describedBy} onChange={(e) => setInstallments(e.target.value)} placeholder="Ex.: 10" />
+                )}
+              </Field>
+              {installments.trim() ? (
+                <Field label="Primeira parcela" hint={bill ? 'Não muda na edição' : undefined}>
+                  {(id, describedBy) => (
+                    <Input id={id} type="month" value={firstMonth} disabled={!!bill} aria-describedby={describedBy} onChange={(e) => setFirstMonth(e.target.value)} />
+                  )}
+                </Field>
+              ) : null}
+            </div>
+          ) : null}
+          <Field label="Pagar para (opcional)">
+            {(id) => <Input id={id} value={payee} maxLength={120} onChange={(e) => setPayee(e.target.value)} placeholder="Ex.: Imobiliária Lopes, Copel" />}
+          </Field>
+          <fieldset>
+            <legend className="mb-1.5 text-sm font-medium">Meio de pagamento</legend>
+            <div role="radiogroup" aria-label="Meio de pagamento" className="grid grid-cols-2 gap-1 rounded-md border bg-card p-1 sm:grid-cols-4">
+              {([['', 'Não definido'], ...Object.entries(PAYMENT_METHODS)] as Array<[PaymentMethod | '', string]>).map(([value, label]) => (
+                <button
+                  key={value || 'none'}
+                  type="button"
+                  role="radio"
+                  aria-checked={method === value}
+                  onClick={() => setMethod(value)}
+                  className={cn('min-h-11 rounded-sm px-2 text-sm font-medium text-muted-foreground', method === value && 'bg-primary text-primary-foreground')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <Field
+            label={method === 'pix' ? 'Chave PIX e dados (opcional)' : method === 'boleto' ? 'Código de barras ou onde achar o boleto (opcional)' : method === 'credit_card' ? 'Qual cartão (opcional)' : 'Como pagar (opcional)'}
+            hint="Vai junto no aviso do vencimento"
+          >
+            {(id, describedBy) => (
+              <Textarea id={id} rows={3} value={howToPay} maxLength={500} aria-describedby={describedBy} onChange={(e) => setHowToPay(e.target.value)} placeholder="Ex.: PIX 12.345.678/0001-90" />
+            )}
+          </Field>
+        </div>
         {error ? (
-          <p role="alert" className="text-sm text-destructive sm:col-span-2">
+          <p role="alert" className="text-sm text-destructive lg:col-span-2">
             {error}
           </p>
         ) : null}
