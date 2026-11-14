@@ -74,6 +74,25 @@ export class GroupContactsService {
     }
   }
 
+  /**
+   * Cartão de contato enviado por alguém da equipe (em conversa direta ou em grupo): salva cada telefone.
+   * Retorna null quando não se aplica (não é cartão ou quem enviou não é da equipe).
+   */
+  async fromContactCard(
+    message: MessageForContacts & { id: string },
+    normalized: InboundMessage | null,
+    sender: { userId: string } | null,
+  ) {
+    if (message.kind !== 'contact' || message.fromMe || !sender) return null;
+    const ownPhone = await this.ownPhone(message.conversation.instanceId, normalized?.connectedPhone ?? null);
+    return this.contacts.saveFromCards(message.organizationId, normalized?.contacts ?? [], {
+      channel: 'whatsapp',
+      userId: sender.userId,
+      phone: message.senderPhone,
+      sourceMessageId: message.id,
+    }, ownPhone);
+  }
+
   /** Lê os participantes no provedor e sincroniza. Grupo sem participantes na resposta é ignorado (resposta suspeita). */
   async syncGroup(
     organizationId: string,

@@ -58,6 +58,15 @@ export const inboundMessage = z.object({
   sentAt: isoDateTime,
   text: z.string().nullable(),
   media: inboundMedia.nullable(),
+  /** Cartões de contato (kind 'contact'): nome como quem enviou salvou e telefones (só dígitos). */
+  contacts: z
+    .array(
+      z.object({
+        name: z.string().nullable(),
+        phones: z.array(z.string()),
+      }),
+    )
+    .optional(),
   notification: z
     .object({
       type: z.string(),

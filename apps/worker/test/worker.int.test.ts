@@ -525,3 +525,52 @@ describe('perfil dos contatos no WhatsApp', () => {
     expect(again.updated).toBe(0);
   });
 });
+
+describe('cartão de contato enviado pela equipe', () => {
+  async function contactCard(opts: { senderPhone: string; group?: string; cards: Array<{ name: string | null; phones: string[] }> }) {
+    const msg = await createMessage({ senderPhone: opts.senderPhone, group: opts.group, text: opts.cards[0]?.name ?? null });
+    return prisma.message.update({
+      where: { id: msg.id },
+      data: {
+        kind: 'contact',
+        normalized: {
+          kind: 'contact',
+          connectedPhone: null,
+          contacts: opts.cards,
+          notification: null,
+          flags: { isEdit: false, isStatusReply: false, isNewsletter: false, isBroadcast: false },
+        },
+      },
+    });
+  }
+  const suffix = String(Date.now()).slice(-6);
+  const MARINA = `55118${suffix}01`;
+  const ZE = `55118${suffix}02`;
+  const ESTRANHO = `55118${suffix}03`;
+  const FORA = `55118${suffix}04`;
+
+  it('em conversa direta: salva com o nome do cartão e a Coxia confirma (não vira comando)', async () => {
+    const msg = await contactCard({ senderPhone: adminPhone(), cards: [{ name: 'Marina Patrocínio', phones: [MARINA] }] });
+    await app.get(InboundProcessor).process(job(msg.id));
+    const contact = await prisma.contact.findUniqueOrThrow({ where: { organizationId_phone: { organizationId: orgId, phone: MARINA } } });
+    expect(contact.name).toBe('Marina Patrocínio');
+    const reply = await prisma.notificationDelivery.findUniqueOrThrow({ where: { idempotencyKey: `reply:${msg.id}` } });
+    expect(reply.recipient).toBe(adminPhone());
+    expect(reply.text).toMatch(/^📇 Contato salvo: Marina Patrocínio · \+55 11 8/);
+    expect(await prisma.auditEvent.count({ where: { organizationId: orgId, action: 'contact.create_from_card', entityId: contact.id } })).toBe(1);
+  });
+
+  it('em grupo: salva sem responder nada', async () => {
+    const msg = await contactCard({ senderPhone: adminPhone(), group: 'Equipe Casa Kaju', cards: [{ name: 'Seu Zé do som', phones: [ZE] }] });
+    await app.get(InboundProcessor).process(job(msg.id));
+    expect((await prisma.contact.findUniqueOrThrow({ where: { organizationId_phone: { organizationId: orgId, phone: ZE } } })).name).toBe('Seu Zé do som');
+    expect(await prisma.notificationDelivery.count({ where: { idempotencyKey: `reply:${msg.id}` } })).toBe(0);
+  });
+
+  it('enviado por quem não é da equipe: o cartão não vira contato', async () => {
+    const msg = await contactCard({ senderPhone: ESTRANHO, cards: [{ name: 'Alguém', phones: [FORA] }] });
+    await app.get(InboundProcessor).process(job(msg.id));
+    expect(await prisma.contact.count({ where: { organizationId: orgId, phone: FORA } })).toBe(0);
+    expect(await prisma.notificationDelivery.count({ where: { idempotencyKey: `reply:${msg.id}` } })).toBe(0);
+  });
+});

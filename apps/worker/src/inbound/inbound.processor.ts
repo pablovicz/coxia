@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Inject, Logger } from '@nestjs/common';
 import { type InboundMessage, type InboundMessageJob, QUEUES } from '@coxia/contracts';
 import { enqueueDelivery } from '@coxia/database';
-import { CommandService, ProjectWorkspaceService, trackAi } from '@coxia/domain';
+import { CommandService, contactCardReply, ProjectWorkspaceService, trackAi } from '@coxia/domain';
 import { AiServiceError, normalizePhone, sha256, type WhatsappProvider } from '@coxia/shared';
 import type { Job } from 'bullmq';
 import { createHash } from 'node:crypto';
@@ -70,7 +70,7 @@ export class InboundProcessor extends WorkerHost {
 
       const members = await this.prisma.organizationMember.findMany({
         where: { organizationId: message.organizationId, user: { phone: { not: null } } },
-        select: { role: true, canManageProjects: true, user: { select: { phone: true } } },
+        select: { role: true, canManageProjects: true, user: { select: { id: true, phone: true } } },
       });
       const phones = (filter: (m: (typeof members)[number]) => boolean) =>
         new Set(members.filter(filter).flatMap((m) => (m.user.phone ? [normalizePhone(m.user.phone)!] : [])));
@@ -78,6 +78,9 @@ export class InboundProcessor extends WorkerHost {
       const normalized = message.normalized as unknown as InboundMessage | null;
       // Contatos: quem escreveu, quem entrou ou saiu do grupo (nunca derruba o processamento).
       await this.groupContacts.fromMessage(message, normalized);
+      // Cartão de contato enviado pela equipe vira contato (em grupo, sem responder nada).
+      const teamSender = members.find((m) => m.role !== 'viewer' && !!message.senderPhone && normalizePhone(m.user.phone) === message.senderPhone);
+      const savedCards = await this.groupContacts.fromContactCard(message, normalized, teamSender ? { userId: teamSender.user.id } : null);
       const project = message.conversation.group?.projectChannel?.project ?? null;
       const route = routeMessage({
         kind: message.kind,
@@ -96,7 +99,15 @@ export class InboundProcessor extends WorkerHost {
         adminPhones: phones((m) => m.role === 'owner' || m.role === 'admin'),
       });
 
-      if (route.route === 'admin_direct' && message.senderPhone) {
+      if (savedCards && !message.conversation.isGroup) {
+        // Não é comando: só confirma o que foi salvo.
+        await enqueueDelivery(this.prisma, {
+          organizationId: message.organizationId,
+          recipient: message.conversation.externalChatId,
+          text: contactCardReply(savedCards),
+          idempotencyKey: `reply:${message.id}`,
+        });
+      } else if (route.route === 'admin_direct' && message.senderPhone) {
         await this.handleCommand(message, stored, traceId);
       }
       // Grupo de projeto (ou candidato com remetente autorizado): o domínio decide o resto.

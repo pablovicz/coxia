@@ -95,6 +95,12 @@
     "fromMe": {
       "type": "boolean"
     },
+    "connectedPhone": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "sentAt": {
       "type": "string",
       "format": "date-time",
@@ -163,6 +169,31 @@
         }
       ]
     },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phones": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "phones"
+        ],
+        "additionalProperties": false
+      }
+    },
     "notification": {
       "anyOf": [
         {
@@ -223,6 +254,7 @@
     "chat",
     "sender",
     "fromMe",
+    "connectedPhone",
     "sentAt",
     "text",
     "media",

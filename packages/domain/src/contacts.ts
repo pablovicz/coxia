@@ -140,6 +140,37 @@ export class ContactService {
     return withTeam!;
   }
 
+  /**
+   * Cartão de contato enviado pela equipe no WhatsApp: cada telefone vira contato.
+   * O nome do cartão (como a equipe salvou a pessoa) vira o nome do contato, sem
+   * sobrescrever um nome que a equipe já tenha dado. Ignora o próprio número da Coxia.
+   */
+  async saveFromCards(
+    organizationId: string,
+    cards: Array<{ name: string | null; phones: string[] }>,
+    actor: Actor,
+    ownPhone?: string | null,
+  ): Promise<Array<{ contactId: string; phone: string; name: string | null; created: boolean }>> {
+    const own = validPhone(ownPhone);
+    const out: Array<{ contactId: string; phone: string; name: string | null; created: boolean }> = [];
+    for (const card of cards) {
+      const cardName = card.name?.trim() || null;
+      for (const raw of card.phones) {
+        const phone = validPhone(raw);
+        if (!phone || phone === own || out.some((o) => o.phone === phone)) continue;
+        const existing = await this.db.contact.findUnique({ where: { organizationId_phone: { organizationId, phone } } });
+        const contact = existing ?? (await this.upsertContact(organizationId, phone, null));
+        const name = contact.name ?? cardName;
+        if (name !== contact.name) {
+          await this.db.contact.update({ where: { id: contact.id }, data: { name, searchName: searchOf(name, contact.whatsappName) } });
+        }
+        if (!existing) await audit(this.db, organizationId, actor, 'contact.create_from_card', 'contact', contact.id, { after: { phone, name } });
+        out.push({ contactId: contact.id, phone, name, created: !existing });
+      }
+    }
+    return out;
+  }
+
   /** A equipe corrige o nome (o do WhatsApp pode ser apelido) e anota observações. */
   async update(organizationId: string, contactId: string, patch: { name?: string | null; notes?: string | null }, actor: Actor) {
     const before = await this.get(organizationId, contactId);
@@ -224,4 +255,24 @@ export class ContactService {
     const byPhone = new Map(members.map((m) => [m.user.phone!, { name: m.user.name, role: m.role }]));
     return rows.map((r) => ({ ...r, member: byPhone.get(r.phone) ?? null }));
   }
+}
+
+/** "+55 11 98765-4321" para mensagens de WhatsApp. */
+function phoneLabel(digits: string): string {
+  const br = /^55(\d{2})(\d{4,5})(\d{4})$/.exec(digits);
+  return br ? `+55 ${br[1]} ${br[2]}-${br[3]}` : `+${digits}`;
+}
+
+/** Resposta da Coxia (só em conversa direta) depois de salvar cartões de contato. */
+export function contactCardReply(saved: Array<{ phone: string; name: string | null; created: boolean }>): string {
+  if (saved.length === 0) return 'Não consegui ler o telefone desse contato. Pode me mandar o nome e o número por escrito?';
+  const label = (s: { phone: string; name: string | null }) => (s.name ? `${s.name} · ${phoneLabel(s.phone)}` : phoneLabel(s.phone));
+  const created = saved.filter((s) => s.created);
+  const known = saved.filter((s) => !s.created);
+  const lines: string[] = [];
+  if (created.length === 1) lines.push(`📇 Contato salvo: ${label(created[0]!)}`);
+  else if (created.length > 1) lines.push(`📇 ${created.length} contatos salvos:`, ...created.map((s) => `• ${label(s)}`));
+  if (known.length === 1) lines.push(`${created.length ? '' : '📇 '}${label(known[0]!)} já estava nos contatos.`);
+  else if (known.length > 1) lines.push(`${created.length ? 'Já estavam' : '📇 Já estavam'} nos contatos:`, ...known.map((s) => `• ${label(s)}`));
+  return lines.join('\n');
 }

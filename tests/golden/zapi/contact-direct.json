@@ -1,0 +1,37 @@
+{
+  "provider": "zapi",
+  "instanceId": "3E1A2B3C4D5E6F708192A3B4C5D6E7F8",
+  "providerMessageId": "3EB0A1B2C3D4E5F60009",
+  "dedupeKey": "zapi:3E1A2B3C4D5E6F708192A3B4C5D6E7F8:3EB0A1B2C3D4E5F60009",
+  "kind": "contact",
+  "chat": {
+    "id": "5511977776666",
+    "isGroup": false,
+    "name": null
+  },
+  "sender": {
+    "phone": "5511977776666",
+    "lid": null,
+    "name": "Ana Admin"
+  },
+  "fromMe": false,
+  "connectedPhone": "5511900000000",
+  "sentAt": "2026-11-06T12:00:00.000Z",
+  "text": "Marina Patrocínio",
+  "media": null,
+  "contacts": [
+    {
+      "name": "Marina Patrocínio",
+      "phones": [
+        "5511988880000"
+      ]
+    }
+  ],
+  "notification": null,
+  "flags": {
+    "isEdit": false,
+    "isStatusReply": false,
+    "isNewsletter": false,
+    "isBroadcast": false
+  }
+}

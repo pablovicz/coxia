@@ -92,3 +92,27 @@ describe('regras de normalização', () => {
     expect(() => normalizeZapiWebhook({ type: 'ReceivedCallback', phone: '1' })).toThrow(/instanceId/);
   });
 });
+
+describe('cartão de contato', () => {
+  const base = load('contact-direct.json');
+
+  it('sem "phones", lê o telefone do vCard (waid ou o número do TEL)', () => {
+    const waid = normalizeZapiWebhook({
+      ...base,
+      contact: { displayName: 'Seu Zé', vCard: 'BEGIN:VCARD\nFN:Seu Zé\nTEL;type=CELL;waid=551133334444:+55 11 3333-4444\nEND:VCARD' },
+    })!;
+    expect(waid.contacts).toEqual([{ name: 'Seu Zé', phones: ['551133334444'] }]);
+
+    const plain = normalizeZapiWebhook({
+      ...base,
+      contact: { vCard: 'BEGIN:VCARD\r\nFN:Carla Mendes\r\nTEL;type=CELL:(11) 98765-0002\r\nitem1.TEL:+1 415 555 0100\r\nEND:VCARD' },
+    })!;
+    expect(plain.contacts).toEqual([{ name: 'Carla Mendes', phones: ['5511987650002', '14155550100'] }]);
+  });
+
+  it('cartão sem telefone legível vira lista vazia (a Coxia avisa que não conseguiu ler)', () => {
+    const m = normalizeZapiWebhook({ ...base, contact: { displayName: 'Sem número', vCard: 'BEGIN:VCARD\nFN:Sem número\nEND:VCARD', phones: [] } })!;
+    expect(m.kind).toBe('contact');
+    expect(m.contacts).toEqual([{ name: 'Sem número', phones: [] }]);
+  });
+});

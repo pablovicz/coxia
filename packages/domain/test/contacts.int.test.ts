@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { createPrismaClient } from '@coxia/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type Actor, ContactService, DomainError } from '../src';
+import { type Actor, ContactService, contactCardReply, DomainError } from '../src';
 
 const db = createPrismaClient();
 const actor: Actor = { channel: 'web', userId: null };
@@ -139,5 +139,53 @@ describe('busca de contatos', () => {
       { id: lume, name: 'PROJETO - Lume', members: 2 },
       { id: xpo, name: 'PROJETO - XPO', members: 4 },
     ]);
+  });
+});
+
+describe('cartão de contato enviado pela equipe', () => {
+  const whatsapp: Actor = { channel: 'whatsapp', userId: null, phone: TEAM_PHONE };
+
+  it('cada telefone vira contato com o nome do cartão; não sobrescreve nome dado pela equipe; ignora o próprio número', async () => {
+    const saved = await contacts.saveFromCards(
+      orgId,
+      [
+        { name: 'Marina Patrocínio', phones: [ph(201), OWN] },
+        { name: 'Seu Zé do som', phones: [ph(202), ph(203)] },
+        { name: 'Ilegível', phones: ['123'] },
+      ],
+      whatsapp,
+      OWN,
+    );
+    expect(saved.map((s) => [s.phone, s.name, s.created])).toEqual([
+      [ph(201), 'Marina Patrocínio', true],
+      [ph(202), 'Seu Zé do som', true],
+      [ph(203), 'Seu Zé do som', true],
+    ]);
+    const marina = await db.contact.findUniqueOrThrow({ where: { organizationId_phone: { organizationId: orgId, phone: ph(201) } } });
+    expect(marina).toMatchObject({ name: 'Marina Patrocínio', searchName: 'marina patrocinio' });
+    expect(await db.auditEvent.count({ where: { organizationId: orgId, action: 'contact.create_from_card' } })).toBe(3);
+
+    // A equipe renomeou: um novo cartão com outro nome não muda o nome dado.
+    await contacts.update(orgId, marina.id, { name: 'Marina (patrocínio)' }, actor);
+    const again = await contacts.saveFromCards(orgId, [{ name: 'Marina P.', phones: [ph(201)] }], whatsapp, OWN);
+    expect(again).toEqual([{ contactId: marina.id, phone: ph(201), name: 'Marina (patrocínio)', created: false }]);
+
+    // Já existia sem nome (só pelo WhatsApp): o cartão dá o nome.
+    await contacts.recordMessage(orgId, { phone: ph(204), whatsappName: 'jr', groupId: null, at: t(30), ownPhone: OWN });
+    const named = await contacts.saveFromCards(orgId, [{ name: 'Júnior da luz', phones: [ph(204)] }], whatsapp, OWN);
+    expect(named[0]).toMatchObject({ name: 'Júnior da luz', created: false });
+  });
+
+  it('resposta da Coxia: salvo, já existente, vários e ilegível', () => {
+    expect(contactCardReply([{ phone: '5511988880000', name: 'Marina', created: true }])).toBe('📇 Contato salvo: Marina · +55 11 98888-0000');
+    expect(contactCardReply([{ phone: '5511988880000', name: 'Marina', created: false }])).toBe('📇 Marina · +55 11 98888-0000 já estava nos contatos.');
+    expect(
+      contactCardReply([
+        { phone: '5511988880000', name: 'Marina', created: true },
+        { phone: '551133334444', name: 'Seu Zé', created: true },
+        { phone: '5511987650002', name: 'Carla', created: false },
+      ]),
+    ).toBe('📇 2 contatos salvos:\n• Marina · +55 11 98888-0000\n• Seu Zé · +55 11 3333-4444\nCarla · +55 11 98765-0002 já estava nos contatos.');
+    expect(contactCardReply([])).toContain('Não consegui ler o telefone');
   });
 });

@@ -1,6 +1,6 @@
 import type { InboundMessage, InboundMessageKind } from '@coxia/contracts';
 import { stableHash } from '../hash';
-import { normalizePhone } from '../phone';
+import { normalizeBrPhone, normalizePhone } from '../phone';
 
 /**
  * Normalização do webhook "on-message-received" da Z-API.
@@ -68,6 +68,7 @@ export function normalizeZapiWebhook(payload: unknown): InboundMessage | null {
   const senderLid = isGroup ? str(p.participantLid) : str(p.chatLid);
 
   const { kind, text, media } = extractContent(p, notificationType);
+  const contacts = kind === 'contact' ? extractContacts(p) : [];
 
   // Eventos sem messageId (ex.: algumas notificações) recebem uma chave determinística,
   // para que reenvios do mesmo evento continuem sendo deduplicados.
@@ -96,6 +97,7 @@ export function normalizeZapiWebhook(payload: unknown): InboundMessage | null {
     sentAt,
     text,
     media,
+    ...(kind === 'contact' ? { contacts } : {}),
     notification: notificationType
       ? { type: notificationType, parameters: notificationParameters }
       : null,
@@ -201,8 +203,43 @@ function extractContent(
   const reaction = obj(p.reaction);
   if (reaction) return { kind: 'reaction', text: str(reaction.value), media: null };
   if (obj(p.location)) return { kind: 'location', text: str(obj(p.location)!.address), media: null };
-  if (obj(p.contact)) return { kind: 'contact', text: str(obj(p.contact)!.displayName), media: null };
+  if (obj(p.contact) || Array.isArray(p.contacts)) {
+    const first = obj(p.contact) ?? obj((p.contacts as unknown[])[0]);
+    return { kind: 'contact', text: str(first?.displayName), media: null };
+  }
   if (notificationType) return { kind: 'notification', text: null, media: null };
 
   return { kind: 'unknown', text: null, media: null };
+}
+
+/**
+ * Cartões de contato. A Z-API manda `contact` com `displayName`, `vCard` e `phones`
+ * (só dígitos, com DDI). Sem `phones`, os telefones saem do vCard (waid=… ou o número do TEL).
+ * `contacts` (vários cartões numa mensagem) não está documentado: lido do mesmo jeito, por precaução.
+ */
+function extractContacts(p: Json): Array<{ name: string | null; phones: string[] }> {
+  const cards = [obj(p.contact), ...(Array.isArray(p.contacts) ? p.contacts.map(obj) : [])].filter((c): c is Json => c !== null);
+  return cards.map((card) => {
+    const vcard = str(card.vCard) ?? str(card.vcard) ?? '';
+    const listed = Array.isArray(card.phones) ? card.phones.map((x) => normalizePhone(typeof x === 'string' ? x : null)) : [];
+    const fromVcard = listed.length ? [] : phonesFromVcard(vcard);
+    const phones = [...new Set([...listed, ...fromVcard].filter((x): x is string => !!x && x.length >= 10 && x.length <= 15))];
+    const fn = /^FN:(.+)$/im.exec(vcard)?.[1]?.trim() ?? null;
+    return { name: str(card.displayName) ?? fn, phones };
+  });
+}
+
+function phonesFromVcard(vcard: string): Array<string | null> {
+  const out: Array<string | null> = [];
+  for (const line of vcard.split(/\r?\n/)) {
+    if (!/^(item\d+\.)?TEL/i.test(line)) continue;
+    const waid = /waid=(\d+)/i.exec(line)?.[1];
+    if (waid) {
+      out.push(normalizePhone(waid));
+      continue;
+    }
+    const value = line.slice(line.indexOf(':') + 1).trim();
+    out.push(value ? normalizeBrPhone(value) : null);
+  }
+  return out;
 }
