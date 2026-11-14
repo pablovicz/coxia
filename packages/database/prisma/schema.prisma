@@ -160,6 +160,7 @@ enum NotificationKind {
   project_checkin
   project_confirmation
   ad_hoc
+  appointment_before
 }
 
 enum NotificationScheduleStatus {
@@ -228,6 +229,7 @@ model Organization {
   bookings               Booking[]
   bookingOccurrences     BookingOccurrence[]
   reminders              Reminder[]
+  appointments           Appointment[]
   recurringBills         RecurringBill[]
   billOccurrences        BillOccurrence[]
   paymentAttachments     PaymentAttachment[]
@@ -267,6 +269,7 @@ model OrganizationMember {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments AppointmentParticipant[]
 
   @@unique([organizationId, userId])
   @@map("organization_members")
@@ -343,6 +346,7 @@ model Contact {
   groups       ContactGroup[]
   reminders    Reminder[]
   bookings     Booking[]
+  appointments AppointmentParticipant[]
 
   @@unique([organizationId, phone])
   @@index([organizationId, lastMessageAt])
@@ -1073,4 +1077,61 @@ model PendingAction {
 
   @@index([conversationId, status])
   @@map("pending_actions")
+}
+
+// ───────────── Compromissos da equipe (calendário próprio, separado das salas) ─────────────
+
+enum AppointmentKind {
+  meeting
+  visit
+  event
+  other
+}
+
+enum AppointmentStatus {
+  scheduled
+  cancelled
+}
+
+/// Reunião, visita, evento… Vai toda a equipe (`allTeam`) ou só quem estiver nos participantes.
+model Appointment {
+  id                  String            @id @default(cuid())
+  organizationId      String            @map("organization_id")
+  kind                AppointmentKind   @default(meeting)
+  title               String
+  location            String?
+  notes               String?
+  startAt             DateTime          @map("start_at") @db.Timestamptz(6)
+  endAt               DateTime          @map("end_at") @db.Timestamptz(6)
+  allTeam             Boolean           @default(false) @map("all_team")
+  /// Aviso pelo WhatsApp para a equipe participante; null = sem aviso.
+  notifyMinutesBefore Int?              @default(60) @map("notify_minutes_before")
+  status              AppointmentStatus @default(scheduled)
+  createdByUserId     String?           @map("created_by_user_id")
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  participants AppointmentParticipant[]
+
+  @@index([organizationId, startAt])
+  @@map("appointments")
+}
+
+/// Participante: alguém da equipe (`memberId`), um contato (`contactId`) ou pessoa de fora (nome/telefone).
+model AppointmentParticipant {
+  id            String  @id @default(cuid())
+  appointmentId String  @map("appointment_id")
+  memberId      String? @map("member_id")
+  contactId     String? @map("contact_id")
+  name          String?
+  phone         String?
+
+  appointment Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  member      OrganizationMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  contact     Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@index([memberId])
+  @@map("appointment_participants")
 }

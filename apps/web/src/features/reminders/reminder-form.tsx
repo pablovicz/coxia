@@ -19,6 +19,16 @@ export const REMINDER_TYPES: Record<ReminderType, { label: string; Icon: typeof 
   message: { label: 'Mensagem', Icon: MessageCircle },
 };
 
+/** "dias úteis", "toda semana", "todo mês"… a partir da RRULE. */
+export function repeatLabel(rule: string | null): string | null {
+  if (!rule) return null;
+  if (rule.startsWith('FREQ=MONTHLY')) return 'todo mês';
+  const days = /BYDAY=([A-Z,]+)/.exec(rule)?.[1]?.split(',') ?? [];
+  if (days.length === 7) return 'todo dia';
+  if (days.length === 5 && !days.includes('SA') && !days.includes('SU')) return 'dias úteis';
+  return 'toda semana';
+}
+
 const WEEKDAY_CODES = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
 type Repeat = 'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly';
 const REPEAT: Record<Repeat, string> = {
@@ -56,10 +66,12 @@ function nextSlot(tz: string) {
  * Novo lembrete: geral ("Renovar o alvará"), ligar ou mandar mensagem para alguém
  * ("Ligar para a Carla às 14h"). O aviso chega pelo WhatsApp para quem for marcado.
  */
-export function ReminderForm({ tz, onClose }: { tz: string; onClose: () => void }) {
+export function ReminderForm({ tz, onClose, defaultDate }: { tz: string; onClose: () => void; defaultDate?: string }) {
   const qc = useQueryClient();
   const { session } = useAuth();
-  const slot = nextSlot(tz);
+  const next = nextSlot(tz);
+  // Aberto a partir de um dia do calendário: esse dia, às 9h (se não for hoje).
+  const slot = defaultDate && defaultDate !== next.date ? { date: defaultDate, time: '09:00' } : next;
   const [type, setType] = useState<ReminderType>('general');
   const [title, setTitle] = useState('');
   const [contact, setContact] = useState<Contact | null>(null);
@@ -78,7 +90,7 @@ export function ReminderForm({ tz, onClose }: { tz: string; onClose: () => void 
   // Quem cria recebe o aviso, se tiver WhatsApp cadastrado.
   useEffect(() => {
     const me = members.data?.find((m) => m.userId === session?.user.id);
-    if (me) setRecipients((r) => (r.length ? r : [me.phone]));
+    if (me?.phone) setRecipients((r) => (r.length ? r : [me.phone!]));
   }, [members.data, session?.user.id]);
 
   const needsPerson = type !== 'general';
@@ -229,14 +241,18 @@ export function ReminderForm({ tz, onClose }: { tz: string; onClose: () => void 
 
         <fieldset>
           <legend className="mb-1 text-sm font-medium">Quem recebe o aviso</legend>
-          {(members.data ?? []).map((m) => (
-            <Checkbox
-              key={m.userId}
-              label={`${m.name} · ${formatPhone(m.phone)}`}
-              checked={recipients.includes(m.phone)}
-              onChange={(on) => setRecipients((r) => (on ? [...r, m.phone] : r.filter((x) => x !== m.phone)))}
-            />
-          ))}
+          {(members.data ?? []).flatMap((m) => {
+            const phone = m.phone;
+            if (!phone) return [];
+            return [
+              <Checkbox
+                key={m.userId}
+                label={`${m.name} · ${formatPhone(phone)}`}
+                checked={recipients.includes(phone)}
+                onChange={(on) => setRecipients((r) => (on ? [...r, phone] : r.filter((x) => x !== phone)))}
+              />,
+            ];
+          })}
           <Field label="Outros números (opcional)" hint="Separe vários por vírgula" className="mt-2">
             {(id, describedBy) => <Input id={id} inputMode="tel" value={extra} aria-describedby={describedBy} onChange={(e) => setExtra(e.target.value)} />}
           </Field>

@@ -128,6 +128,26 @@ export const reminderSchema = z.object({
   personPhone: phone.nullish(),
 });
 
+// ───────────── Compromissos ─────────────
+
+export const appointmentSchema = z
+  .object({
+    kind: z.enum(['meeting', 'visit', 'event', 'other']).optional(),
+    title: z.string().min(1).max(120),
+    location: z.string().max(200).nullish(),
+    notes: z.string().max(2000).nullish(),
+    startAt: isoDateTime,
+    endAt: isoDateTime,
+    allTeam: z.boolean().optional(),
+    memberIds: z.array(z.string()).max(50).optional(),
+    contactIds: z.array(z.string()).max(50).optional(),
+    guests: z.array(z.object({ name: z.string().min(1).max(120), phone: z.string().max(30).nullish() })).max(30).optional(),
+    notifyMinutesBefore: z.number().int().min(0).max(10080).nullable().optional(),
+  })
+  .refine((a) => a.endAt > a.startAt, { message: 'O fim precisa ser depois do início', path: ['endAt'] });
+
+export const calendarQuery = z.object({ from: isoDateTime, to: isoDateTime });
+
 export function webActor(user: AuthUser): Actor {
   return { channel: 'web', userId: user.userId };
 }

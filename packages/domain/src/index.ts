@@ -7,6 +7,8 @@ export * from './expense-categories';
 export * from './bookings';
 export * from './bills';
 export * from './reminders';
+export * from './appointments';
+export * from './calendar';
 export * from './briefing';
 export * from './notifications';
 export * from './commands';

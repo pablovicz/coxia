@@ -7,7 +7,7 @@ import { ProjectDetailPage } from '@/features/projects/project-detail-page';
 import { ProjectsPage } from '@/features/projects/projects-page';
 import { ContactsPage } from '@/features/contacts/contacts-page';
 import { BillsPage } from '@/features/reminders/bills-page';
-import { RemindersPage } from '@/features/reminders/reminders-page';
+import { TeamCalendarPage } from '@/features/calendar/team-calendar-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { AgendaPage } from '@/features/rooms/agenda-page';
 import { RoomsPage } from '@/features/rooms/rooms-page';
@@ -38,7 +38,7 @@ export function App() {
           <Route path="agenda" element={<AgendaPage />} />
           <Route path="salas" element={<RoomsPage />} />
           <Route path="contas" element={<BillsPage />} />
-          <Route path="lembretes" element={<RemindersPage />} />
+          <Route path="lembretes" element={<TeamCalendarPage />} />
           <Route path="contatos" element={<ContactsPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
         </Route>

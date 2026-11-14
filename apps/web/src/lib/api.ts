@@ -223,10 +223,72 @@ export interface AutomaticReminder {
 }
 
 export interface Member {
+  memberId: string;
   userId: string;
   name: string;
-  phone: string;
+  /** Sem WhatsApp cadastrado: participa, mas não recebe aviso. */
+  phone: string | null;
   role: Role;
+}
+
+// ───────────── Calendário da equipe (separado da agenda das salas) ─────────────
+
+export type AppointmentKind = 'meeting' | 'visit' | 'event' | 'other';
+
+export interface AppointmentParticipant {
+  id: string;
+  memberId: string | null;
+  contactId: string | null;
+  name: string | null;
+  phone: string | null;
+  member: { id: string; user: { id: string; name: string; phone: string | null } } | null;
+  contact: { id: string; name: string | null; whatsappName: string | null; phone: string } | null;
+}
+
+export interface Appointment {
+  id: string;
+  kind: AppointmentKind;
+  title: string;
+  location: string | null;
+  notes: string | null;
+  startAt: string;
+  endAt: string;
+  allTeam: boolean;
+  notifyMinutesBefore: number | null;
+  status: 'scheduled' | 'cancelled';
+  participants: AppointmentParticipant[];
+}
+
+export interface CalendarReminder {
+  reminderId: string;
+  at: string;
+  type: ReminderType;
+  title: string;
+  message: string | null;
+  recurrenceRule: string | null;
+  person: { name: string | null; phone: string | null };
+  recipientPhones: string[];
+  done: boolean;
+  active: boolean;
+}
+
+export interface CalendarBill {
+  occurrenceId: string;
+  billId: string;
+  name: string;
+  dueDate: string;
+  status: BillOccurrence['status'];
+  expectedAmountCents: number | null;
+  paidAmountCents: number;
+  isVariableAmount: boolean;
+  lateFeeCents: number | null;
+  category: ExpenseCategoryRef | null;
+}
+
+export interface TeamCalendar {
+  appointments: Appointment[];
+  reminders: CalendarReminder[];
+  bills: CalendarBill[];
 }
 
 export interface Overview {

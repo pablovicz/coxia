@@ -4,7 +4,8 @@ import { composeProjectCheckIn, loadProjectState, type ProjectState } from './pr
 import { addDays, formatBRL, formatShortDate, formatTimeRange, type IsoDate, localDateOf, localDayBoundsUtc } from '@coxia/shared';
 import { DateTime } from 'luxon';
 import { BillingService } from './bills';
-import { composeMorningBriefing, loadBriefingState } from './briefing';
+import { APPOINTMENT_KIND_LABEL, AppointmentService, appointmentInclude } from './appointments';
+import { composeMorningBriefing, loadBriefingState, participantNames } from './briefing';
 import { type Db, fromIsoDate, getOrganization, toIsoDate } from './common';
 import { ReminderService, reminderPerson, reminderText } from './reminders';
 
@@ -44,6 +45,18 @@ export interface PlannerInput {
     lastOverdueNoticeAt: Date | null;
   }>;
   remindersDue: Array<{ id: string; title: string; text?: string; message: string | null; recipientPhones: string[]; runAt: Date }>;
+  /** Compromissos da equipe com aviso antecipado (para quem da equipe vai). */
+  appointmentsSoon?: Array<{
+    id: string;
+    kindLabel: string;
+    title: string;
+    startAt: Date;
+    endAt: Date;
+    location: string | null;
+    notifyMinutesBefore: number | null;
+    recipients: string[];
+    who: string[];
+  }>;
   /** Projetos ativos com check-in no grupo ligado. `text` null = nada relevante hoje (silêncio). */
   projectCheckIns?: Array<{ projectId: string; groupChatId: string; text: () => string | null }>;
 }
@@ -165,6 +178,26 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
     });
   }
 
+  // Aviso antes do compromisso, na antecedência escolhida. Mudou o horário → novo aviso.
+  for (const a of input.appointmentsSoon ?? []) {
+    if (a.notifyMinutesBefore === null || !a.recipients.length) continue;
+    const minutes = (a.startAt.getTime() - input.now.getTime()) / 60_000;
+    if (minutes <= 0 || minutes > a.notifyMinutesBefore) continue;
+    const day = localDateOf(a.startAt, tz);
+    const when = day === today ? 'hoje' : day === tomorrow ? 'amanhã' : formatShortDate(day);
+    const lines = [`📅 ${a.kindLabel} ${when}, ${formatTimeRange(a.startAt, a.endAt, tz)}: ${a.title}`];
+    if (a.location) lines.push(`Local: ${a.location}`);
+    if (a.who.length) lines.push(`Com: ${a.who.join(', ')}`);
+    out.push({
+      kind: 'appointment_before',
+      dedupeKey: `appointment_before:${a.id}:${a.startAt.toISOString()}`,
+      targetType: 'appointment',
+      targetId: a.id,
+      recipients: [...new Set(a.recipients)],
+      text: lines.join('\n'),
+    });
+  }
+
   for (const r of input.remindersDue) {
     if (!r.recipientPhones.length) continue;
     out.push({
@@ -197,7 +230,7 @@ export class NotificationService {
 
     await this.billing.markOverdue(organizationId, now);
 
-    const [members, bookingsTomorrow, bookingsSoon, bills, remindersDue, checkInProjects] = await Promise.all([
+    const [members, bookingsTomorrow, bookingsSoon, bills, remindersDue, checkInProjects, appointmentsSoon] = await Promise.all([
       this.db.organizationMember.findMany({
         where: { organizationId, receivesMorningBriefing: true, user: { phone: { not: null } } },
         select: { user: { select: { phone: true } } },
@@ -224,7 +257,20 @@ export class NotificationService {
         where: { organizationId, status: 'active', groupCheckIns: true },
         select: { id: true, channels: { select: { whatsappGroup: { select: { externalGroupId: true } } } } },
       }),
+      // Antecedência máxima do aviso: 1 semana.
+      this.db.appointment.findMany({
+        where: {
+          organizationId,
+          status: 'scheduled',
+          notifyMinutesBefore: { not: null },
+          startAt: { gt: now, lte: new Date(now.getTime() + 7 * 24 * 3_600_000) },
+        },
+        include: appointmentInclude,
+      }),
     ]);
+    const appointmentService = new AppointmentService(this.db);
+    const appointmentRecipients = new Map<string, string[]>();
+    for (const a of appointmentsSoon) appointmentRecipients.set(a.id, await appointmentService.teamPhones(organizationId, a));
 
     // Estado dos projetos carregado antes do planejamento (o planner é síncrono).
     const checkInStates = new Map<string, ProjectState>();
@@ -281,6 +327,17 @@ export class NotificationService {
         text: reminderText({ type: r.type, title: r.title, message: r.message, person: reminderPerson(r) }),
         recipientPhones: r.recipientPhones,
         runAt: r.nextRunAt!,
+      })),
+      appointmentsSoon: appointmentsSoon.map((a) => ({
+        id: a.id,
+        kindLabel: APPOINTMENT_KIND_LABEL[a.kind],
+        title: a.title,
+        startAt: a.startAt,
+        endAt: a.endAt,
+        location: a.location,
+        notifyMinutesBefore: a.notifyMinutesBefore,
+        recipients: appointmentRecipients.get(a.id) ?? [],
+        who: a.allTeam ? ['toda a equipe'] : participantNames(a.participants),
       })),
       projectCheckIns: checkInProjects.flatMap((p) => {
         const state = checkInStates.get(p.id);

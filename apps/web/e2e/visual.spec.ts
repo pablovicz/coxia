@@ -154,25 +154,6 @@ const reminder = (r: Record<string, unknown>) => ({
   contact: null,
   ...r,
 });
-const REMINDERS = [
-  reminder({
-    id: 'r3',
-    type: 'call',
-    title: 'Ligar para Carla (iluminação)',
-    nextRunAt: '2026-11-06T17:00:00Z',
-    message: 'Confirmar a luz da estreia',
-    contact: { id: 'k2', name: 'Carla (iluminação)', whatsappName: 'Carla Mendes', phone: '5511987650002' },
-  }),
-  reminder({ id: 'r4', type: 'message', title: 'Mandar mensagem para Seu Zé do som', nextRunAt: '2026-11-07T13:30:00Z', personName: 'Seu Zé do som', personPhone: '551133334444' }),
-  reminder({ id: 'r1', title: 'Renovar alvará', nextRunAt: '2026-11-10T12:00:00Z' }),
-  reminder({ id: 'r2', title: 'Abrir a casa', kind: 'recurring', recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', nextRunAt: '2026-11-09T10:30:00Z' }),
-  reminder({ id: 'r5', title: 'Pagar o técnico de som', active: false, nextRunAt: null, dueAt: '2026-11-03T15:00:00Z', lastSentAt: '2026-11-03T15:00:00Z' }),
-];
-const AUTOMATIC = [
-  { billId: 'rb2', name: 'Energia elétrica', dueDay: 7, isVariableAmount: true, overdueEveryDays: 3, next: { occurrenceId: 'c2', dueDate: '2026-11-07', status: 'pending', remainingCents: 32000 }, recipients: [{ phone: '5511900001111', name: 'Ana Admin' }] },
-  { billId: 'rb4', name: 'Água', dueDay: 4, isVariableAmount: true, overdueEveryDays: 3, next: { occurrenceId: 'c3', dueDate: '2026-11-04', status: 'overdue', remainingCents: 6000 }, recipients: [] },
-  { billId: 'rb5', name: 'Internet', dueDay: 20, isVariableAmount: false, overdueEveryDays: 3, next: { occurrenceId: 'c4', dueDate: '2026-11-20', status: 'pending', remainingCents: 14990 }, recipients: [{ phone: '5511900001111', name: 'Ana Admin' }] },
-];
 const income = (r: Record<string, unknown>) => ({
   source: 'other',
   status: 'expected',
@@ -233,8 +214,9 @@ const TEAM = [
 ];
 
 const MEMBERS = [
-  { userId: 'u1', name: 'Ana Admin', phone: '5511900001111', role: 'owner' },
-  { userId: 'u2', name: 'Bruno Lima', phone: '5511900002222', role: 'staff' },
+  { memberId: 'mb1', userId: 'u1', name: 'Ana Admin', phone: '5511900001111', role: 'owner' },
+  { memberId: 'mb2', userId: 'u2', name: 'Bruno Lima', phone: '5511900002222', role: 'staff' },
+  { memberId: 'mb3', userId: 'u3', name: 'Julia Rocha', phone: null, role: 'admin' },
 ];
 
 const ev = (who: string, at: string, text: string | null, attachmentKind: string | null = null) => ({
@@ -418,6 +400,77 @@ const PROJECT_CLOSED = {
   summaries: [{ id: 'sum1', kind: 'closing', content: CLOSING_REPORT, generatedAt: '2026-10-20T21:00:00Z' }],
 };
 
+// ───────────── calendário da equipe (semana de 02 a 08/11/2026) ─────────────
+const teamMember = (id: string, userId: string, name: string, phone: string | null) => ({ id: `p-${id}`, memberId: id, contactId: null, name: null, phone: null, member: { id, user: { id: userId, name, phone } }, contact: null });
+const guest = (id: string, name: string, phone: string | null) => ({ id: `p-${id}`, memberId: null, contactId: null, name, phone, member: null, contact: null });
+const APPOINTMENTS = [
+  {
+    id: 'ap1',
+    kind: 'meeting',
+    title: 'Reunião com a Secretaria de Cultura',
+    location: 'Secretaria de Cultura',
+    notes: 'Levar o projeto da mostra e o orçamento.',
+    startAt: '2026-11-06T17:00:00Z',
+    endAt: '2026-11-06T18:30:00Z',
+    allTeam: false,
+    notifyMinutesBefore: 60,
+    status: 'scheduled',
+    participants: [
+      teamMember('mb1', 'u1', 'Ana Admin', '5511900001111'),
+      { id: 'p-k2', memberId: null, contactId: 'k2', name: null, phone: null, member: null, contact: { id: 'k2', name: 'Carla (iluminação)', whatsappName: 'Carla Mendes', phone: '5511987650002' } },
+      guest('g1', 'Marina (patrocínio)', '5511988880000'),
+    ],
+  },
+  {
+    id: 'ap2',
+    kind: 'visit',
+    title: 'Visita técnica do som',
+    location: 'Sala Grande',
+    notes: null,
+    startAt: '2026-11-04T13:00:00Z',
+    endAt: '2026-11-04T14:00:00Z',
+    allTeam: false,
+    notifyMinutesBefore: 30,
+    status: 'scheduled',
+    participants: [teamMember('mb2', 'u2', 'Bruno Lima', '5511900002222'), guest('g2', 'Seu Zé do som', '551133334444')],
+  },
+  {
+    id: 'ap3',
+    kind: 'event',
+    title: 'Ensaio aberto para apoiadores',
+    location: 'Sala Grande',
+    notes: null,
+    startAt: '2026-11-07T22:00:00Z',
+    endAt: '2026-11-08T00:00:00Z',
+    allTeam: true,
+    notifyMinutesBefore: 1440,
+    status: 'scheduled',
+    participants: [],
+  },
+];
+const calReminder = (r: Record<string, unknown>) => ({ type: 'general', message: null, recurrenceRule: null, person: { name: null, phone: null }, recipientPhones: ['5511900001111'], done: false, active: true, ...r });
+const TEAM_CALENDAR = {
+  appointments: APPOINTMENTS,
+  reminders: [
+    calReminder({ reminderId: 'r7', at: '2026-11-02T21:00:00Z', title: 'Deixar a chave com o Seu João', recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,FR', done: true }),
+    calReminder({ reminderId: 'r6', at: '2026-11-05T12:00:00Z', title: 'Enviar o dossiê para a XPO', done: true }),
+    calReminder({
+      reminderId: 'r3',
+      at: '2026-11-06T14:00:00Z',
+      type: 'call',
+      title: 'Ligar para Carla (iluminação)',
+      message: 'Confirmar a luz da estreia',
+      person: { name: 'Carla (iluminação)', phone: '5511987650002' },
+    }),
+    calReminder({ reminderId: 'r7', at: '2026-11-06T21:00:00Z', title: 'Deixar a chave com o Seu João', recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,FR', recipientPhones: ['5511900002222'] }),
+  ],
+  bills: [
+    { occurrenceId: 'c3', billId: 'rb4', name: 'Água', dueDate: '2026-11-04', status: 'overdue', expectedAmountCents: 9000, paidAmountCents: 3000, isVariableAmount: true, lateFeeCents: 1500, category: CAT_CASA },
+    { occurrenceId: 'c1', billId: 'rb1', name: 'Aluguel', dueDate: '2026-11-05', status: 'paid', expectedAmountCents: 250000, paidAmountCents: 250000, isVariableAmount: false, lateFeeCents: 5000, category: CAT_CASA },
+    { occurrenceId: 'c2', billId: 'rb2', name: 'Energia elétrica', dueDate: '2026-11-07', status: 'pending', expectedAmountCents: 32000, paidAmountCents: 0, isVariableAmount: true, lateFeeCents: null, category: CAT_CASA },
+  ],
+};
+
 /** Espera as fontes antes de fotografar: evita baseline com fonte de fallback. */
 async function snap(page: Page, name: string, opts: { fullPage?: boolean } = {}) {
   await page.evaluate(() => document.fonts.ready);
@@ -501,9 +554,11 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/bills/occurrences') return respond(empty ? [] : [...BILLS, ONE_OFF]);
     if (path === '/bills/summary') return respond(empty ? { ...SUMMARY, expectedCents: 0, paidCents: 0, total: 0, paid: 0, pending: 0, overdue: 0, variableWithoutAmount: 0 } : SUMMARY);
     if (path === '/bills') return respond(empty ? [] : RECURRING);
-    if (path === '/reminders' && method === 'GET') return respond(empty ? [] : REMINDERS);
     if (path === '/reminders' && method === 'POST') return route.fulfill({ status: 201, json: reminder({ id: 'r9', ...route.request().postDataJSON() }) });
-    if (path === '/reminders/automatic') return respond(empty ? [] : AUTOMATIC);
+    if (path === '/calendar') return respond(empty ? { appointments: [], reminders: [], bills: [] } : TEAM_CALENDAR);
+    if (path === '/appointments' && method === 'POST') return route.fulfill({ status: 201, json: { ...APPOINTMENTS[0], id: 'ap9' } });
+    if (/^\/appointments\/ap\d$/.test(path) && method === 'PUT') return route.fulfill({ json: APPOINTMENTS[0] });
+    if (/^\/appointments\/ap\d\/cancel$/.test(path)) return route.fulfill({ json: { ...APPOINTMENTS[0], status: 'cancelled' } });
     if (/^\/reminders\/r\d\/deactivate$/.test(path)) return route.fulfill({ json: {} });
     if (path === '/organization/members') return respond(MEMBERS);
     if (path === '/expense-categories' && method === 'GET') return respond(EXPENSE_CATEGORIES);
@@ -725,7 +780,36 @@ test.describe('golden visual', () => {
     await mockApi(page);
     await page.goto('/lembretes');
     await expect(page.getByText('Pagar Energia elétrica')).toBeVisible();
+    await expect(page.getByText('Reunião com a Secretaria de Cultura')).toBeVisible();
     await snap(page, 'reminders.png', { fullPage: true });
+  });
+
+  test('lembretes: calendário do mês', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/lembretes?visao=mes');
+    await expect(page.getByRole('heading', { name: 'Sexta-feira, 6 de novembro' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Reunião com a Secretaria de Cultura/ }).last()).toBeVisible();
+    await snap(page, 'team-calendar-month.png', { fullPage: true });
+  });
+
+  test('compromisso: formulário', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/lembretes');
+    await page.getByRole('button', { name: 'Novo compromisso' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Novo compromisso' });
+    await dialog.getByLabel('Título').fill('Reunião com a Secretaria de Cultura');
+    await dialog.getByLabel('Local (opcional)').fill('Secretaria de Cultura');
+    await expect(dialog.getByRole('checkbox', { name: 'Ana Admin' })).toBeChecked();
+    await snap(page, 'appointment-form.png');
+  });
+
+  test('compromisso: detalhe', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/lembretes');
+    await page.getByRole('button', { name: /Reunião com a Secretaria de Cultura/ }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'Reunião com a Secretaria de Cultura' });
+    await expect(dialog.getByText('Marina (patrocínio)')).toBeVisible();
+    await snap(page, 'appointment-detail.png');
   });
 
   test('lembretes: ligar para um contato', async ({ page }) => {
@@ -1087,6 +1171,94 @@ test.describe('interação acessível', () => {
       personName: null,
       personPhone: null,
     });
+  });
+
+  test('compromisso com uma pessoa da equipe, contato e pessoa de fora', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/lembretes');
+    await page.getByRole('button', { name: 'Novo compromisso' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Novo compromisso' });
+    await dialog.getByRole('radio', { name: 'Visita' }).click();
+    await dialog.getByLabel('Título').fill('Visita ao teatro municipal');
+    await dialog.getByLabel('Data').fill('2026-11-10');
+    await dialog.getByLabel('Início').fill('15:00');
+    await expect(dialog.getByLabel('Fim')).toHaveValue('16:00');
+    await dialog.getByLabel('Local (opcional)').fill('Teatro Municipal');
+    // Só o Bruno vai.
+    await dialog.getByRole('checkbox', { name: 'Ana Admin' }).uncheck();
+    await dialog.getByRole('checkbox', { name: 'Bruno Lima' }).check();
+    await expect(dialog.getByText('Julia Rocha (sem WhatsApp: não recebe aviso)')).toBeVisible();
+    await dialog.getByLabel('Buscar contato').fill('carla');
+    await dialog.getByRole('button', { name: /Carla \(iluminação\)/ }).click();
+    await dialog.getByLabel('Nome', { exact: true }).fill('Marina (patrocínio)');
+    await dialog.getByLabel('Telefone (opcional)').fill('11 98888-0000');
+    await dialog.getByRole('button', { name: 'Adicionar' }).click();
+    await expect(dialog.getByRole('button', { name: 'Tirar Marina (patrocínio)' })).toBeVisible();
+    await dialog.getByLabel('Aviso pelo WhatsApp').selectOption('30');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/appointments') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Marcar compromisso' }).click(),
+    ]);
+    expect(req.postDataJSON()).toEqual({
+      kind: 'visit',
+      title: 'Visita ao teatro municipal',
+      location: 'Teatro Municipal',
+      notes: null,
+      startAt: '2026-11-10T15:00:00-03:00',
+      endAt: '2026-11-10T16:00:00-03:00',
+      allTeam: false,
+      memberIds: ['mb2'],
+      contactIds: ['k2'],
+      guests: [{ name: 'Marina (patrocínio)', phone: '11 98888-0000' }],
+      notifyMinutesBefore: 30,
+    });
+  });
+
+  test('compromisso: editar para toda a equipe e cancelar', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/lembretes');
+    await page.getByRole('button', { name: /Reunião com a Secretaria de Cultura/ }).first().click();
+    await page.getByRole('dialog', { name: 'Reunião com a Secretaria de Cultura' }).getByRole('button', { name: 'Editar' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Editar compromisso' });
+    await expect(dialog.getByLabel('Título')).toHaveValue('Reunião com a Secretaria de Cultura');
+    await dialog.getByRole('radio', { name: 'Toda a equipe' }).click();
+    const [put] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/appointments/ap1') && r.method() === 'PUT'),
+      dialog.getByRole('button', { name: 'Salvar' }).click(),
+    ]);
+    expect(put.postDataJSON()).toMatchObject({
+      allTeam: true,
+      memberIds: [],
+      contactIds: ['k2'],
+      guests: [{ name: 'Marina (patrocínio)', phone: '5511988880000' }],
+      startAt: '2026-11-06T14:00:00-03:00',
+      endAt: '2026-11-06T15:30:00-03:00',
+      notifyMinutesBefore: 60,
+    });
+
+    await page.getByRole('button', { name: /Reunião com a Secretaria de Cultura/ }).first().click();
+    const detail = page.getByRole('dialog', { name: 'Reunião com a Secretaria de Cultura' });
+    await detail.getByRole('button', { name: 'Cancelar compromisso' }).click();
+    await expect(detail.getByText('Cancelar este compromisso?')).toBeVisible();
+    const [cancel] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/appointments/ap1/cancel') && r.method() === 'POST'),
+      detail.getByRole('button', { name: 'Cancelar compromisso' }).click(),
+    ]);
+    expect(cancel).toBeTruthy();
+  });
+
+  test('calendário da equipe: filtro por tipo e "só os meus"', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/lembretes');
+    await page.getByRole('radio', { name: 'Contas' }).click();
+    await expect(page.getByText('Pagar Água')).toBeVisible();
+    await expect(page.getByText('Reunião com a Secretaria de Cultura')).toHaveCount(0);
+    await page.getByRole('radio', { name: 'Tudo' }).click();
+    await page.getByRole('button', { name: 'Só os meus' }).click();
+    // A visita é só do Bruno; a reunião é da Ana (quem está logada); o evento é da equipe toda.
+    await expect(page.getByText('Visita técnica do som')).toHaveCount(0);
+    await expect(page.getByText('Reunião com a Secretaria de Cultura').first()).toBeVisible();
+    await expect(page.getByText('Ensaio aberto para apoiadores').first()).toBeVisible();
   });
 
   test('conta mensal: valor obrigatório quando não é variável', async ({ page }) => {

@@ -34,7 +34,7 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 |---|---|
 | **Contas** (`/contas`) só com o financeiro; valor sempre informado (obrigatório na conta fixa, estimado na variável) e edição de contas cadastradas | `apps/web/src/features/reminders/bills-page.tsx` |
 | Conta variável com estimativa: entra no previsto do mês, mas o pagamento pede o valor real e o primeiro pagamento define o valor (não fica "parcial") | `BillingService.registerPayment` |
-| **Lembretes** (`/lembretes`) em tela própria: geral, **ligar** ou **mandar mensagem** para alguém (contato dos Contatos ou nome/telefone digitados), repetição (todo dia, dias úteis, semanal, mensal) e destinatários da equipe; o aviso no WhatsApp traz o telefone (e o link wa.me na mensagem). A equipe também cria lembretes | `apps/web/src/features/reminders/reminders-page.tsx`, `reminder-form.tsx`, `packages/domain/src/reminders.ts` |
+| **Lembretes** (`/lembretes`) em tela própria: geral, **ligar** ou **mandar mensagem** para alguém (contato dos Contatos ou nome/telefone digitados), repetição (todo dia, dias úteis, semanal, mensal) e destinatários da equipe; o aviso no WhatsApp traz o telefone (e o link wa.me na mensagem). A equipe também cria lembretes | `apps/web/src/features/reminders/reminder-form.tsx`, `packages/domain/src/reminders.ts` |
 | Cada conta ativa aparece em Lembretes como **automático**: avisos na véspera e no dia do vencimento (e reavisos se atrasar), até ser paga — os mesmos avisos que as contas já disparavam, sem duplicar | `GET /reminders/automatic` |
 
 ### Financeiro: entradas e saídas (pós-Etapa 4)
@@ -64,6 +64,16 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 | **Tipo** da conta: **Mensal** (dia de vencimento, valor fixo e **multa por atraso** opcional, somada ao valor sugerido no pagamento e citada no aviso de atraso) ou **Outros** (lançamento pontual numa data, valor fixo ou variável; a ocorrência nasce na hora, mesmo meses à frente) | `BillingService.createBill`, `bills-page.tsx` |
 | **Categorias de gasto** cadastráveis com ícone e cor (iniciais: Casa, Estoque, Manutenção), selo em cada conta e quadro "Por categoria" do mês | `packages/domain/src/expense-categories.ts`, `apps/web/src/features/finance/expense-categories.tsx` |
 | O antigo campo "categoria" (aluguel, energia…) virou interno: é deduzido do nome e só serve para o WhatsApp entender "paguei a luz" | `inferUtility` |
+
+### Calendário da equipe: compromissos, lembretes e contas (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| **Lembretes** (`/lembretes`) virou um calendário próprio, separado da agenda das salas, com as mesmas visões (semana, mês, trimestre, semestre, ano), filtro por tipo (Compromissos, Lembretes, Contas) e "só os meus" | `apps/web/src/features/calendar/team-calendar-page.tsx`, `GET /calendar` |
+| **Compromissos** (reunião, visita, evento, outro): data, início e fim, local, observações; vai **toda a equipe** ou só quem for marcado (pode ser uma pessoa), mais **contatos** e **pessoas de fora** (nome e telefone). Editar e cancelar | `packages/domain/src/appointments.ts`, `appointment-form.tsx`, `/appointments` |
+| Aviso pelo WhatsApp para quem da equipe vai (15 min a 1 dia antes, ou sem aviso; mudou o horário, novo aviso) e seção "Compromissos de hoje" no briefing da manhã. Contatos e pessoas de fora não recebem mensagem automática | `planNotifications` (`appointment_before`), `composeMorningBriefing` |
+| **Lembretes** gerais ("Enviar o dossiê para a XPO") e de ligar/mandar mensagem aparecem no dia e hora; os recorrentes, em cada dia em que disparam | `CalendarService.range` |
+| **Contas** entram sozinhas no dia do vencimento, com valor em aberto e situação | `CalendarService.range` |
 
 Os avisos de participante (`GROUP_PARTICIPANT_*`) ainda não foram confirmados com payload real da Z-API: a sincronização pela lista de participantes cobre o que eles não trouxerem.
 

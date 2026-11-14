@@ -620,3 +620,43 @@ describe('categorias de gasto e tipo da conta', () => {
     expect(occ.body.find((o: { recurringBill: { id: string } }) => o.recurringBill.id === bill.body.id).recurringBill.expenseCategory.name).toBe('Eventos');
   });
 });
+
+describe('compromissos e calendário da equipe', () => {
+  it('equipe cria e edita; leitura vê sem telefones; calendário junta compromissos, lembretes e contas', async () => {
+    const members = await http().get('/organization/members').set(as('owner')).expect(200);
+    const staff = members.body.find((m: { name: string }) => m.name === 'staff');
+    expect(staff).toMatchObject({ memberId: expect.any(String) });
+
+    const start = new Date(Date.now() + 3 * 86_400_000);
+    start.setUTCHours(13, 0, 0, 0);
+    const end = new Date(start.getTime() + 3_600_000);
+    const body = {
+      kind: 'visit',
+      title: 'Visita do patrocinador',
+      startAt: start.toISOString(),
+      endAt: end.toISOString(),
+      memberIds: [staff.memberId],
+      guests: [{ name: 'Marina (patrocínio)', phone: '11 98888-0000' }],
+    };
+    await http().post('/appointments').set(as('viewer')).send(body).expect(403);
+    await http().post('/appointments').set(as('staff')).send({ ...body, endAt: start.toISOString() }).expect(400);
+    await http().post('/appointments').set(as('staff')).send({ ...body, memberIds: [] }).expect(422);
+    const created = await http().post('/appointments').set(as('staff')).send(body).expect(201);
+    await http().put(`/appointments/${created.body.id}`).set(as('owner')).send({ ...body, title: 'Visita da patrocinadora', allTeam: true }).expect(200);
+
+    const range = `from=${encodeURIComponent(new Date(start.getTime() - 86_400_000).toISOString())}&to=${encodeURIComponent(new Date(end.getTime() + 86_400_000).toISOString())}`;
+    const cal = await http().get(`/calendar?${range}`).set(as('staff')).expect(200);
+    const mine = cal.body.appointments.find((a: { id: string }) => a.id === created.body.id);
+    expect(mine).toMatchObject({ title: 'Visita da patrocinadora', allTeam: true });
+    expect(mine.participants.find((p: { name: string | null }) => p.name === 'Marina (patrocínio)').phone).toBe('5511988880000');
+    expect(cal.body).toMatchObject({ reminders: expect.any(Array), bills: expect.any(Array) });
+
+    const asViewer = await http().get(`/calendar?${range}`).set(as('viewer')).expect(200);
+    const seen = asViewer.body.appointments.find((a: { id: string }) => a.id === created.body.id);
+    expect(seen.participants.find((p: { name: string | null }) => p.name === 'Marina (patrocínio)').phone).toBeNull();
+
+    await http().post(`/appointments/${created.body.id}/cancel`).set(as('staff')).expect(200);
+    const afterCancel = await http().get(`/calendar?${range}`).set(as('staff')).expect(200);
+    expect(afterCancel.body.appointments.map((a: { id: string }) => a.id)).not.toContain(created.body.id);
+  });
+});

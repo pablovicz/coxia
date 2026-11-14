@@ -82,12 +82,13 @@ export class OrganizationController {
   @Roles('owner', 'admin', 'staff')
   @Get('organization/members')
   async members(@CurrentUser() user: AuthUser) {
+    // Todos da equipe (quem não tem WhatsApp vem com phone null: participa, mas não recebe aviso).
     const rows = await this.prisma.organizationMember.findMany({
-      where: { organizationId: user.organizationId, user: { phone: { not: null } } },
-      select: { role: true, user: { select: { id: true, name: true, phone: true } } },
+      where: { organizationId: user.organizationId },
+      select: { id: true, role: true, user: { select: { id: true, name: true, phone: true } } },
       orderBy: { user: { name: 'asc' } },
     });
-    return rows.map((m) => ({ userId: m.user.id, name: m.user.name, phone: m.user.phone!, role: m.role }));
+    return rows.map((m) => ({ memberId: m.id, userId: m.user.id, name: m.user.name, phone: m.user.phone, role: m.role }));
   }
 
   // ───────────── Equipe (quem entra no painel e é reconhecido no WhatsApp) ─────────────

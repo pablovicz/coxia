@@ -8,6 +8,7 @@ import {
   type IsoDate,
   localDayBoundsUtc,
 } from '@coxia/shared';
+import { APPOINTMENT_KIND_LABEL, appointmentInclude } from './appointments';
 import { type Db, fromIsoDate, getOrganization, toIsoDate } from './common';
 
 /** Estado estruturado do briefing — o texto é gerado a partir dele, nunca relendo conversas. */
@@ -21,6 +22,8 @@ export interface BriefingState {
   billsDueTomorrow: BriefingBill[];
   billsOverdue: BriefingBill[];
   remindersToday: Array<{ title: string; at: Date }>;
+  /** Compromissos da equipe que começam hoje (reuniões, visitas…). */
+  appointmentsToday?: BriefingAppointment[];
   /** Pendências de projetos ativos (Etapa 3). */
   projects: Array<{ title: string; openTasks: number; overdueTasks: number; toReview: number }>;
 }
@@ -31,6 +34,16 @@ export interface BriefingBooking {
   endAt: Date;
   title: string | null;
   responsibleName: string | null;
+}
+
+export interface BriefingAppointment {
+  kindLabel: string;
+  title: string;
+  startAt: Date;
+  endAt: Date;
+  location: string | null;
+  /** Quem vai: "toda a equipe" ou os nomes. */
+  who: string[];
 }
 
 export interface BriefingBill {
@@ -66,6 +79,14 @@ export function composeMorningBriefing(s: BriefingState, greeting = 'Bom dia!'):
 
   section('Agenda de hoje', s.today.map((b) => bookingLine(b, tz)));
   section(`Amanhã (${formatShortDate(addDays(s.date, 1))})`, s.tomorrow.map((b) => bookingLine(b, tz)));
+  section(
+    'Compromissos de hoje',
+    (s.appointmentsToday ?? []).map((a) => {
+      const where = a.location ? ` — ${a.location}` : '';
+      const who = a.who.length ? ` (${a.who.join(', ')})` : '';
+      return `• ${formatTimeRange(a.startAt, a.endAt, tz)} · ${a.kindLabel}: ${a.title}${where}${who}`;
+    }),
+  );
   section('Contas', [
     ...s.billsOverdue.map((b) => `• Atrasada desde ${formatShortDate(b.dueDate)}: ${b.name} — ${billAmount(b)}`),
     ...s.billsDueToday.map((b) => `• Vence hoje: ${b.name} — ${billAmount(b)}`),
@@ -98,7 +119,7 @@ export async function loadBriefingState(db: Db, organizationId: string, date: Is
   const today = localDayBoundsUtc(date, tz);
   const tomorrow = localDayBoundsUtc(addDays(date, 1), tz);
 
-  const [occurrences, bills, reminders, projects] = await Promise.all([
+  const [occurrences, bills, reminders, projects, appointments] = await Promise.all([
     db.bookingOccurrence.findMany({
       where: { organizationId, status: { not: 'cancelled' }, startAt: { gte: today.start, lt: tomorrow.end } },
       include: { booking: true, space: true },
@@ -124,6 +145,11 @@ export async function loadBriefingState(db: Db, organizationId: string, date: Is
         _count: { select: { events: { where: { reviewStatus: 'pending_review' } } } },
       },
       orderBy: { title: 'asc' },
+    }),
+    db.appointment.findMany({
+      where: { organizationId, status: 'scheduled', startAt: { gte: today.start, lt: today.end } },
+      include: appointmentInclude,
+      orderBy: { startAt: 'asc' },
     }),
   ]);
 
@@ -151,6 +177,14 @@ export async function loadBriefingState(db: Db, organizationId: string, date: Is
     billsDueToday: bills.filter((b) => toIsoDate(b.dueDate) === date).map(toBill),
     billsDueTomorrow: bills.filter((b) => toIsoDate(b.dueDate) === addDays(date, 1)).map(toBill),
     remindersToday: reminders.map((r) => ({ title: r.title, at: r.nextRunAt! })),
+    appointmentsToday: appointments.map((a) => ({
+      kindLabel: APPOINTMENT_KIND_LABEL[a.kind],
+      title: a.title,
+      startAt: a.startAt,
+      endAt: a.endAt,
+      location: a.location,
+      who: a.allTeam ? ['toda a equipe'] : participantNames(a.participants),
+    })),
     projects: projects.map((p) => ({
       title: p.title,
       openTasks: p.tasks.filter((t) => t.status === 'open').length,
@@ -158,4 +192,16 @@ export async function loadBriefingState(db: Db, organizationId: string, date: Is
       toReview: p._count.events + p.tasks.filter((t) => t.status === 'proposed' && !t.sourceEventId).length,
     })),
   };
+}
+
+/** Nomes dos participantes: equipe, contatos e pessoas de fora. */
+export function participantNames(
+  ps: Array<{ name: string | null; phone: string | null; member: { user: { name: string } } | null; contact: { name: string | null; whatsappName: string | null; phone: string } | null }>,
+): string[] {
+  // Equipe primeiro, depois contatos e pessoas de fora; cada grupo em ordem alfabética.
+  const group = (p: (typeof ps)[number]) => (p.member ? 0 : p.contact ? 1 : 2);
+  return [...ps]
+    .map((p) => ({ g: group(p), name: p.member?.user.name ?? p.contact?.name ?? p.contact?.whatsappName ?? p.name ?? p.contact?.phone ?? p.phone ?? '?' }))
+    .sort((a, b) => a.g - b.g || a.name.localeCompare(b.name, 'pt-BR'))
+    .map((x) => x.name);
 }

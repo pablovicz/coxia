@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
 import {
+  AppointmentService,
   BillingService,
   BookingService,
+  CalendarService,
   competenceOf,
   ContactService,
   ExpenseCategoryService,
@@ -20,7 +22,9 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import {
+  appointmentSchema,
   availabilitySchema,
+  calendarQuery,
   billSchema,
   blockSchema,
   cancelSeriesSchema,
@@ -406,6 +410,70 @@ export class RemindersController {
   @HttpCode(200)
   deactivate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.reminders.deactivate(user.organizationId, id, webActor(user));
+  }
+}
+
+// ───────────────────────── Compromissos e calendário da equipe ─────────────────────────
+
+type AppointmentRow = Awaited<ReturnType<AppointmentService['get']>>;
+
+/** Perfil leitura vê quem vai, sem telefones. */
+function hideAppointmentPhones(a: AppointmentRow): AppointmentRow {
+  return {
+    ...a,
+    participants: a.participants.map((p) => ({
+      ...p,
+      phone: null,
+      member: p.member ? { ...p.member, user: { ...p.member.user, phone: null } } : null,
+      contact: p.contact ? { ...p.contact, phone: '' } : null,
+    })),
+  };
+}
+
+@Controller('appointments')
+export class AppointmentsController {
+  constructor(private readonly appointments: AppointmentService) {}
+
+  @Get(':id')
+  async get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const a = await this.appointments.get(user.organizationId, id);
+    return user.role === 'viewer' ? hideAppointmentPhones(a) : a;
+  }
+
+  @Roles('owner', 'admin', 'staff')
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body(v(appointmentSchema)) body: z.infer<typeof appointmentSchema>) {
+    return this.appointments.create(user.organizationId, body, webActor(user));
+  }
+
+  @Roles('owner', 'admin', 'staff')
+  @Put(':id')
+  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body(v(appointmentSchema)) body: z.infer<typeof appointmentSchema>) {
+    return this.appointments.update(user.organizationId, id, body, webActor(user));
+  }
+
+  @Roles('owner', 'admin', 'staff')
+  @Post(':id/cancel')
+  @HttpCode(200)
+  cancel(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.appointments.cancel(user.organizationId, id, webActor(user));
+  }
+}
+
+@Controller('calendar')
+export class CalendarController {
+  constructor(private readonly calendar: CalendarService) {}
+
+  /** Compromissos, lembretes (recorrentes expandidos) e contas do período. */
+  @Get()
+  async range(@CurrentUser() user: AuthUser, @Query(v(calendarQuery)) q: z.infer<typeof calendarQuery>) {
+    const data = await this.calendar.range(user.organizationId, q.from, q.to);
+    if (user.role !== 'viewer') return data;
+    return {
+      appointments: data.appointments.map(hideAppointmentPhones),
+      reminders: data.reminders.map((r) => ({ ...r, person: { ...r.person, phone: null }, recipientPhones: [] })),
+      bills: data.bills,
+    };
   }
 }
 
