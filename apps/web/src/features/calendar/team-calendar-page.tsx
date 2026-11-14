@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/input';
 import { CategoryBadge } from '@/features/finance/expense-categories';
 import { REMINDER_TYPES, ReminderForm, repeatLabel } from '@/features/reminders/reminder-form';
 import { AGENDA_VIEWS, type AgendaView, isAgendaView, monthGrid, monthsOf, periodOf, shiftPeriod, WEEKDAY_HEADERS } from '@/features/rooms/calendar';
-import { api, apiSend, type Appointment, type CalendarBill, type CalendarReminder, canBook, type TeamCalendar } from '@/lib/api';
+import { api, apiSend, type Appointment, type CalendarBill, type CalendarReminder, canBook, PAYMENT_METHODS, type TeamCalendar } from '@/lib/api';
 import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, formatTime, local, todayIn } from '@/lib/format';
 import { roomStyle } from '@/lib/rooms';
 import { cn } from '@/lib/utils';
@@ -766,6 +766,7 @@ function ItemDialog({ item, tz, mayEdit, onClose, onEdit }: { item: Item; tz: st
         </Row>
         {b.installment ? <Row label="Parcela">{`${b.installment.number} de ${b.installment.total}`}</Row> : null}
         {b.payeeName ? <Row label="Pagar para">{b.payeeName}</Row> : null}
+        {b.paymentMethod ? <Row label="Meio de pagamento">{PAYMENT_METHODS[b.paymentMethod]}</Row> : null}
         {b.paymentDetails ? (
           <Row label="Como pagar">
             <span className="whitespace-pre-line break-words">{b.paymentDetails}</span>

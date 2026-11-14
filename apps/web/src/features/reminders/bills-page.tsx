@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownLeft, ChevronLeft, ChevronRight, Pencil, Plus, ReceiptText, Tags } from 'lucide-react';
+import { ArrowDownLeft, ChevronLeft, ChevronRight, Paperclip, Pencil, Plus, ReceiptText, Tags } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -25,6 +25,11 @@ import {
   canManage,
   type Income,
   type IncomesSummary,
+  MAX_PROOF_BYTES,
+  PAYMENT_METHODS,
+  type PaymentMethod,
+  payWithProof,
+  PROOF_TYPES,
   type RecurringBill,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -78,6 +83,7 @@ export function BillsPage() {
   const currentMonth = todayIn(tz).slice(0, 7);
   const competence = routeCompetence && /^\d{4}-(0[1-9]|1[0-2])$/.test(routeCompetence) ? routeCompetence : currentMonth;
   const [paying, setPaying] = useState<BillOccurrence | null>(null);
+  const [newPayment, setNewPayment] = useState(false);
   // null = fechado; 'new' = cadastro; RecurringBill = edição.
   const [billForm, setBillForm] = useState<RecurringBill | 'new' | null>(null);
   const [incomeForm, setIncomeForm] = useState<Income | 'new' | null>(null);
@@ -138,6 +144,9 @@ export function BillsPage() {
               </Button>
               <Button variant="outline" onClick={() => setIncomeForm('new')}>
                 <ArrowDownLeft aria-hidden /> Nova entrada
+              </Button>
+              <Button variant="outline" onClick={() => setNewPayment(true)}>
+                <Paperclip aria-hidden /> Adicionar pagamento
               </Button>
               <Button onClick={() => setBillForm('new')}>
                 <Plus aria-hidden /> Nova conta
@@ -343,8 +352,10 @@ export function BillsPage() {
                           <button type="button" onClick={() => openDetails(o)} className="-my-3 block min-h-11 max-w-full truncate text-left font-medium leading-[2.75rem] underline-offset-4 hover:underline">
                             {o.recurringBill.name}
                           </button>
-                          {o.recurringBill.payeeName ? (
-                            <p className="truncate text-sm text-muted-foreground">Para {o.recurringBill.payeeName}</p>
+                          {o.recurringBill.payeeName || o.recurringBill.paymentMethod ? (
+                            <p className="truncate text-sm text-muted-foreground">
+                              {[o.recurringBill.payeeName ? `Para ${o.recurringBill.payeeName}` : null, o.recurringBill.paymentMethod ? PAYMENT_METHODS[o.recurringBill.paymentMethod] : null].filter(Boolean).join(' · ')}
+                            </p>
                           ) : null}
                           <p className="truncate text-sm text-muted-foreground">
                             {billNote(o)}
@@ -380,6 +391,7 @@ export function BillsPage() {
       )}
 
       {paying ? <PaymentDialog occ={paying} tz={tz} onClose={() => setPaying(null)} /> : null}
+      {newPayment ? <PaymentDialog occ={null} tz={tz} onClose={() => setNewPayment(false)} /> : null}
       {details ? (
         <BillDetailsDialog
           billId={details.billId}
@@ -470,7 +482,9 @@ export function BillsList({
               {b.lateFeeCents ? ` · multa ${formatBRL(b.lateFeeCents)}` : ''}
               {b.installments ? ` · ${b.installments} parcelas${b.endsOn ? `, até ${formatCompetence(b.endsOn.slice(0, 7))}` : ''}` : ''}
             </p>
-            {b.payeeName ? <p className="truncate text-sm text-muted-foreground">Para {b.payeeName}</p> : null}
+            {b.payeeName || b.paymentMethod ? (
+              <p className="truncate text-sm text-muted-foreground">{[b.payeeName ? `Para ${b.payeeName}` : null, b.paymentMethod ? PAYMENT_METHODS[b.paymentMethod] : null].filter(Boolean).join(' · ')}</p>
+            ) : null}
             <CategoryBadge category={b.expenseCategory} className="mt-1" />
           </div>
           <div className="flex items-center gap-2">
@@ -502,84 +516,118 @@ export function BillsList({
   );
 }
 
-export function PaymentDialog({
-  occ,
-  tz,
-  onClose,
-}: {
-  occ: BillOccurrence;
-  tz: string;
-  onClose: () => void;
-}) {
+/** Em aberto para pagar agora: restante + multa (se atrasada); null = valor variável sem valor. */
+function suggestedAmount(o: BillOccurrence): number | null {
+  const fee = o.status === 'overdue' ? (o.recurringBill.lateFeeCents ?? 0) : 0;
+  if (o.expectedAmountCents === null || (o.recurringBill.isVariableAmount && o.paidAmountCents === 0)) return null;
+  return o.expectedAmountCents - o.paidAmountCents + fee;
+}
+
+/**
+ * Registrar pagamento, com comprovante opcional (foto ou PDF). Sem `occ`, o modal começa pela
+ * escolha da conta (contas em aberto: atrasadas e as que vencem nos próximos 60 dias).
+ */
+export function PaymentDialog({ occ: initial, tz, onClose }: { occ: BillOccurrence | null; tz: string; onClose: () => void }) {
   const qc = useQueryClient();
-  const fee = occ.status === 'overdue' ? (occ.recurringBill.lateFeeCents ?? 0) : 0;
-  const remaining =
-    occ.expectedAmountCents === null ? null : occ.expectedAmountCents - occ.paidAmountCents + fee;
-  const [amount, setAmount] = useState(remaining === null ? '' : centsToInput(remaining));
+  const choosing = initial === null;
+  const open = useQuery({ queryKey: ['bills', 'upcoming', 60], queryFn: () => api<BillOccurrence[]>('/bills/upcoming?days=60'), enabled: choosing });
+  const [occ, setOcc] = useState<BillOccurrence | null>(initial);
+  const [amount, setAmount] = useState(() => {
+    const s = initial ? suggestedAmount(initial) : null;
+    return s === null ? '' : centsToInput(s);
+  });
   const [paidOn, setPaidOn] = useState(todayIn(tz));
+  const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const remaining = occ ? suggestedAmount(occ) : null;
+
+  function pick(id: string) {
+    const o = open.data?.find((x) => x.id === id) ?? null;
+    setOcc(o);
+    const s = o ? suggestedAmount(o) : null;
+    setAmount(s === null ? '' : centsToInput(s));
+    setError(null);
+  }
+
+  function chooseFile(f: File | null) {
+    setError(null);
+    if (f && !PROOF_TYPES.includes(f.type)) return setError('Envie o comprovante em foto (JPG, PNG, WebP) ou PDF.');
+    if (f && f.size > MAX_PROOF_BYTES) return setError('O comprovante deve ter até 10 MB.');
+    setFile(f);
+  }
+
   const pay = useMutation({
     mutationFn: (cents: number) =>
-      apiSend(`/bills/occurrences/${occ.id}/payments`, 'POST', { amountCents: cents, paidOn }),
+      file
+        ? payWithProof(occ!.id, file, { amountCents: cents, paidOn })
+        : apiSend(`/bills/occurrences/${occ!.id}/payments`, 'POST', { amountCents: cents, paidOn }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bills'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
       qc.invalidateQueries({ queryKey: ['overview'] });
-      toast.success('Pagamento registrado.');
+      toast.success(file ? 'Pagamento registrado com o comprovante.' : 'Pagamento registrado.');
       onClose();
     },
     onError: (e) => setError(e.message),
   });
+
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (!occ) return setError('Escolha a conta.');
     const cents = parseBRL(amount);
     if (cents === null || cents <= 0) return setError('Informe um valor válido, ex.: 310,00');
     pay.mutate(cents);
   }
+
+  const label = (o: BillOccurrence) => {
+    const s = suggestedAmount(o);
+    return `${o.recurringBill.name} · vence ${DateTime.fromISO(o.dueDate.slice(0, 10)).toFormat('dd/LL')}${s === null ? '' : ` · ${formatBRL(s)}`}${o.status === 'overdue' ? ' (atrasada)' : ''}`;
+  };
+
   return (
     <Dialog
       open
       onOpenChange={(v) => !v && onClose()}
-      title={`Registrar pagamento — ${occ.recurringBill.name}`}
-      description={`Competência ${formatCompetence(occ.competence)}${remaining !== null ? ` · em aberto ${formatBRL(remaining)}` : ''}`}
+      title={occ && !choosing ? `Registrar pagamento — ${occ.recurringBill.name}` : 'Adicionar pagamento'}
+      description={
+        occ ? `Competência ${formatCompetence(occ.competence)}${remaining !== null ? ` · em aberto ${formatBRL(remaining)}` : ''}` : 'Escolha a conta, anexe o comprovante e salve: a conta fica paga.'
+      }
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
             Cancelar
           </Button>
           <Button type="submit" form="payment-form" loading={pay.isPending}>
-            Confirmar pagamento
+            {choosing ? 'Salvar pagamento' : 'Confirmar pagamento'}
           </Button>
         </>
       }
     >
       <form id="payment-form" onSubmit={submit} className="grid gap-4" noValidate>
-        <Field
-          label="Valor pago (R$)"
-          error={error}
-          hint="Valor menor que o previsto fica como pagamento parcial"
-        >
-          {(id, describedBy) => (
-            <Input
-              id={id}
-              inputMode="decimal"
-              className="tabular"
-              value={amount}
-              aria-invalid={!!error}
-              aria-describedby={describedBy}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          )}
-        </Field>
-        <Field label="Data do pagamento">
-          {(id) => (
-            <Input id={id} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
-          )}
-        </Field>
-        {occ.recurringBill.payeeName || occ.recurringBill.paymentDetails ? (
+        {choosing ? (
+          <Field label="Conta">
+            {(id) => (
+              <Select id={id} value={occ?.id ?? ''} onChange={(e) => pick(e.target.value)} disabled={open.isPending}>
+                <option value="">{open.isPending ? 'Carregando…' : (open.data?.length ?? 0) === 0 ? 'Nenhuma conta em aberto' : 'Escolha a conta'}</option>
+                {(open.data ?? []).map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {label(o)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        ) : null}
+        {occ?.recurringBill.payeeName || occ?.recurringBill.paymentDetails || occ?.recurringBill.paymentMethod ? (
           <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
             {occ.recurringBill.payeeName ? (
               <p>
                 <span className="text-muted-foreground">Pagar para:</span> {occ.recurringBill.payeeName}
+              </p>
+            ) : null}
+            {occ.recurringBill.paymentMethod ? (
+              <p>
+                <span className="text-muted-foreground">Meio:</span> {PAYMENT_METHODS[occ.recurringBill.paymentMethod]}
               </p>
             ) : null}
             {occ.recurringBill.paymentDetails ? (
@@ -589,9 +637,41 @@ export function PaymentDialog({
             ) : null}
           </div>
         ) : null}
-        <p className="text-sm text-muted-foreground">
-          Comprovantes enviados pelo WhatsApp são anexados automaticamente.
-        </p>
+        <Field label="Comprovante (foto ou PDF, opcional)" hint="O mesmo comprovante não vale para duas contas">
+          {(id, describedBy) =>
+            file ? (
+              <div className="flex min-h-11 items-center justify-between gap-2 rounded-sm border bg-muted/40 px-3">
+                <span className="flex min-w-0 items-center gap-2 text-sm">
+                  <Paperclip size={16} aria-hidden className="shrink-0" />
+                  <span className="truncate">{file.name}</span>
+                </span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setFile(null)} aria-label="Tirar comprovante">
+                  Trocar
+                </Button>
+              </div>
+            ) : (
+              <Input
+                id={id}
+                type="file"
+                accept={PROOF_TYPES.join(',')}
+                aria-describedby={describedBy}
+                className="py-2 file:mr-3 file:rounded-sm file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium"
+                onChange={(e) => chooseFile(e.target.files?.[0] ?? null)}
+              />
+            )
+          }
+        </Field>
+        <Field label="Valor pago (R$)" hint="Valor menor que o previsto fica como pagamento parcial">
+          {(id, describedBy) => (
+            <Input id={id} inputMode="decimal" className="tabular" value={amount} aria-describedby={describedBy} onChange={(e) => setAmount(e.target.value)} />
+          )}
+        </Field>
+        <Field label="Data do pagamento">{(id) => <Input id={id} type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />}</Field>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
       </form>
     </Dialog>
   );
@@ -610,6 +690,7 @@ export function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringB
   const [variable, setVariable] = useState(bill?.kind === 'one_time' ? bill.isVariableAmount : false);
   const [payee, setPayee] = useState(bill?.payeeName ?? '');
   const [howToPay, setHowToPay] = useState(bill?.paymentDetails ?? '');
+  const [method, setMethod] = useState<PaymentMethod | ''>(bill?.paymentMethod ?? '');
   const [installments, setInstallments] = useState(bill?.installments ? String(bill.installments) : '');
   const [firstMonth, setFirstMonth] = useState(bill?.startsOn ? bill.startsOn.slice(0, 7) : todayIn(tz).slice(0, 7));
   const [manage, setManage] = useState(false);
@@ -652,6 +733,7 @@ export function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringB
         isVariableAmount: false,
         lateFeeCents: fee,
         payeeName: payee.trim() || null,
+        paymentMethod: method || null,
         paymentDetails: howToPay.trim() || null,
         installments: parts,
         ...(bill ? {} : { startsOn: `${parts !== null ? firstMonth : todayIn(tz).slice(0, 7)}-01` }),
@@ -668,6 +750,7 @@ export function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringB
       estimatedAmountCents: cents,
       isVariableAmount: variable,
       payeeName: payee.trim() || null,
+      paymentMethod: method || null,
       paymentDetails: howToPay.trim() || null,
       ...(bill ? {} : { startsOn: dueOn }),
     });
@@ -781,7 +864,28 @@ export function BillDialog({ tz, bill, onClose }: { tz: string; bill: RecurringB
         <Field label="Pagar para (opcional)" className="sm:col-span-2">
           {(id) => <Input id={id} value={payee} maxLength={120} onChange={(e) => setPayee(e.target.value)} placeholder="Ex.: Imobiliária Lopes, Copel" />}
         </Field>
-        <Field label="Como pagar (opcional)" hint="PIX, conta, código de barras… Vai junto no aviso do vencimento" className="sm:col-span-2">
+        <fieldset className="sm:col-span-2">
+          <legend className="mb-1.5 text-sm font-medium">Meio de pagamento</legend>
+          <div role="radiogroup" aria-label="Meio de pagamento" className="grid grid-cols-2 gap-1 rounded-md border bg-card p-1 sm:grid-cols-4">
+            {([['', 'Não definido'], ...Object.entries(PAYMENT_METHODS)] as Array<[PaymentMethod | '', string]>).map(([value, label]) => (
+              <button
+                key={value || 'none'}
+                type="button"
+                role="radio"
+                aria-checked={method === value}
+                onClick={() => setMethod(value)}
+                className={cn('min-h-11 rounded-sm px-2 text-sm font-medium text-muted-foreground', method === value && 'bg-primary text-primary-foreground')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        <Field
+          label={method === 'pix' ? 'Chave PIX e dados (opcional)' : method === 'boleto' ? 'Código de barras ou onde achar o boleto (opcional)' : method === 'credit_card' ? 'Qual cartão (opcional)' : 'Como pagar (opcional)'}
+          hint="Vai junto no aviso do vencimento"
+          className="sm:col-span-2"
+        >
           {(id, describedBy) => (
             <Textarea id={id} rows={2} value={howToPay} maxLength={500} aria-describedby={describedBy} onChange={(e) => setHowToPay(e.target.value)} placeholder="Ex.: PIX 12.345.678/0001-90" />
           )}

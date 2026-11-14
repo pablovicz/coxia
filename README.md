@@ -70,6 +70,8 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 | **Próximas contas**: em aberto nos próximos 10 dias, com as atrasadas primeiro | `GET /bills/upcoming`, `BillingService.upcoming` |
 | No mês: visão **Lista, Mês ou Semana** (calendário das contas pela data de vencimento) e **filtro por categoria** | `apps/web/src/features/finance/bills-views.tsx` |
 | **Detalhe da conta** (clique em qualquer conta): total pago, saldo devedor (inclui parcelas ainda não geradas), parcelas restantes, parcelas atrasadas com mês e valor, configuração, quem cadastrou e quando (pela auditoria), histórico mês a mês; Pagar e Editar | `GET /bills/:id/details`, `BillingService.details` |
+| **Comprovante no pagamento** (foto JPG/PNG/WebP ou PDF, até 10 MB, tipo conferido pelos bytes): pelo modal **Adicionar pagamento** (escolhe a conta em aberto) ou pelo detalhe da conta (**Adicionar comprovante**); sem valor, quita o restante (com multa, se atrasada) e a conta fica paga. Conta já paga sem arquivo: **Anexar comprovante**. O mesmo arquivo não vale para duas contas; o comprovante abre pelo histórico da conta | `POST /bills/occurrences/:id/payments/with-proof`, `GET /bills/payments/:id/proof`, `BillingService.attachProof` |
+| **Meio de pagamento** na conta (Boleto, PIX ou Cartão de crédito), junto de "Como pagar"; aparece na lista, no pagamento, no detalhe, no calendário e no aviso ("Como pagar: PIX · chave…") | `howToPay`, `PaymentMethod` |
 | O antigo campo "categoria" (aluguel, energia…) virou interno: é deduzido do nome e só serve para o WhatsApp entender "paguei a luz" | `inferUtility` |
 
 ### Calendário da equipe: compromissos, lembretes e contas (pós-Etapa 4)

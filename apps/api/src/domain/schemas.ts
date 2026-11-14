@@ -102,6 +102,7 @@ export const billSchema = z.object({
   installments: z.number().int().min(1).max(120).nullish(),
   payeeName: z.string().max(120).nullish(),
   paymentDetails: z.string().max(500).nullish(),
+  paymentMethod: z.enum(['boleto', 'pix', 'credit_card']).nullish(),
   recipientPhones: z.array(phone).max(10).optional(),
   overdueReminderEveryDays: z.number().int().min(1).max(30).optional(),
   startsOn: isoDate,

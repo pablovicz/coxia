@@ -1,4 +1,4 @@
-import type { BillOccurrenceStatus, Prisma } from '@coxia/database';
+import type { BillOccurrenceStatus, PaymentMethod, Prisma } from '@coxia/database';
 import { isUniqueViolation } from '@coxia/database';
 import { addDays, competenceKey, dueDateForCompetence, type IsoDate, localDateOf, normalizeText, zonedToUtc } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError, fromIsoDate, getOrganization, toIsoDate } from './common';
@@ -27,6 +27,8 @@ export interface BillInput {
   /** Para quem pagar e como (PIX, conta, código de barras…). */
   payeeName?: string | null;
   paymentDetails?: string | null;
+  /** Meio de pagamento: boleto, PIX ou cartão de crédito. */
+  paymentMethod?: PaymentMethod | null;
   recipientPhones?: string[];
   overdueReminderEveryDays?: number;
   startsOn: IsoDate;
@@ -95,6 +97,7 @@ const occurrenceInclude = {
       startsOn: true,
       payeeName: true,
       paymentDetails: true,
+      paymentMethod: true,
       expenseCategory: { select: { id: true, name: true, icon: true, color: true } },
     },
   },
@@ -148,6 +151,7 @@ export class BillingService {
           installments,
           payeeName: input.payeeName?.trim() || null,
           paymentDetails: input.paymentDetails?.trim() || null,
+          paymentMethod: input.paymentMethod ?? null,
           recipientPhones: input.recipientPhones ?? [],
           overdueReminderEveryDays: input.overdueReminderEveryDays ?? 3,
           startsOn: fromIsoDate(startsOn),
@@ -219,6 +223,7 @@ export class BillingService {
           ...(patch.overdueReminderEveryDays !== undefined ? { overdueReminderEveryDays: patch.overdueReminderEveryDays } : {}),
           ...(patch.payeeName !== undefined ? { payeeName: patch.payeeName?.trim() || null } : {}),
           ...(patch.paymentDetails !== undefined ? { paymentDetails: patch.paymentDetails?.trim() || null } : {}),
+          ...(patch.paymentMethod !== undefined ? { paymentMethod: patch.paymentMethod } : {}),
           ...(newEnd !== undefined
             ? { installments: patch.installments ?? null, endsOn: newEnd ? fromIsoDate(newEnd) : null }
             : patch.endsOn !== undefined
@@ -358,6 +363,51 @@ export class BillingService {
     });
   }
 
+  /**
+   * Anexa um comprovante a uma conta já paga (pagamento registrado antes, sem arquivo).
+   * O mesmo arquivo não vale para duas contas (unique por organização + sha256).
+   */
+  async attachProof(organizationId: string, occurrenceId: string, proof: { sha256: string; storageKey: string }, actor: Actor) {
+    const occ = await this.db.billOccurrence.findFirst({ where: { id: occurrenceId, organizationId }, include: { recurringBill: true } });
+    if (!occ) throw new DomainError('not_found', 'Conta não encontrada');
+    if (occ.status !== 'paid') throw new DomainError('validation', 'Registre o pagamento junto com o comprovante');
+    const dup = await this.db.paymentAttachment.findFirst({
+      where: { organizationId, sha256: proof.sha256 },
+      include: { billOccurrence: { include: { recurringBill: true } } },
+    });
+    if (dup) {
+      throw new DomainError('conflict', `Este comprovante já foi registrado para ${dup.billOccurrence.recurringBill.name} (${dup.billOccurrence.competence})`, {
+        code: 'duplicate_receipt',
+        occurrenceId: dup.billOccurrenceId,
+      });
+    }
+    try {
+      return await this.db.$transaction(async (tx) => {
+        const attachment = await tx.paymentAttachment.create({
+          data: { organizationId, billOccurrenceId: occ.id, sha256: proof.sha256, storageKey: proof.storageKey },
+        });
+        await audit(tx, organizationId, actor, 'bill.proof_attached', 'bill_occurrence', occ.id, { after: { paymentAttachmentId: attachment.id } });
+        return attachment;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new DomainError('conflict', 'Este comprovante já foi registrado', { code: 'duplicate_receipt' });
+      throw err;
+    }
+  }
+
+  async getOccurrence(organizationId: string, occurrenceId: string) {
+    const occ = await this.db.billOccurrence.findFirst({ where: { id: occurrenceId, organizationId }, include: occurrenceInclude });
+    if (!occ) throw new DomainError('not_found', 'Conta não encontrada');
+    return occ;
+  }
+
+  /** Um pagamento (com o comprovante) da organização, para baixar o arquivo. */
+  async getPayment(organizationId: string, paymentId: string) {
+    const p = await this.db.paymentAttachment.findFirst({ where: { id: paymentId, organizationId } });
+    if (!p) throw new DomainError('not_found', 'Pagamento não encontrado');
+    return p;
+  }
+
   /** Contas em aberto que vencem nos próximos `days` dias, mais as atrasadas (no topo). */
   async upcoming(organizationId: string, days = 10, now = new Date()) {
     const org = await getOrganization(this.db, organizationId);
@@ -437,6 +487,7 @@ export class BillingService {
         paidAt: o.paidAt,
         installment: installmentOf(bill, o.competence),
         proofs: o.payments.filter((p) => !!p.storageKey).length,
+        payments: o.payments.map((p) => ({ id: p.id, amountCents: p.amountCents, paidOn: p.paidOn ? toIsoDate(p.paidOn) : null, hasProof: !!p.storageKey })),
       })),
     };
   }
@@ -595,6 +646,14 @@ export function installmentOf(bill: { installments: number | null; startsOn: Dat
   const [sy, sm] = start.split('-').map(Number) as [number, number];
   const [cy, cm] = competence.split('-').map(Number) as [number, number];
   return { number: (cy - sy) * 12 + (cm - sm) + 1, total: bill.installments };
+}
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = { boleto: 'Boleto', pix: 'PIX', credit_card: 'Cartão de crédito' };
+
+/** "PIX · chave 11.222…" — como pagar, nos avisos (meio e/ou dados). */
+export function howToPay(b: { paymentMethod?: PaymentMethod | null; paymentDetails?: string | null }): string | null {
+  const parts = [b.paymentMethod ? PAYMENT_METHOD_LABEL[b.paymentMethod] : null, b.paymentDetails?.trim() || null].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
 }
 
 /** "Aluguel (parcela 3/10, para Imobiliária Lopes)" — nome da conta nos avisos e no briefing. */

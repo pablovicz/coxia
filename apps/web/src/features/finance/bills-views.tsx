@@ -1,7 +1,8 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, FileText, Paperclip, Pencil } from 'lucide-react';
 import { DateTime } from 'luxon';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
+import { toast } from 'sonner';
 import { EmptyState } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/input';
 import { monthGrid, WEEKDAY_HEADERS } from '@/features/rooms/calendar';
-import { api, type BillDetails, type BillOccurrence, type ExpenseCategory, type RecurringBill } from '@/lib/api';
+import { api, type BillDetails, type BillOccurrence, type ExpenseCategory, fetchPaymentProof, MAX_PROOF_BYTES, PAYMENT_METHODS, payWithProof, PROOF_TYPES, type RecurringBill } from '@/lib/api';
 import { CategoryIcon } from '@/lib/expense-categories';
 import { formatBRL, formatCompetence, formatDayTitle, formatDueDate, formatShortDay, todayIn } from '@/lib/format';
 import { roomStyle } from '@/lib/rooms';
@@ -357,6 +358,7 @@ export function BillDetailsDialog({
         startsOn: b.startsOn,
         payeeName: b.payeeName,
         paymentDetails: b.paymentDetails,
+        paymentMethod: b.paymentMethod,
         expenseCategory: b.expenseCategory,
       },
       payments: [],
@@ -381,7 +383,11 @@ export function BillDetailsDialog({
               <Pencil aria-hidden /> Editar
             </Button>
           ) : null}
-          {admin && target ? <Button onClick={payTarget}>Pagar</Button> : null}
+          {admin && target ? (
+            <Button onClick={payTarget}>
+              <Paperclip aria-hidden /> Adicionar comprovante
+            </Button>
+          ) : null}
         </>
       }
     >
@@ -444,6 +450,7 @@ export function BillDetailsDialog({
                   <Row label="Parcelas">Sem fim (todo mês)</Row>
                 ) : null}
                 <Row label="Pagar para">{b.payeeName ?? '—'}</Row>
+                <Row label="Meio de pagamento">{b.paymentMethod ? PAYMENT_METHODS[b.paymentMethod] : 'Não definido'}</Row>
                 {b.paymentDetails ? (
                   <Row label="Como pagar">
                     <span className="whitespace-pre-line">{b.paymentDetails}</span>
@@ -489,6 +496,10 @@ export function BillDetailsDialog({
                           {o.proofs ? ` · ${o.proofs} comprovante${o.proofs > 1 ? 's' : ''}` : ''}
                         </span>
                       </span>
+                      {o.payments.filter((p) => p.hasProof).map((p) => (
+                        <ViewProofButton key={p.id} paymentId={p.id} />
+                      ))}
+                      {admin && o.status === 'paid' && !o.payments.some((p) => p.hasProof) ? <AttachProofButton occurrenceId={o.id} billId={b.id} /> : null}
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </li>
                   );
@@ -499,5 +510,56 @@ export function BillDetailsDialog({
         </div>
       )}
     </Dialog>
+  );
+}
+
+/** Abre o comprovante numa aba nova (o arquivo passa pela api: bucket privado). */
+function ViewProofButton({ paymentId }: { paymentId: string }) {
+  async function open() {
+    // Abre a aba já no clique (senão o navegador bloqueia como pop-up) e carrega o arquivo nela.
+    const tab = window.open('', '_blank');
+    try {
+      const blob = await fetchPaymentProof(paymentId);
+      const url = URL.createObjectURL(blob);
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
+    } catch {
+      tab?.close();
+      toast.error('Não foi possível abrir o comprovante.');
+    }
+  }
+  return (
+    <Button type="button" variant="ghost" size="sm" onClick={open} aria-label="Ver comprovante">
+      <FileText aria-hidden /> <span className="hidden sm:inline">Comprovante</span>
+    </Button>
+  );
+}
+
+/** Conta paga sem comprovante: anexa o arquivo (foto ou PDF). */
+function AttachProofButton({ occurrenceId, billId }: { occurrenceId: string; billId: string }) {
+  const input = useRef<HTMLInputElement>(null);
+  const qc = useQueryClient();
+  const attach = useMutation({
+    mutationFn: (file: File) => payWithProof(occurrenceId, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bills', 'details', billId] });
+      toast.success('Comprovante anexado.');
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  function choose(file: File | undefined) {
+    if (!file) return;
+    if (!PROOF_TYPES.includes(file.type)) return toast.error('Envie o comprovante em foto (JPG, PNG, WebP) ou PDF.');
+    if (file.size > MAX_PROOF_BYTES) return toast.error('O comprovante deve ter até 10 MB.');
+    attach.mutate(file);
+  }
+  return (
+    <>
+      <input ref={input} type="file" accept={PROOF_TYPES.join(',')} className="sr-only" tabIndex={-1} aria-hidden onChange={(e) => choose(e.target.files?.[0])} />
+      <Button type="button" variant="ghost" size="sm" loading={attach.isPending} onClick={() => input.current?.click()}>
+        <Paperclip aria-hidden /> <span className="hidden sm:inline">Anexar comprovante</span>
+        <span className="sr-only sm:hidden">Anexar comprovante</span>
+      </Button>
+    </>
   );
 }

@@ -165,6 +165,7 @@ function billDetails(billId: string) {
     paidAt: paid ? `${competence}-12T15:00:00.000Z` : null,
     installment: n ? { number: n, total: 10 } : null,
     proofs: paid ? 1 : 0,
+    payments: paid ? [{ id: `pay-${id}`, amountCents: paid, paidOn: `${competence}-12`, hasProof: true }] : [],
   });
   const open = occ.expectedAmountCents === null ? null : occ.expectedAmountCents - occ.paidAmountCents;
   return {
@@ -192,7 +193,7 @@ function billDetails(billId: string) {
     overdueCents: parcelada ? 50000 : occ.status === 'overdue' ? (open ?? 0) + ((rb.lateFeeCents as number | null) ?? 0) : 0,
     occurrences: parcelada
       ? [row('h1', '2026-09', 'paid', 50000, 1), row('h2', '2026-10', 'overdue', 0, 2), row('c7', '2026-11', 'pending', 0, 3)]
-      : [{ id: occ.id, competence: occ.competence, dueDate: occ.dueDate.slice(0, 10), status: occ.status, expectedAmountCents: occ.expectedAmountCents, paidAmountCents: occ.paidAmountCents, paidAt: null, installment: null, proofs: 0 }],
+      : [{ id: occ.id, competence: occ.competence, dueDate: occ.dueDate.slice(0, 10), status: occ.status, expectedAmountCents: occ.expectedAmountCents, paidAmountCents: occ.paidAmountCents, paidAt: null, installment: null, proofs: 0, payments: [] }],
   };
 }
 const financeMonth = (m: number, income: number, bills: number, paid: number, overdue = 0) => ({
@@ -423,6 +424,8 @@ const QR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 25 25" sh
 ).join('')}</svg>`;
 
 /** "Foto do WhatsApp" determinística (a real é uma URL temporária do WhatsApp). */
+/** PNG 1×1 (comprovante de teste). */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 const AVATAR = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#d86e4b"/><circle cx="20" cy="16" r="7" fill="#fffdf8"/><rect x="8" y="26" width="24" height="14" rx="7" fill="#fffdf8"/></svg>').toString('base64')}`;
 
 const XPO = { id: 'g1', name: 'PROJETO - XPO' };
@@ -644,6 +647,8 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/bills/occurrences') return respond(empty ? [] : [...BILLS, ONE_OFF, PARCELADA]);
     if (path === '/finance/overview')
       return respond(empty ? { ...FINANCE_OVERVIEW, months: FINANCE_OVERVIEW.months.map((m) => financeMonth(Number(m.competence.slice(5)), 0, 0, 0)), totals: { ...FINANCE_OVERVIEW.totals, incomeExpectedCents: 0, billsExpectedCents: 0 } } : FINANCE_OVERVIEW);
+    if (/^\/bills\/occurrences\/[\w-]+\/payments\/with-proof$/.test(path)) return route.fulfill({ status: 201, json: { amountCents: 7500, remainingCents: 0 } });
+    if (/^\/bills\/payments\/[\w-]+\/proof$/.test(path)) return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
     if (path === '/bills/upcoming')
       return respond(empty ? [] : [...BILLS, ONE_OFF, PARCELADA].filter((o) => o.status !== 'paid' && o.dueDate.slice(0, 10) <= '2026-11-16').sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
     if (/^\/bills\/[\w-]+\/details$/.test(path)) return respond(billDetails(path.split('/')[2]!));
@@ -1590,6 +1595,7 @@ test.describe('interação acessível', () => {
       isVariableAmount: false,
       lateFeeCents: 4500,
       payeeName: null,
+      paymentMethod: null,
       paymentDetails: null,
       installments: null,
       startsOn: '2026-11-01',
@@ -1615,6 +1621,7 @@ test.describe('interação acessível', () => {
       estimatedAmountCents: null,
       isVariableAmount: true,
       payeeName: null,
+      paymentMethod: null,
       paymentDetails: null,
       startsOn: '2026-11-20',
     });
@@ -1631,7 +1638,8 @@ test.describe('interação acessível', () => {
     await dialog.getByLabel('Parcelas (opcional)').fill('10');
     await dialog.getByLabel('Primeira parcela').fill('2026-12');
     await dialog.getByLabel('Pagar para (opcional)').fill('Loja do Som');
-    await dialog.getByLabel('Como pagar (opcional)').fill('PIX 11.222.333/0001-44');
+    await dialog.getByRole('radio', { name: 'PIX' }).click();
+    await dialog.getByLabel('Chave PIX e dados (opcional)').fill('11.222.333/0001-44');
     const [req] = await Promise.all([
       page.waitForRequest((r) => r.url().endsWith('/bills') && r.method() === 'POST'),
       dialog.getByRole('button', { name: 'Cadastrar' }).click(),
@@ -1645,7 +1653,8 @@ test.describe('interação acessível', () => {
       isVariableAmount: false,
       lateFeeCents: null,
       payeeName: 'Loja do Som',
-      paymentDetails: 'PIX 11.222.333/0001-44',
+      paymentMethod: 'pix',
+      paymentDetails: '11.222.333/0001-44',
       installments: 10,
       startsOn: '2026-12-01',
     });
@@ -1664,6 +1673,52 @@ test.describe('interação acessível', () => {
     await expect(page.getByRole('heading', { name: 'Novembro de 2026.' })).toBeVisible();
     await page.getByRole('link', { name: 'Voltar ao Financeiro' }).click();
     await expect(page).toHaveURL(/\/contas$/);
+  });
+
+  test('adicionar pagamento: escolhe a conta, anexa o comprovante e a conta fica paga', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas');
+    await page.getByRole('button', { name: 'Adicionar pagamento' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Adicionar pagamento' });
+    await dialog.getByLabel('Conta').selectOption('c3');
+    // Água: R$ 90 previstos, R$ 30 pagos, multa de R$ 15 (atrasada) → R$ 75.
+    await expect(dialog.getByLabel('Valor pago (R$)')).toHaveValue('75,00');
+    await dialog.getByLabel('Comprovante (foto ou PDF, opcional)').setInputFiles({ name: 'comprovante-agua.png', mimeType: 'image/png', buffer: PNG });
+    await expect(dialog.getByText('comprovante-agua.png')).toBeVisible();
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().includes('/bills/occurrences/c3/payments/with-proof') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Salvar pagamento' }).click(),
+    ]);
+    const url = new URL(req.url());
+    expect(Object.fromEntries(url.searchParams)).toEqual({ amountCents: '7500', paidOn: '2026-11-06' });
+    expect(req.headers()['content-type']).toBe('image/png');
+    await expect(page.getByText('Pagamento registrado com o comprovante.')).toBeVisible();
+  });
+
+  test('conta do mês: adicionar comprovante pelo detalhe e ver o comprovante de uma parcela paga', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    await page.getByRole('tabpanel').getByRole('button', { name: 'Equipamento de som', exact: true }).click();
+    const details = page.getByRole('dialog', { name: 'Equipamento de som' });
+    await expect(details.getByRole('button', { name: 'Ver comprovante' })).toHaveCount(1);
+    await details.getByRole('button', { name: 'Adicionar comprovante' }).click();
+    const pay = page.getByRole('dialog', { name: 'Registrar pagamento — Equipamento de som' });
+    await pay.getByLabel('Comprovante (foto ou PDF, opcional)').setInputFiles({ name: 'recibo.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 recibo') });
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().includes('/bills/occurrences/c7/payments/with-proof') && r.method() === 'POST'),
+      pay.getByRole('button', { name: 'Confirmar pagamento' }).click(),
+    ]);
+    expect(req.headers()['content-type']).toBe('application/pdf');
+    expect(new URL(req.url()).searchParams.get('amountCents')).toBe('50000');
+  });
+
+  test('comprovante em formato não aceito é recusado antes de enviar', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas/2026-11');
+    await page.getByRole('listitem').filter({ hasText: 'Internet' }).getByRole('button', { name: 'Pagar' }).click();
+    const pay = page.getByRole('dialog', { name: 'Registrar pagamento — Internet' });
+    await pay.getByLabel('Comprovante (foto ou PDF, opcional)').setInputFiles({ name: 'planilha.xlsx', mimeType: 'application/vnd.ms-excel', buffer: Buffer.from('x') });
+    await expect(pay.getByRole('alert')).toHaveText('Envie o comprovante em foto (JPG, PNG, WebP) ou PDF.');
   });
 
   test('financeiro: filtro por categoria', async ({ page }) => {
@@ -1692,7 +1747,7 @@ test.describe('interação acessível', () => {
     await expect(dialog.getByText('Ana Admin pelo painel')).toBeVisible();
     await expect(dialog.getByText('Loja do Som')).toBeVisible();
     await expect(dialog.getByText('PIX 11.222.333/0001-44')).toBeVisible();
-    await dialog.getByRole('button', { name: 'Pagar' }).click();
+    await dialog.getByRole('button', { name: 'Adicionar comprovante' }).click();
     const pay = page.getByRole('dialog', { name: 'Registrar pagamento — Equipamento de som' });
     await expect(pay.getByLabel('Valor pago (R$)')).toHaveValue('500,00');
     await expect(pay.getByText('Loja do Som')).toBeVisible();

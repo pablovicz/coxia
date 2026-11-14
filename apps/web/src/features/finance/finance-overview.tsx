@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, ChevronLeft, ChevronRight, Plus, Tags } from 'lucide-react';
+import { ArrowRight, ChevronLeft, ChevronRight, Paperclip, Plus, Tags } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -33,6 +33,7 @@ export function FinanceOverviewPage() {
   const setYear = (y: number) => setParams(y === Number(current.slice(0, 4)) ? {} : { ano: String(y) }, { replace: true });
   const [details, setDetails] = useState<{ billId: string; focus: BillOccurrence | null } | null>(null);
   const [paying, setPaying] = useState<BillOccurrence | null>(null);
+  const [newPayment, setNewPayment] = useState(false);
   // null = fechado; 'new' = cadastro; RecurringBill = edição.
   const [editing, setEditing] = useState<RecurringBill | 'new' | null>(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
@@ -61,6 +62,9 @@ export function FinanceOverviewPage() {
                 </Button>
                 <Button variant="outline" onClick={() => setEditing('new')}>
                   <Plus aria-hidden /> Nova conta
+                </Button>
+                <Button variant="outline" onClick={() => setNewPayment(true)}>
+                  <Paperclip aria-hidden /> Adicionar pagamento
                 </Button>
               </>
             ) : null}
@@ -159,6 +163,7 @@ export function FinanceOverviewPage() {
         />
       ) : null}
       {paying ? <PaymentDialog occ={paying} tz={tz} onClose={() => setPaying(null)} /> : null}
+      {newPayment ? <PaymentDialog occ={null} tz={tz} onClose={() => setNewPayment(false)} /> : null}
       {editing ? <BillDialog tz={tz} bill={editing === 'new' ? null : editing} onClose={() => setEditing(null)} /> : null}
       {categoriesOpen ? <ExpenseCategoriesDialog onClose={() => setCategoriesOpen(false)} /> : null}
     </>

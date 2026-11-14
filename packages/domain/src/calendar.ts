@@ -34,6 +34,7 @@ export interface CalendarBill {
   lateFeeCents: number | null;
   payeeName: string | null;
   paymentDetails: string | null;
+  paymentMethod: 'boleto' | 'pix' | 'credit_card' | null;
   installment: { number: number; total: number } | null;
   category: { id: string; name: string; icon: string; color: string } | null;
 }
@@ -131,6 +132,7 @@ export class CalendarService {
       lateFeeCents: b.recurringBill.lateFeeCents,
       payeeName: b.recurringBill.payeeName,
       paymentDetails: b.recurringBill.paymentDetails,
+      paymentMethod: b.recurringBill.paymentMethod,
       installment: installmentOf(b.recurringBill, b.competence),
       category: b.recurringBill.expenseCategory,
     }));

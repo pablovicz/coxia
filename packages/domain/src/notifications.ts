@@ -1,9 +1,9 @@
-import type { NotificationKind, Prisma } from '@coxia/database';
+import type { NotificationKind, PaymentMethod, Prisma } from '@coxia/database';
 import { enqueueDelivery, isUniqueViolation } from '@coxia/database';
 import { composeProjectCheckIn, loadProjectState, type ProjectState } from './projects';
 import { addDays, formatBRL, formatShortDate, formatTimeRange, type IsoDate, localDateOf, localDayBoundsUtc } from '@coxia/shared';
 import { DateTime } from 'luxon';
-import { BillingService, billLabel, installmentOf } from './bills';
+import { BillingService, billLabel, howToPay, installmentOf } from './bills';
 import { APPOINTMENT_KIND_LABEL, AppointmentService, appointmentInclude } from './appointments';
 import { composeMorningBriefing, loadBriefingState, participantNames } from './briefing';
 import { type Db, fromIsoDate, getOrganization, toIsoDate } from './common';
@@ -42,6 +42,7 @@ export interface PlannerInput {
     /** Para quem pagar, como, e a parcela (contas parceladas). */
     payeeName?: string | null;
     paymentDetails?: string | null;
+    paymentMethod?: PaymentMethod | null;
     installment?: { number: number; total: number } | null;
     status: string;
     recipientPhones: string[];
@@ -122,7 +123,8 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
             ? `cerca de ${formatBRL(bill.expectedCents)}`
             : formatBRL(Math.max(bill.expectedCents - bill.paidCents, 0));
       const label = billLabel(bill.name, bill);
-      const howTo = bill.paymentDetails ? `\nComo pagar: ${bill.paymentDetails}` : '';
+      const how = howToPay(bill);
+      const howTo = how ? `\nComo pagar: ${how}` : '';
       if (bill.dueDate === tomorrow) {
         out.push({
           kind: 'bill_day_before',
@@ -322,6 +324,7 @@ export class NotificationService {
         lateFeeCents: b.recurringBill.lateFeeCents,
         payeeName: b.recurringBill.payeeName,
         paymentDetails: b.recurringBill.paymentDetails,
+        paymentMethod: b.recurringBill.paymentMethod,
         installment: installmentOf(b.recurringBill, b.competence),
         paidCents: b.paidAmountCents,
         status: b.status,

@@ -46,6 +46,12 @@ enum BookingStatus {
   cancelled
 }
 
+enum PaymentMethod {
+  boleto
+  pix
+  credit_card
+}
+
 enum BillOccurrenceStatus {
   pending
   partially_paid
@@ -267,8 +273,8 @@ model OrganizationMember {
   receivesMorningBriefing Boolean    @default(false) @map("receives_morning_briefing")
   createdAt               DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointments AppointmentParticipant[]
 
   @@unique([organizationId, userId])
@@ -342,7 +348,7 @@ model Contact {
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   groups       ContactGroup[]
   reminders    Reminder[]
   bookings     Booking[]
@@ -837,39 +843,41 @@ model Reminder {
 }
 
 model RecurringBill {
-  id                       String    @id @default(cuid())
-  organizationId           String    @map("organization_id")
+  id                       String         @id @default(cuid())
+  organizationId           String         @map("organization_id")
   name                     String
   /// Mensal (vencimento todo mês) ou pontual (uma data).
-  kind                     BillKind  @default(monthly)
+  kind                     BillKind       @default(monthly)
   /// Categoria cadastrada pela casa (Casa, Estoque, Manutenção…).
-  expenseCategoryId        String?   @map("expense_category_id")
+  expenseCategoryId        String?        @map("expense_category_id")
   /// Multa por atraso (valor fixo somado quando a conta vence sem pagamento).
-  lateFeeCents             Int?      @map("late_fee_cents")
+  lateFeeCents             Int?           @map("late_fee_cents")
   /// Mensal parcelada: total de parcelas (a última vence no mês `endsOn`); null = sem fim.
   installments             Int?
   /// Para quem pagar (ex.: imobiliária, concessionária).
-  payeeName                String?   @map("payee_name")
+  payeeName                String?        @map("payee_name")
   /// Como pagar: PIX, conta, código de barras…
-  paymentDetails           String?   @map("payment_details")
+  paymentDetails           String?        @map("payment_details")
+  /// Meio de pagamento: boleto, PIX ou cartão de crédito.
+  paymentMethod            PaymentMethod? @map("payment_method")
   /// Uso interno: tipo de serviço deduzido do nome (aluguel, energia…), para o WhatsApp entender "paguei a luz".
   category                 String
-  responsibleName          String?   @map("responsible_name")
-  responsiblePhone         String?   @map("responsible_phone")
+  responsibleName          String?        @map("responsible_name")
+  responsiblePhone         String?        @map("responsible_phone")
   /// 1..31. Em meses mais curtos, vence no último dia do mês.
-  dueDay                   Int       @map("due_day")
-  estimatedAmountCents     Int?      @map("estimated_amount_cents")
-  isVariableAmount         Boolean   @default(false) @map("is_variable_amount")
-  currency                 String    @default("BRL")
-  recipientPhones          String[]  @default([]) @map("recipient_phones")
+  dueDay                   Int            @map("due_day")
+  estimatedAmountCents     Int?           @map("estimated_amount_cents")
+  isVariableAmount         Boolean        @default(false) @map("is_variable_amount")
+  currency                 String         @default("BRL")
+  recipientPhones          String[]       @default([]) @map("recipient_phones")
   /// Intervalo mínimo entre reavisos de conta vencida (anti-spam).
-  overdueReminderEveryDays Int       @default(3) @map("overdue_reminder_every_days")
-  startsOn                 DateTime  @map("starts_on") @db.Date
-  endsOn                   DateTime? @map("ends_on") @db.Date
-  active                   Boolean   @default(true)
-  suspendedAt              DateTime? @map("suspended_at") @db.Timestamptz(6)
-  createdAt                DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  overdueReminderEveryDays Int            @default(3) @map("overdue_reminder_every_days")
+  startsOn                 DateTime       @map("starts_on") @db.Date
+  endsOn                   DateTime?      @map("ends_on") @db.Date
+  active                   Boolean        @default(true)
+  suspendedAt              DateTime?      @map("suspended_at") @db.Timestamptz(6)
+  createdAt                DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   expenseCategory ExpenseCategory? @relation(fields: [expenseCategoryId], references: [id], onDelete: SetNull)

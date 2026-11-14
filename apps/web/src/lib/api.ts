@@ -151,6 +151,7 @@ export interface BillOccurrence {
     startsOn?: string;
     payeeName?: string | null;
     paymentDetails?: string | null;
+    paymentMethod?: PaymentMethod | null;
     expenseCategory?: ExpenseCategoryRef | null;
   };
   payments: Array<{ id: string; amountCents: number | null; paidOn: string | null; storageKey: string | null }>;
@@ -193,6 +194,7 @@ export interface RecurringBill {
   installments?: number | null;
   payeeName?: string | null;
   paymentDetails?: string | null;
+  paymentMethod?: PaymentMethod | null;
   overdueReminderEveryDays?: number;
   dueDay: number;
   estimatedAmountCents: number | null;
@@ -201,6 +203,9 @@ export interface RecurringBill {
   suspendedAt: string | null;
   recipientPhones: string[];
 }
+
+export type PaymentMethod = 'boleto' | 'pix' | 'credit_card';
+export const PAYMENT_METHODS: Record<PaymentMethod, string> = { boleto: 'Boleto', pix: 'PIX', credit_card: 'Cartão de crédito' };
 
 /** Um mês na visão unificada do Financeiro. */
 export interface FinanceMonth {
@@ -256,6 +261,7 @@ export interface BillDetails {
     paidAt: string | null;
     installment: { number: number; total: number } | null;
     proofs: number;
+    payments: Array<{ id: string; amountCents: number | null; paidOn: string | null; hasProof: boolean }>;
   }>;
 }
 
@@ -351,6 +357,7 @@ export interface CalendarBill {
   lateFeeCents: number | null;
   payeeName: string | null;
   paymentDetails: string | null;
+  paymentMethod: PaymentMethod | null;
   installment: { number: number; total: number } | null;
   category: ExpenseCategoryRef | null;
 }
@@ -561,6 +568,40 @@ export async function uploadSpacePhoto(spaceId: string, file: File): Promise<{ i
 }
 
 /** Foto privada: busca com o token e devolve um blob (o <img> não manda Authorization). */
+/** Comprovante: foto (JPG, PNG, WebP) ou PDF, até 10 MB. */
+export const PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+export const MAX_PROOF_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Pagamento com comprovante (o arquivo vai como corpo bruto). Conta em aberto: registra o
+ * pagamento (sem valor, quita o restante) e a conta fica paga. Conta já paga: só anexa.
+ */
+export async function payWithProof(occurrenceId: string, file: File, opts: { amountCents?: number | null; paidOn?: string | null } = {}) {
+  const token = tokenStore.get();
+  const q = new URLSearchParams();
+  if (opts.amountCents) q.set('amountCents', String(opts.amountCents));
+  if (opts.paidOn) q.set('paidOn', opts.paidOn);
+  const res = await fetch(`${API_URL}/bills/occurrences/${occurrenceId}/payments/with-proof${q.size ? `?${q}` : ''}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  if (res.status === 401) {
+    tokenStore.set(null);
+    window.dispatchEvent(new Event('coxia:unauthorized'));
+  }
+  const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
+  if (!res.ok) throw new ApiBodyError(res.status, json);
+  return json;
+}
+
+export async function fetchPaymentProof(paymentId: string): Promise<Blob> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/bills/payments/${paymentId}/proof`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
+  return res.blob();
+}
+
 export async function fetchSpacePhoto(spaceId: string, photoId: string): Promise<Blob> {
   const token = tokenStore.get();
   const res = await fetch(`${API_URL}/spaces/${spaceId}/photos/${photoId}`, {

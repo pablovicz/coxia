@@ -15,7 +15,7 @@ import {
   SpaceService,
 } from '@coxia/domain';
 import type { Response } from 'express';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { addDays, localDateOf, localDayBoundsUtc } from '@coxia/shared';
 import { z } from 'zod';
 import { type AuthUser, CurrentUser, Roles } from '../auth/decorators';
@@ -58,6 +58,17 @@ const v = <S extends z.ZodType>(s: S) => new ZodValidationPipe(s);
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const PHOTO_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+
+/** Comprovante: foto (JPG, PNG, WebP) ou PDF, até 10 MB. */
+const MAX_PROOF_BYTES = 10 * 1024 * 1024;
+const PROOF_EXT: Record<string, string> = { ...PHOTO_EXT, 'application/pdf': 'pdf' };
+const PROOF_TYPE: Record<string, string> = Object.fromEntries(Object.entries(PROOF_EXT).map(([type, ext]) => [ext, type]));
+
+/** Tipo do comprovante pelos primeiros bytes (foto ou PDF). */
+export function sniffProof(buf: Buffer): string | null {
+  if (buf.length >= 5 && buf.subarray(0, 5).toString('ascii') === '%PDF-') return 'application/pdf';
+  return sniffImage(buf);
+}
 
 /** Confere o tipo pelos primeiros bytes: o content-type do cliente não basta. */
 export function sniffImage(buf: Buffer): string | null {
@@ -250,7 +261,10 @@ export class BookingsController {
 
 @Controller('bills')
 export class BillsController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser) {
@@ -304,6 +318,58 @@ export class BillsController {
   @Get('summary')
   summary(@CurrentUser() user: AuthUser, @Query(v(z.object({ competence }))) q: { competence: string }) {
     return this.billing.summary(user.organizationId, q.competence);
+  }
+
+  /**
+   * Pagamento com comprovante (corpo bruto: foto ou PDF). Conta em aberto: registra o pagamento
+   * (sem valor, quita o restante — com a multa, se atrasada) e a conta fica paga.
+   * Conta já paga: só anexa o comprovante. O mesmo arquivo não vale para duas contas.
+   */
+  @Roles('owner', 'admin')
+  @Post('occurrences/:id/payments/with-proof')
+  async payWithProof(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Query(v(z.object({ amountCents: z.coerce.number().int().positive().optional(), paidOn: isoDate.optional() }))) q: { amountCents?: number; paidOn?: string },
+    @Headers('content-type') contentType?: string,
+  ) {
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      throw new DomainError('validation', 'Envie o comprovante em foto (JPG, PNG, WebP) ou PDF', { code: 'invalid_proof' });
+    }
+    if (body.length > MAX_PROOF_BYTES) throw new DomainError('validation', 'O comprovante deve ter até 10 MB', { code: 'proof_too_large' });
+    const sniffed = sniffProof(body);
+    if (!sniffed || (contentType && contentType.split(';')[0]!.trim() !== sniffed)) {
+      throw new DomainError('validation', 'Envie o comprovante em foto (JPG, PNG, WebP) ou PDF', { code: 'invalid_proof' });
+    }
+    const sha256 = createHash('sha256').update(body).digest('hex');
+    const storageKey = `${user.organizationId}/proofs/${id}/${randomUUID()}.${PROOF_EXT[sniffed]}`;
+    await this.storage.put(storageKey, body, sniffed);
+    try {
+      const occ = await this.billing.getOccurrence(user.organizationId, id);
+      if (occ.status === 'paid') {
+        await this.billing.attachProof(user.organizationId, id, { sha256, storageKey }, webActor(user));
+        return { occurrence: await this.billing.getOccurrence(user.organizationId, id), attachedOnly: true };
+      }
+      return await this.billing.registerPayment(user.organizationId, id, { amountCents: q.amountCents ?? null, paidOn: q.paidOn ?? null, proof: { sha256, storageKey } }, webActor(user));
+    } catch (err) {
+      await this.storage.delete(storageKey).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  /** O comprovante passa pela api (bucket privado). */
+  @Get('payments/:paymentId/proof')
+  async proof(@CurrentUser() user: AuthUser, @Param('paymentId') paymentId: string, @Res() res: Response) {
+    const payment = await this.billing.getPayment(user.organizationId, paymentId);
+    if (!payment.storageKey) throw new DomainError('not_found', 'Este pagamento não tem comprovante');
+    const ext = payment.storageKey.split('.').pop() ?? '';
+    const stream = await this.storage.get(payment.storageKey);
+    // Comprovantes vindos do WhatsApp podem não ter extensão: o navegador decide pelo conteúdo.
+    res.setHeader('content-type', PROOF_TYPE[ext] ?? 'application/octet-stream');
+    res.setHeader('cache-control', 'private, max-age=86400, immutable');
+    res.setHeader('x-content-type-options', 'nosniff');
+    stream.pipe(res);
   }
 
   @Roles('owner', 'admin')

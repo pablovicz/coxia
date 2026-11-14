@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { createPrismaClient } from '@coxia/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type Actor, BillingService, billLabel, DomainError, ExpenseCategoryService, FinanceService, inferUtility, installmentOf, installmentsEnd, NotificationService } from '../src';
+import { type Actor, BillingService, billLabel, DomainError, ExpenseCategoryService, FinanceService, howToPay, inferUtility, installmentOf, installmentsEnd, NotificationService } from '../src';
 
 const db = createPrismaClient();
 const actor: Actor = { channel: 'web', userId: null };
@@ -143,6 +143,9 @@ describe('parcelas e para quem pagar', () => {
   it('o aviso do vencimento diz a parcela, para quem pagar e como', async () => {
     expect(billLabel('Aluguel', { payeeName: 'Imobiliária Lopes', installment: { number: 3, total: 10 } })).toBe('Aluguel (parcela 3/10, para Imobiliária Lopes)');
     expect(billLabel('Internet', {})).toBe('Internet');
+    expect(howToPay({ paymentMethod: 'pix', paymentDetails: 'chave 11.222.333/0001-44' })).toBe('PIX · chave 11.222.333/0001-44');
+    expect(howToPay({ paymentMethod: 'boleto' })).toBe('Boleto');
+    expect(howToPay({})).toBeNull();
     const u = await db.user.create({ data: { name: 'Caio', phone: `55117${String(Date.now()).slice(-8)}` } });
     await db.organizationMember.create({ data: { organizationId: orgId, userId: u.id, role: 'admin' } });
     await billing.createBill(
