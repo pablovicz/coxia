@@ -28,5 +28,5 @@ COPY tests/fixtures /fixtures
 COPY apps/ai/coxia_ai ./coxia_ai
 USER nobody
 EXPOSE 8000
-# "::" escuta IPv4 e IPv6 (rede privada do Railway é IPv6).
-CMD ["sh", "-c", "exec uvicorn coxia_ai.main:app_factory --factory --host :: --port ${PORT:-8000} --proxy-headers"]
+# Socket dual-stack (IPv4 + IPv6) na porta $PORT: ver coxia_ai/serve.py.
+CMD ["python", "-m", "coxia_ai.serve"]
