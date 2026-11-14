@@ -8,8 +8,7 @@ WORKDIR /repo
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter "@coxia/web"
+RUN pnpm install --frozen-lockfile --filter "@coxia/web"
 
 # ---------- dev ----------
 FROM deps AS dev

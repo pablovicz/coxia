@@ -17,10 +17,11 @@
  *  - região do bucket (não pode ser alterada depois de criado);
  *  - geração dos domínios públicos de `api` e `web` (domínio customizado ou gerado pelo Railway).
  */
-import { bucket, defineRailway, github, group, postgres, preserve, project, redis, service } from 'railway/iac';
+import { bucket, defineRailway, github, group, postgres, preserve, project, redis, ref, service } from 'railway/iac';
 
 const REPO = 'pablovicz/coxia';
-const BUCKET_REGION = 'sjc'; // TODO: confirmar a região disponível mais próxima do Brasil
+// Regiões de bucket: sjc, iad, ams, sin. Nenhuma no Brasil; iad (Virgínia) é a de menor latência.
+const BUCKET_REGION = 'iad';
 
 export default defineRailway((ctx) => {
   const prod = ctx.environment === 'production';
@@ -32,11 +33,11 @@ export default defineRailway((ctx) => {
   const media = bucket('media', { region: BUCKET_REGION });
 
   const storageEnv = {
-    S3_ENDPOINT: media.env.ENDPOINT,
-    S3_BUCKET: media.env.BUCKET,
-    S3_ACCESS_KEY_ID: media.env.ACCESS_KEY_ID,
-    S3_SECRET_ACCESS_KEY: media.env.SECRET_ACCESS_KEY,
-    S3_REGION: media.env.REGION,
+    S3_ENDPOINT: ref(media, 'ENDPOINT'),
+    S3_BUCKET: ref(media, 'BUCKET'),
+    S3_ACCESS_KEY_ID: ref(media, 'ACCESS_KEY_ID'),
+    S3_SECRET_ACCESS_KEY: ref(media, 'SECRET_ACCESS_KEY'),
+    S3_REGION: ref(media, 'REGION'),
     S3_FORCE_PATH_STYLE: 'false',
     S3_SIGNED_URL_TTL: '900',
   };

@@ -17,8 +17,7 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/database/package.json packages/database/
 COPY packages/domain/package.json packages/domain/
 COPY apps/api/package.json apps/api/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter "@coxia/api..."
+RUN pnpm install --frozen-lockfile --filter "@coxia/api..."
 
 FROM deps AS source
 COPY packages packages
