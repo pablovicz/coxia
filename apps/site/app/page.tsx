@@ -1,6 +1,11 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { InstagramIcon } from '@/components/chrome';
 import { COURSES, quoteHref, SITE, SPACES } from '@/lib/content';
+import { fetchSpaces, photoUrl, summary } from '@/lib/spaces';
+
+// Salas cadastradas na Coxia: a home é regerada a cada 5 minutos.
+export const revalidate = 300;
 
 /** Dados estruturados para o Google (negócio local, com contatos e redes). */
 const JSON_LD = {
@@ -19,7 +24,8 @@ const JSON_LD = {
 
 const DESIGN_SERVICES = ['Figurino', 'Cenografia', 'Iluminação', 'Adereços', 'Bonecos'];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const rooms = await fetchSpaces();
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }} />
@@ -34,7 +40,7 @@ export default function HomePage() {
             </h1>
             <p className="mt-5 text-sm font-bold uppercase tracking-[0.18em] text-kaju-green sm:text-base">{SITE.tagline}</p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Link href="/orcamento/" className="btn btn-green">
+              <Link href="/orcamento" className="btn btn-green">
                 Solicite um orçamento
               </Link>
               <a href="#espacos" className="btn btn-outline text-kaju-green hover:bg-kaju-green hover:text-kaju-cream">
@@ -73,6 +79,40 @@ export default function HomePage() {
           </ul>
         </div>
       </section>
+
+      {rooms.length ? (
+        <>
+          <div className="dots bg-kaju-green" aria-hidden />
+          {/* Salas cadastradas na Coxia (com "Mostrar no site"): cada uma tem página com fotos e orçamento. */}
+          <section id="nossos-espacos" aria-labelledby="nossos-espacos-titulo" className="scroll-mt-16 bg-kaju-green px-4 py-16 sm:px-6">
+            <div className="mx-auto max-w-6xl">
+              <h2 id="nossos-espacos-titulo" className="section-title text-center text-kaju-pink">
+                Nossos espaços
+              </h2>
+              <p className="mx-auto mt-3 max-w-2xl text-center text-kaju-cream/85">Conheça cada espaço da casa e peça um orçamento direto na página dele.</p>
+              <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {rooms.map((r) => (
+                  <li key={r.id}>
+                    <Link href={`/espacos/${r.slug}`} className="group flex h-full flex-col overflow-hidden rounded-3xl bg-kaju-cream text-kaju-green-deep shadow-lg transition hover:-translate-y-1">
+                      <div className="relative aspect-[4/3] bg-kaju-pink bg-[url(/img/padrao-caju.webp)] bg-cover">
+                        {r.photos[0] ? (
+                          <Image src={photoUrl(r.slug, r.photos[0].id)} alt="" fill sizes="(min-width: 1024px) 380px, (min-width: 640px) 50vw, 100vw" className="object-cover" />
+                        ) : null}
+                      </div>
+                      <div className="flex flex-1 flex-col gap-2 p-6">
+                        <h3 className="font-display text-xl font-extrabold">{r.name}</h3>
+                        {r.capacity ? <p className="text-sm font-semibold text-kaju-rose-deep">Até {r.capacity} pessoas</p> : null}
+                        {r.description ? <p className="text-sm leading-relaxed text-kaju-green-deep/85">{summary(r.description, 140)}</p> : null}
+                        <span className="mt-auto pt-3 text-sm font-bold text-kaju-green underline-offset-4 group-hover:underline">Ver fotos e pedir orçamento →</span>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        </>
+      ) : null}
 
       <div className="dots bg-kaju-green" aria-hidden />
 
@@ -167,7 +207,7 @@ export default function HomePage() {
             <p className="text-center font-bold">Kaju: onde a cena encontra sua melhor forma.</p>
           </div>
           <div className="mt-8 flex justify-center">
-            <Link href="/orcamento/" className="btn btn-green">
+            <Link href="/orcamento" className="btn btn-green">
               Solicite um orçamento
             </Link>
           </div>
@@ -181,7 +221,7 @@ export default function HomePage() {
             Tem um projeto em mente?
           </h2>
           <p className="mt-3 text-kaju-cream/85">Conte para a gente o que você imagina: respondemos pelo WhatsApp.</p>
-          <Link href="/orcamento/" className="btn btn-rose mt-7">
+          <Link href="/orcamento" className="btn btn-rose mt-7">
             Solicite um orçamento
           </Link>
         </div>

@@ -5,12 +5,13 @@
 import { randomUUID } from 'node:crypto';
 import { createPrismaClient } from '@coxia/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { type Actor, DomainError, ProjectService, QuoteRequestService } from '../src';
+import { type Actor, DomainError, ProjectService, QuoteRequestService, SpaceService } from '../src';
 
 const db = createPrismaClient();
 const actor: Actor = { channel: 'web', userId: null };
 const quotes = new QuoteRequestService(db);
 const projects = new ProjectService(db);
+const spaces = new SpaceService(db);
 const suffix = String(Date.now()).slice(-7);
 const ANA = `554193${suffix}`;
 let orgId: string;
@@ -115,5 +116,41 @@ describe('pedido de orçamento pelo site', () => {
 
     await projects.deleteProject(orgId, project.id, actor);
     expect(await quotes.get(orgId, q.id)).toMatchObject({ status: 'contacted', projectId: null });
+  });
+});
+
+describe('salas no site', () => {
+  it('só salas ativas e com "Mostrar no site"; sem preço nem inquilino; foto só de sala pública', async () => {
+    const ensaio = await spaces.create(orgId, { name: 'Sala de Ensaio', description: 'Piso de madeira, espelho.', capacity: 20, hourlyRateCents: 8000 }, actor);
+    const escondida = await spaces.create(orgId, { name: 'Depósito', showOnSite: false }, actor);
+    const arquivada = await spaces.create(orgId, { name: 'Sala Antiga' }, actor);
+    await spaces.update(orgId, arquivada.id, { active: false }, actor);
+    const foto = await spaces.addPhoto(orgId, ensaio.id, { storageKey: `k/${randomUUID()}.jpg`, contentType: 'image/jpeg', sizeBytes: 100 }, actor);
+    const fotoEscondida = await spaces.addPhoto(orgId, escondida.id, { storageKey: `k/${randomUUID()}.jpg`, contentType: 'image/jpeg', sizeBytes: 100 }, actor);
+
+    const list = await spaces.listPublic(orgId);
+    expect(list).toEqual([{ id: ensaio.id, slug: 'sala-de-ensaio', name: 'Sala de Ensaio', description: 'Piso de madeira, espelho.', capacity: 20, photos: [{ id: foto.id, contentType: 'image/jpeg' }] }]);
+    expect(Object.keys(list[0]!)).not.toContain('hourlyRateCents');
+    expect((await spaces.getPublic(orgId, 'sala-de-ensaio')).name).toBe('Sala de Ensaio');
+    await expectDomainError(spaces.getPublic(orgId, 'deposito'), 'not_found');
+    await expectDomainError(spaces.getPublic(orgId, 'sala-antiga'), 'not_found');
+    expect((await spaces.getPublicPhoto(orgId, 'sala-de-ensaio', foto.id)).id).toBe(foto.id);
+    await expectDomainError(spaces.getPublicPhoto(orgId, 'deposito', fotoEscondida.id), 'not_found');
+    await expectDomainError(spaces.getPublicPhoto(orgId, 'sala-de-ensaio', fotoEscondida.id), 'not_found');
+
+    await spaces.update(orgId, escondida.id, { showOnSite: true }, actor);
+    expect((await spaces.listPublic(orgId)).map((s) => s.slug)).toEqual(['sala-de-ensaio', 'deposito']);
+  });
+
+  it('orçamento pela página da sala guarda a sala, cita no aviso e no rascunho do projeto', async () => {
+    const r = await quotes.submit(orgId, { ...base, phone: `554196${suffix}`, services: ['space_rental'], description: 'Ensaios às terças, 10 pessoas.', spaceSlug: 'sala-de-ensaio' });
+    const q = await quotes.get(orgId, r.id);
+    expect(q.space).toMatchObject({ name: 'Sala de Ensaio', slug: 'sala-de-ensaio' });
+    expect(q.projectDraft.title).toBe('Sala de Ensaio - Marina Lopes');
+    const notice = await db.notificationDelivery.findFirstOrThrow({ where: { idempotencyKey: `quote_request:${r.id}:${ANA}` } });
+    expect(notice.text).toContain('Espaço: Sala de Ensaio');
+    // Sala que não está no site: o pedido entra, sem sala.
+    const r2 = await quotes.submit(orgId, { ...base, phone: `554197${suffix}`, services: ['space_rental'], description: 'Outro pedido de sala.', spaceSlug: 'nao-existe' });
+    expect((await quotes.get(orgId, r2.id)).space).toBeNull();
   });
 });

@@ -60,7 +60,8 @@ export const cancelSeriesSchema = z.object({ fromDate: isoDate, wholeGroup: z.bo
 
 export const spaceSchema = z.object({
   name: z.string().trim().min(1).max(80),
-  description: z.string().max(1000).nullish(),
+  /** Também é o texto da página da sala no site público. */
+  description: z.string().max(3000).nullish(),
   aliases: z.array(z.string().max(40)).max(10).optional(),
   capacity: z.number().int().positive().nullish(),
   sortOrder: z.number().int().optional(),
@@ -71,6 +72,7 @@ export const spaceSchema = z.object({
   rentAmountCents: z.number().int().positive().nullish(),
   rentDueDay: z.number().int().min(1).max(31).nullish(),
   tenantName: z.string().max(120).nullish(),
+  showOnSite: z.boolean().optional(),
 });
 
 const openingRule = z.object({ weekday: z.number().int().min(1).max(7), opensAt: hhmm, closesAt: hhmm });

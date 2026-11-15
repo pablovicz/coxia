@@ -1,4 +1,4 @@
-import type { SpaceStatus } from '@coxia/database';
+import type { Prisma, SpaceStatus } from '@coxia/database';
 import { normalizeText } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError } from './common';
 import type { OpeningRule } from './availability';
@@ -45,7 +45,29 @@ export interface SpaceInput {
   rentAmountCents?: number | null;
   rentDueDay?: number | null;
   tenantName?: string | null;
+  /** Aparece no site público (padrão: sim). */
+  showOnSite?: boolean;
 }
+
+/** O que o site público mostra de uma sala: sem preços, inquilino nem situação interna. */
+export interface PublicSpace {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  capacity: number | null;
+  photos: Array<{ id: string; contentType: string }>;
+}
+
+const publicSpaceWhere = (organizationId: string) => ({ organizationId, active: true, showOnSite: true });
+const publicSpaceSelect = {
+  id: true,
+  slug: true,
+  name: true,
+  description: true,
+  capacity: true,
+  photos: { select: { id: true, contentType: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+} satisfies Prisma.SpaceSelect;
 
 /** Horário padrão de sala nova: segunda a sábado, 08:00–22:00 (ajustável na tela Salas). */
 export const DEFAULT_OPENING_RULES: OpeningRule[] = [1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, opensAt: '08:00', closesAt: '22:00' }));
@@ -155,6 +177,7 @@ export class SpaceService {
           rentAmountCents: input.rentAmountCents ?? null,
           rentDueDay: input.rentDueDay ?? null,
           tenantName: input.tenantName?.trim() || null,
+          ...(input.showOnSite !== undefined ? { showOnSite: input.showOnSite } : {}),
         },
       });
       await tx.spaceAvailabilityRule.createMany({ data: rules.map((r) => ({ ...r, spaceId: space.id })) });
@@ -192,6 +215,7 @@ export class SpaceService {
           ...(patch.rentAmountCents !== undefined ? { rentAmountCents: patch.rentAmountCents } : {}),
           ...(patch.rentDueDay !== undefined ? { rentDueDay: patch.rentDueDay } : {}),
           ...(patch.tenantName !== undefined ? { tenantName: patch.tenantName?.trim() || null } : {}),
+          ...(patch.showOnSite !== undefined ? { showOnSite: patch.showOnSite } : {}),
         },
       });
       await audit(tx, organizationId, actor, 'space.update', 'space', spaceId, { before, after: updated });
@@ -211,6 +235,26 @@ export class SpaceService {
         })
       : [];
     return { ...space, futureOccurrences };
+  }
+
+  // ───────────── site público ─────────────
+
+  /** Salas que aparecem no site (ativas e com "Mostrar no site"), na ordem do cadastro. */
+  listPublic(organizationId: string): Promise<PublicSpace[]> {
+    return this.db.space.findMany({ where: publicSpaceWhere(organizationId), select: publicSpaceSelect, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] });
+  }
+
+  async getPublic(organizationId: string, slug: string): Promise<PublicSpace> {
+    const space = await this.db.space.findFirst({ where: { ...publicSpaceWhere(organizationId), slug }, select: publicSpaceSelect });
+    if (!space) throw new DomainError('not_found', 'Espaço não encontrado');
+    return space;
+  }
+
+  /** Foto de sala visível no site (as outras não saem do bucket). */
+  async getPublicPhoto(organizationId: string, slug: string, photoId: string) {
+    const photo = await this.db.spacePhoto.findFirst({ where: { id: photoId, organizationId, space: { ...publicSpaceWhere(organizationId), slug } } });
+    if (!photo) throw new DomainError('not_found', 'Foto não encontrada');
+    return photo;
   }
 
   // ───────────── fotos ─────────────

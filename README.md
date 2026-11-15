@@ -91,10 +91,11 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 
 | Entregue | Onde |
 |---|---|
-| **Site da Casa Kaju** (`apps/site`, Next.js com exportação estática servida pelo nginx: HTML pronto, sem servidor Node). Home com a marca, espaços para alugar, sócias, cursos e design cênico; página **/orcamento**. SEO: metadados e Open Graph por página, `sitemap.xml`, `robots.txt`, dados estruturados (LocalBusiness), canonical, `www` → `casakaju.com`; fontes servidas pelo próprio site; imagens WebP | `apps/site` |
+| **Site da Casa Kaju** (`apps/site`, Next.js standalone com ISR: páginas pré-geradas e regeradas a cada 5 min). Home com a marca, serviços, **Nossos espaços**, sócias, cursos e design cênico; página **/orcamento**. SEO: metadados e Open Graph por página, `sitemap.xml` (com as salas), `robots.txt`, dados estruturados (LocalBusiness e Place), canonical, `www` → `casakaju.com`; fontes servidas pelo próprio site; imagens WebP e fotos das salas otimizadas pelo Next (AVIF/WebP no tamanho certo) | `apps/site` |
+| **Salas no site**: cada sala ativa com **"Mostrar no site"** (padrão: sim; no cadastro da sala) aparece em "Nossos espaços" e ganha a página **/espacos/[sala]** com galeria de fotos, descrição, capacidade e o formulário de orçamento daquele espaço. Sem preços, inquilino nem situação interna; sala nova aparece em até 5 min | `GET /public/spaces`, `/public/spaces/:slug`, `/public/spaces/:slug/photos/:id`, `spaces.show_on_site` |
 | **Formulário de orçamento**: nome, e-mail, WhatsApp, segmento, serviços (design cênico, aluguel de espaço, cursos), descrição e prazo. Os círculos de espaços e os cursos abrem o formulário com o serviço já marcado (`?servico=&interesse=`). Validação no site e na api; campo-armadilha para robôs; limite de 5 envios por IP em 10 min; envio repetido em 10 min não duplica | `components/quote-form.tsx`, `POST /public/quote-requests` |
 | Cada pedido vira **orçamento** na Coxia, quem pediu vira **contato** (pelo WhatsApp, sem trocar o nome dado pela equipe) e as **administradoras recebem o aviso no WhatsApp** | `QuoteRequestService.submit`, `quote_requests` |
-| **Orçamentos** no painel: abas Novos, Em conversa, Aprovados, Arquivados; detalhe com contato, "Responder no WhatsApp", e-mail e anotações | `/orcamentos`, `features/quotes` |
+| **Orçamentos** no painel: abas Novos, Em conversa, Aprovados, Arquivados; detalhe com contato, espaço (quando veio da página de uma sala), "Responder no WhatsApp", e-mail e anotações | `/orcamentos`, `features/quotes`, `quote_requests.space_id` |
 | **Promover a projeto**: abre o "Novo projeto" com nome e objetivo vindos do orçamento (descrição, cliente, segmento, serviços e prazo); ao criar, o orçamento fica "Aprovado" e ligado ao projeto, que mostra o cartão **Cliente**. "Aprovado" só por esse caminho; excluir o projeto devolve o orçamento para "Em conversa" | `POST /projects` com `quoteRequestId`, `projectDraftFromQuote`, `linkProject` |
 
 ### Residentes, contatos e equipe (pós-Etapa 4)
@@ -269,7 +270,7 @@ apps/
   worker/     NestJS — BullMQ: mensagens recebidas, outbox, reconciliação, conexão
   ai/         FastAPI — transcrição, extração estruturada, interpretação de comandos
   web/        React + Vite + Tailwind v4 (tokens do design system) — painel da equipe
-  site/       Next.js (exportação estática) — site público casakaju.com e formulário de orçamento
+  site/       Next.js (standalone + ISR) — site público casakaju.com, páginas das salas e orçamento
 packages/
   config/     validação de variáveis de ambiente (zod)
   contracts/  schemas compartilhados (InboundMessage, contratos API↔IA, filas) + JSON Schema

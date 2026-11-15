@@ -25,7 +25,7 @@ import {
   RemindersController,
   SpacesController,
 } from './controllers';
-import { PublicQuoteController, QuoteRequestsController } from './quote-requests.controller';
+import { PublicQuoteController, PublicSpacesController, QuoteRequestsController } from './quote-requests.controller';
 
 const STATUS: Record<DomainError['code'], number> = {
   not_found: HttpStatus.NOT_FOUND,
@@ -66,6 +66,6 @@ export class DomainErrorFilter implements ExceptionFilter {
 export class DomainModule {}
 
 @Module({
-  controllers: [SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController],
+  controllers: [SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController, PublicSpacesController],
 })
 export class DomainHttpModule {}

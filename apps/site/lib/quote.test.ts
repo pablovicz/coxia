@@ -31,6 +31,7 @@ describe('formulário de orçamento', () => {
       services: ['costume', 'props'],
       description: 'Figurino para 6 atores.',
       neededBy: null,
+      spaceSlug: null,
       website: '',
     });
   });

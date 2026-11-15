@@ -104,7 +104,7 @@ export function QuoteRequestsPage() {
                           <span className="shrink-0 text-xs text-muted-foreground">{local(q.createdAt, tz).toFormat('dd/LL HH:mm')}</span>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {QUOTE_SEGMENTS[q.segment] ?? q.segment} · {quoteServices(q)}
+                          {QUOTE_SEGMENTS[q.segment] ?? q.segment} · {q.space ? q.space.name : quoteServices(q)}
                           {q.neededBy ? ` · para ${dateBr(q.neededBy)}` : ''}
                         </p>
                         <p className="line-clamp-2 text-sm">{q.description}</p>
@@ -209,6 +209,12 @@ function QuoteRequestDialog({
           <dd>{QUOTE_SEGMENTS[q.segment] ?? q.segment}</dd>
           <dt className="text-muted-foreground">Serviços</dt>
           <dd>{quoteServices(q)}</dd>
+          {q.space ? (
+            <>
+              <dt className="text-muted-foreground">Espaço</dt>
+              <dd>{q.space.name}</dd>
+            </>
+          ) : null}
           <dt className="text-muted-foreground">Para quando</dt>
           <dd>{q.neededBy ? dateBr(q.neededBy) : 'Não informado'}</dd>
           {q.project ? (

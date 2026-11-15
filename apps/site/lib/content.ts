@@ -62,5 +62,5 @@ export const quoteHref = (service?: ServiceKey, interest?: string) => {
   if (service) q.set('servico', service);
   if (interest) q.set('interesse', interest);
   const s = q.toString();
-  return `/orcamento/${s ? `?${s}` : ''}`;
+  return `/orcamento${s ? `?${s}` : ''}`;
 };

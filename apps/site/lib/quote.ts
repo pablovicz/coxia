@@ -8,6 +8,8 @@ export interface QuotePayload {
   services: ServiceKey[];
   description: string;
   neededBy: string | null;
+  /** Pedido feito na página de uma sala. */
+  spaceSlug: string | null;
   /** Armadilha para robôs: fica escondida e vazia. */
   website: string;
 }
@@ -29,6 +31,7 @@ export function readQuoteForm(form: FormData): { payload: QuotePayload; errors: 
     services,
     description: str('description'),
     neededBy: str('neededBy') || null,
+    spaceSlug: str('spaceSlug') || null,
     website: str('website'),
   };
   const errors: QuoteErrors = {};

@@ -17,7 +17,7 @@ type State = { kind: 'idle' } | { kind: 'sending' } | { kind: 'sent'; name: stri
  * "Solicite um orçamento": vai para a Coxia (módulo de orçamentos), que avisa as
  * administradoras no WhatsApp. O resto da conversa segue pelo WhatsApp.
  */
-export function QuoteForm() {
+export function QuoteForm({ space }: { space?: { slug: string; name: string } } = {}) {
   const formRef = useRef<HTMLFormElement>(null);
   const [state, setState] = useState<State>({ kind: 'idle' });
   const [errors, setErrors] = useState<QuoteErrors>({});
@@ -51,8 +51,10 @@ export function QuoteForm() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        // A confirmação aparece no lugar do formulário: rola até ela (na página da sala fica mais abaixo).
+        const top = (formRef.current?.getBoundingClientRect().top ?? 0) + window.scrollY - 96;
         setState({ kind: 'sent', name: payload.name.split(' ')[0] ?? '' });
-        window.scrollTo({ top: 0 });
+        window.scrollTo({ top: Math.max(top, 0) });
         return;
       }
       const body = (await res.json().catch(() => null)) as { message?: string } | null;
@@ -62,10 +64,13 @@ export function QuoteForm() {
     }
   }
 
+  // Na página da sala o título da página é o nome dela (h1); o formulário fica um nível abaixo.
+  const Title = space ? 'h2' : 'h1';
+
   if (state.kind === 'sent') {
     return (
       <div role="status" className="mx-auto max-w-xl rounded-4xl bg-kaju-green p-8 text-center text-kaju-cream shadow-2xl sm:p-12">
-        <h1 className="font-display text-3xl font-extrabold">Pedido enviado!</h1>
+        <Title className="font-display text-3xl font-extrabold">Pedido enviado!</Title>
         <p className="mt-4 text-lg">
           Obrigada pela preferência{state.name ? `, ${state.name}` : ''}. Entraremos em contato pelo WhatsApp o mais breve possível.
         </p>
@@ -76,7 +81,7 @@ export function QuoteForm() {
     );
   }
 
-  const presetDescription = preset.interest ? `Tenho interesse em: ${preset.interest}.\n` : '';
+  const presetDescription = space ? '' : preset.interest ? `Tenho interesse em: ${preset.interest}.\n` : '';
 
   return (
     <form
@@ -87,10 +92,12 @@ export function QuoteForm() {
       className="mx-auto flex max-w-xl flex-col gap-5 rounded-4xl bg-kaju-green p-6 shadow-2xl ring-1 ring-black/10 sm:p-9"
     >
       <div>
-        <h1 id="orcamento-titulo" className="font-display text-3xl font-extrabold text-kaju-cream">
-          Solicite um orçamento
-        </h1>
-        <p className="mt-2 text-sm text-kaju-cream/80">Respondemos pelo WhatsApp. Campos com * são obrigatórios.</p>
+        <Title id="orcamento-titulo" className="font-display text-3xl font-extrabold text-kaju-cream">
+          {space ? 'Peça um orçamento deste espaço' : 'Solicite um orçamento'}
+        </Title>
+        <p className="mt-2 text-sm text-kaju-cream/80">
+          {space ? `${space.name}: conte como vai usar e respondemos pelo WhatsApp.` : 'Respondemos pelo WhatsApp.'} Campos com * são obrigatórios.
+        </p>
       </div>
 
       <div>
@@ -143,6 +150,13 @@ export function QuoteForm() {
         {errors.segment ? <p id="segment-erro" className={errorText}>{errors.segment}</p> : null}
       </fieldset>
 
+      {space ? (
+        <>
+          {/* Página da sala: o serviço é o aluguel daquele espaço. */}
+          <input type="hidden" name="services" value="space_rental" />
+          <input type="hidden" name="spaceSlug" value={space.slug} />
+        </>
+      ) : (
       <fieldset aria-describedby={errors.services ? 'services-erro' : undefined}>
         <legend className={label}>Qual serviço você precisa? *</legend>
         <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
@@ -163,10 +177,11 @@ export function QuoteForm() {
         </div>
         {errors.services ? <p id="services-erro" className={errorText}>{errors.services}</p> : null}
       </fieldset>
+      )}
 
       <div>
         <label htmlFor="description" className={label}>
-          Conte-nos um pouco sobre o projeto *
+          {space ? 'Conte como vai usar o espaço *' : 'Conte-nos um pouco sobre o projeto *'}
         </label>
         <textarea
           id="description"
@@ -180,21 +195,22 @@ export function QuoteForm() {
           aria-describedby={`description-dica${errors.description ? ' description-erro' : ''}`}
         />
         <p id="description-dica" className="mt-1.5 text-xs leading-relaxed text-kaju-cream/80">
-          Informações importantes: o que é / qual a estética desejada / quantidade / materiais desejados para confecção / será usado em ambiente interno ou externo /
-          será manipulado ou usado em cena / precisa ser extra reforçado?
+          {space
+            ? 'Atividade (ensaio, aula, reunião, fotos…), quantas pessoas, dias e horários, por quanto tempo.'
+            : 'Informações importantes: o que é / qual a estética desejada / quantidade / materiais desejados para confecção / será usado em ambiente interno ou externo / será manipulado ou usado em cena / precisa ser extra reforçado?'}
         </p>
         {errors.description ? <p id="description-erro" className={errorText}>{errors.description}</p> : null}
       </div>
 
       <div>
         <label htmlFor="neededBy" className={label}>
-          Para quando é o projeto?
+          {space ? 'Para quando?' : 'Para quando é o projeto?'}
         </label>
         <input id="neededBy" name="neededBy" type="date" className={`${field} sm:w-56`} />
       </div>
 
       {/* Robôs preenchem; pessoas não veem. */}
-      <div aria-hidden className="absolute -left-[9999px] h-px w-px overflow-hidden">
+      <div aria-hidden className="absolute left-[-9999px] h-px w-px overflow-hidden">
         <label htmlFor="website">Site</label>
         <input id="website" name="website" tabIndex={-1} autoComplete="off" />
       </div>

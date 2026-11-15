@@ -76,6 +76,8 @@ export interface Space {
   rentAmountCents: number | null;
   rentDueDay: number | null;
   tenantName: string | null;
+  /** Aparece no site público casakaju.com. */
+  showOnSite: boolean;
   sortOrder: number;
   availabilityRules: OpeningRule[];
   photos: Array<{ id: string; contentType: string; sortOrder: number }>;
@@ -880,6 +882,8 @@ export interface QuoteRequest {
   source: string;
   projectId: string | null;
   project: { id: string; title: string } | null;
+  /** Sala pedida pela página dela no site. */
+  space: { id: string; name: string; slug: string } | null;
   /** Rascunho para "Promover a projeto" (nome e objetivo com os dados do pedido). */
   projectDraft: { title: string; objective: string };
   createdAt: string;

@@ -35,6 +35,8 @@ export interface QuoteRequestInput {
   services: string[];
   description: string;
   neededBy?: IsoDate | null;
+  /** Pedido feito na página de uma sala do site. */
+  spaceSlug?: string | null;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -61,6 +63,7 @@ export function composeQuoteRequestNotice(r: {
   services: string[];
   description: string;
   neededBy: IsoDate | null;
+  spaceName?: string | null;
 }) {
   const services = r.services.map((s) => (isService(s) ? QUOTE_SERVICES[s] : s)).join(', ');
   const description = r.description.length > 600 ? `${r.description.slice(0, 600)}…` : r.description;
@@ -72,6 +75,7 @@ export function composeQuoteRequestNotice(r: {
     `E-mail: ${r.email}`,
     `Segmento: ${isSegment(r.segment) ? QUOTE_SEGMENTS[r.segment] : r.segment}`,
     `Serviços: ${services}`,
+    r.spaceName ? `Espaço: ${r.spaceName}` : null,
     r.neededBy ? `Para quando: ${r.neededBy.split('-').reverse().join('/')}` : null,
     '',
     description,
@@ -89,15 +93,29 @@ const OBJECTIVE_MAX = 2000;
  * Rascunho do projeto a partir do orçamento ("Promover a projeto"): nome sugerido e objetivo com
  * o que o cliente escreveu, o segmento, os serviços e o prazo. A equipe ajusta antes de criar.
  */
-export function projectDraftFromQuote(q: { name: string; segment: string; services: string[]; description: string; neededBy: IsoDate | null }) {
+export function projectDraftFromQuote(q: {
+  name: string;
+  segment: string;
+  services: string[];
+  description: string;
+  neededBy: IsoDate | null;
+  space?: { name: string } | null;
+}) {
   const services = q.services.map((s) => (isService(s) ? QUOTE_SERVICES[s] : s));
   const segment = isSegment(q.segment) ? QUOTE_SEGMENTS[q.segment] : q.segment;
-  const facts = [`Cliente: ${q.name}`, `Segmento: ${segment}`, `Serviços: ${services.join(', ')}`, q.neededBy ? `Para quando: ${dateBr(q.neededBy)}` : null]
+  const facts = [
+    `Cliente: ${q.name}`,
+    `Segmento: ${segment}`,
+    `Serviços: ${services.join(', ')}`,
+    q.space ? `Espaço: ${q.space.name}` : null,
+    q.neededBy ? `Para quando: ${dateBr(q.neededBy)}` : null,
+  ]
     .filter(Boolean)
     .join(' · ');
   const room = OBJECTIVE_MAX - facts.length - 2;
   const description = q.description.length > room ? `${q.description.slice(0, room - 1)}…` : q.description;
-  return { title: `${services[0] ?? 'Projeto'} - ${q.name}`.slice(0, 120), objective: `${description}\n\n${facts}` };
+  const subject = q.space?.name ?? services[0] ?? 'Projeto';
+  return { title: `${subject} - ${q.name}`.slice(0, 120), objective: `${description}\n\n${facts}` };
 }
 
 /**
@@ -144,6 +162,9 @@ export class QuoteRequestService {
       where: { organizationId, phone: r.phone, description: r.description, createdAt: { gte: new Date(now.getTime() - DUPLICATE_WINDOW_MS) } },
     });
     if (duplicate) return { id: duplicate.id, duplicate: true };
+    const space = input.spaceSlug
+      ? await this.db.space.findFirst({ where: { organizationId, slug: input.spaceSlug, active: true, showOnSite: true }, select: { id: true, name: true } })
+      : null;
 
     const admins = await this.db.organizationMember.findMany({
       where: { organizationId, role: { in: ['owner', 'admin'] }, user: { phone: { not: null } } },
@@ -168,10 +189,11 @@ export class QuoteRequestService {
           services: r.services,
           description: r.description,
           neededBy: r.neededBy ? fromIsoDate(r.neededBy) : null,
+          spaceId: space?.id ?? null,
         },
       });
       await audit(tx, organizationId, SYSTEM, 'quote_request.create', 'quote_request', q.id, { after: { name: r.name, segment: r.segment, services: r.services } });
-      const text = composeQuoteRequestNotice(r);
+      const text = composeQuoteRequestNotice({ ...r, spaceName: space?.name ?? null });
       for (const a of admins) {
         await enqueueDelivery(tx, { organizationId, recipient: a.user.phone!, text, idempotencyKey: `quote_request:${q.id}:${a.user.phone}` });
       }
@@ -236,7 +258,7 @@ export class QuoteRequestService {
   }
 }
 
-const projectInclude = { project: { select: { id: true, title: true } } } as const;
+const projectInclude = { project: { select: { id: true, title: true } }, space: { select: { id: true, name: true, slug: true } } } as const;
 
 function view(q: {
   id: string;
@@ -253,6 +275,7 @@ function view(q: {
   source: string;
   projectId: string | null;
   project: { id: string; title: string } | null;
+  space: { id: string; name: string; slug: string } | null;
   createdAt: Date;
   updatedAt: Date;
 }) {

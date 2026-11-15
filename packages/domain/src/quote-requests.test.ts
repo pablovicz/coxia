@@ -57,6 +57,14 @@ describe('promover a projeto', () => {
     });
   });
 
+  it('pedido pela página da sala: o nome do projeto e o objetivo citam o espaço', () => {
+    const d = projectDraftFromQuote({ name: 'Estúdio Lume', segment: 'audiovisual', services: ['space_rental'], description: 'Diária para ensaio de moda.', neededBy: null, space: { name: 'Estúdio fotográfico' } });
+    expect(d.title).toBe('Estúdio fotográfico - Estúdio Lume');
+    expect(d.objective).toBe('Diária para ensaio de moda.\n\nCliente: Estúdio Lume · Segmento: Audiovisual · Serviços: Aluguel de espaço · Espaço: Estúdio fotográfico');
+    const notice = composeQuoteRequestNotice({ name: 'A', email: 'a@b.co', phone: '5541988887777', segment: 'audiovisual', services: ['space_rental'], description: 'Diária.', neededBy: null, spaceName: 'Estúdio fotográfico' });
+    expect(notice).toContain('Serviços: Aluguel de espaço\nEspaço: Estúdio fotográfico');
+  });
+
   it('descrição longa cabe no limite do objetivo (2.000)', () => {
     const d = projectDraftFromQuote({ name: 'A', segment: 'other', services: ['other'], description: 'x'.repeat(4000), neededBy: null });
     expect(d.objective.length).toBeLessThanOrEqual(2000);

@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { Field } from '@/components/ui/field';
+import { Checkbox, Field } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
 import { ApiError, apiSend, type Space, uploadSpacePhoto } from '@/lib/api';
 import { centsToInput, parseBRL } from '@/lib/format';
@@ -32,6 +32,7 @@ export function RoomForm({ room, onClose }: { room: Space | null; onClose: () =>
   const [rent, setRent] = useState(room?.rentAmountCents != null ? centsToInput(room.rentAmountCents) : '');
   const [rentDay, setRentDay] = useState(room?.rentDueDay != null ? String(room.rentDueDay) : '10');
   const [tenant, setTenant] = useState(room?.tenantName ?? '');
+  const [showOnSite, setShowOnSite] = useState(room?.showOnSite ?? true);
   const initialHours = useMemo(() => toSimpleHours(room?.availabilityRules ?? []), [room]);
   const [hours, setHours] = useState<SimpleHours>(
     editing ? initialHours : { days: [1, 2, 3, 4, 5, 6], opensAt: '08:00', closesAt: '22:00', mixed: false },
@@ -84,6 +85,7 @@ export function RoomForm({ room, onClose }: { room: Space | null; onClose: () =>
         color,
         icon,
         hourlyRateCents: hourly.trim() ? parseBRL(hourly) : null,
+        showOnSite,
         ...rental,
       };
       let saved: Saved;
@@ -178,19 +180,26 @@ export function RoomForm({ room, onClose }: { room: Space | null; onClose: () =>
             )}
           </Field>
 
-          <Field label="Descrição" hint="Tamanho, equipamentos, para que serve">
+          <Field label="Descrição" hint="Tamanho, equipamentos, para que serve. Também é o texto da página da sala no site.">
             {(id, describedBy) => (
               <Textarea
                 id={id}
                 value={description}
-                maxLength={1000}
-                rows={3}
+                maxLength={3000}
+                rows={4}
                 placeholder="Ex.: 80 m², piso de madeira, espelho e som"
                 aria-describedby={describedBy}
                 onChange={(e) => setDescription(e.target.value)}
               />
             )}
           </Field>
+
+          <div className="flex flex-col gap-1">
+            <Checkbox label="Mostrar no site casakaju.com" checked={showOnSite} onChange={setShowOnSite} />
+            <p className="text-xs text-muted-foreground">
+              Fotos, descrição e capacidade aparecem no site, com pedido de orçamento. Preços nunca aparecem. Pode levar até 5 minutos para atualizar.
+            </p>
+          </div>
 
           <fieldset>
             <legend className="mb-1.5 text-sm font-medium">Situação</legend>

@@ -35,7 +35,7 @@ export function SiteHeader() {
           <a href={SITE.instagram} target="_blank" rel="noopener" aria-label={`Instagram ${SITE.instagramHandle}`} className="hover:text-kaju-rose-deep">
             <InstagramIcon />
           </a>
-          <Link href="/orcamento/" className="btn btn-rose min-h-10 px-5 text-sm">
+          <Link href="/orcamento" className="btn btn-rose min-h-10 px-5 text-sm">
             Solicite um orçamento
           </Link>
         </nav>
@@ -55,7 +55,7 @@ export function SiteHeader() {
             <a href={SITE.instagram} target="_blank" rel="noopener" className="flex min-h-11 items-center gap-2 rounded-lg px-3 font-semibold hover:bg-kaju-blush">
               <InstagramIcon /> Instagram
             </a>
-            <Link href="/orcamento/" className="btn btn-rose mt-2">
+            <Link href="/orcamento" className="btn btn-rose mt-2">
               Solicite um orçamento
             </Link>
           </nav>
@@ -97,7 +97,7 @@ export function SiteFooter() {
           <h2 className="text-sm font-bold uppercase tracking-widest text-kaju-pink">Casa Kaju</h2>
           <ul className="mt-3 space-y-2 text-sm">
             <li>
-              <Link className="hover:underline" href="/orcamento/">
+              <Link className="hover:underline" href="/orcamento">
                 Solicite um orçamento
               </Link>
             </li>

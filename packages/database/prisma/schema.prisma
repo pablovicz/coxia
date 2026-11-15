@@ -706,10 +706,13 @@ model Space {
   rentDueDay      Int?        @map("rent_due_day")
   tenantName      String?     @map("tenant_name")
   sortOrder       Int         @default(0) @map("sort_order")
+  /// Aparece no site público (casakaju.com), com fotos, descrição e pedido de orçamento. Sem preços.
+  showOnSite      Boolean     @default(true) @map("show_on_site")
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  quoteRequests     QuoteRequest[]
   availabilityRules SpaceAvailabilityRule[]
   blocks            SpaceBlock[]
   photos            SpacePhoto[]
@@ -1275,6 +1278,8 @@ model QuoteRequest {
   /// Anotações da equipe (andamento, valor combinado...).
   notes          String?
   source         String             @default("site")
+  /// Sala pedida pela página dela no site.
+  spaceId        String?            @map("space_id")
   /// Projeto criado a partir do orçamento ("Promover a projeto").
   projectId      String?            @unique @map("project_id")
   createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1283,6 +1288,7 @@ model QuoteRequest {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  space        Space?       @relation(fields: [spaceId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status, createdAt])
   @@map("quote_requests")

@@ -151,10 +151,10 @@ const BILLS = [
   bill('c5', 'Telefone', '30', 9900, 0, 'pending'),
 ];
 const QUOTES = [
-  { id: 'q1', contactId: 'ct9', name: 'Marina Lopes', email: 'marina@exemplo.com', phone: '5541988887777', segment: 'theater', services: ['costume', 'props'], description: 'Figurino e adereços para 6 atores. Estreia em dezembro, no Guairinha.', neededBy: '2026-12-20', status: 'new', notes: null, source: 'site', projectId: null, project: null, projectDraft: { title: 'Figurino - Marina Lopes', objective: 'Figurino e adereços para 6 atores. Estreia em dezembro, no Guairinha.\n\nCliente: Marina Lopes · Segmento: Teatro · Serviços: Figurino, Adereços · Para quando: 20/12/2026' }, createdAt: '2026-11-06T13:20:00Z', updatedAt: '2026-11-06T13:20:00Z' },
-  { id: 'q2', contactId: 'ct10', name: 'Estúdio Lume', email: 'contato@lume.co', phone: '5541977776666', segment: 'audiovisual', services: ['space_rental'], description: 'Diária do estúdio fotográfico para um ensaio de moda.', neededBy: null, status: 'new', notes: null, source: 'site', projectId: null, project: null, projectDraft: { title: 'Aluguel de espaço - Estúdio Lume', objective: 'Diária do estúdio fotográfico.' }, createdAt: '2026-11-05T18:00:00Z', updatedAt: '2026-11-05T18:00:00Z' },
-  { id: 'q3', contactId: null, name: 'Pedro Alves', email: 'pedro@exemplo.com', phone: '5541966665555', segment: 'private_event', services: ['set_design'], description: 'Cenografia para festa de 15 anos.', neededBy: '2027-02-10', status: 'contacted', notes: 'Orçamento enviado em 04/11', source: 'site', projectId: null, project: null, projectDraft: { title: 'Cenografia - Pedro Alves', objective: 'Cenografia para festa de 15 anos.' }, createdAt: '2026-11-01T12:00:00Z', updatedAt: '2026-11-04T12:00:00Z' },
-  { id: 'q4', contactId: null, name: 'Cia. Ventania', email: 'cia@ventania.art', phone: '5541955554444', segment: 'theater', services: ['set_design', 'lighting'], description: 'Cenário e luz para o espetáculo Ventania.', neededBy: null, status: 'approved', notes: null, source: 'site', projectId: 'p1', project: { id: 'p1', title: 'XPO' }, projectDraft: { title: 'Cenografia - Cia. Ventania', objective: 'Cenário e luz.' }, createdAt: '2026-10-20T12:00:00Z', updatedAt: '2026-10-25T12:00:00Z' },
+  { id: 'q1', contactId: 'ct9', name: 'Marina Lopes', email: 'marina@exemplo.com', phone: '5541988887777', segment: 'theater', services: ['costume', 'props'], description: 'Figurino e adereços para 6 atores. Estreia em dezembro, no Guairinha.', neededBy: '2026-12-20', status: 'new', notes: null, source: 'site', projectId: null, project: null, space: null, projectDraft: { title: 'Figurino - Marina Lopes', objective: 'Figurino e adereços para 6 atores. Estreia em dezembro, no Guairinha.\n\nCliente: Marina Lopes · Segmento: Teatro · Serviços: Figurino, Adereços · Para quando: 20/12/2026' }, createdAt: '2026-11-06T13:20:00Z', updatedAt: '2026-11-06T13:20:00Z' },
+  { id: 'q2', contactId: 'ct10', name: 'Estúdio Lume', email: 'contato@lume.co', phone: '5541977776666', segment: 'audiovisual', services: ['space_rental'], description: 'Diária do estúdio fotográfico para um ensaio de moda.', neededBy: null, status: 'new', notes: null, source: 'site', projectId: null, project: null, space: { id: 's2', name: 'Estúdio Fotográfico', slug: 'estudio-fotografico' }, projectDraft: { title: 'Estúdio Fotográfico - Estúdio Lume', objective: 'Diária do estúdio fotográfico.' }, createdAt: '2026-11-05T18:00:00Z', updatedAt: '2026-11-05T18:00:00Z' },
+  { id: 'q3', contactId: null, name: 'Pedro Alves', email: 'pedro@exemplo.com', phone: '5541966665555', segment: 'private_event', services: ['set_design'], description: 'Cenografia para festa de 15 anos.', neededBy: '2027-02-10', status: 'contacted', notes: 'Orçamento enviado em 04/11', source: 'site', projectId: null, project: null, space: null, projectDraft: { title: 'Cenografia - Pedro Alves', objective: 'Cenografia para festa de 15 anos.' }, createdAt: '2026-11-01T12:00:00Z', updatedAt: '2026-11-04T12:00:00Z' },
+  { id: 'q4', contactId: null, name: 'Cia. Ventania', email: 'cia@ventania.art', phone: '5541955554444', segment: 'theater', services: ['set_design', 'lighting'], description: 'Cenário e luz para o espetáculo Ventania.', neededBy: null, status: 'approved', notes: null, source: 'site', projectId: 'p1', project: { id: 'p1', title: 'XPO' }, space: null, projectDraft: { title: 'Cenografia - Cia. Ventania', objective: 'Cenário e luz.' }, createdAt: '2026-10-20T12:00:00Z', updatedAt: '2026-10-25T12:00:00Z' },
 ];
 
 /** Detalhe (GET /bills/:id/details) montado a partir das ocorrências simuladas. */
@@ -1388,6 +1388,9 @@ test.describe('interação acessível', () => {
     await dialog.getByRole('radio', { name: 'Piano' }).click();
     await dialog.getByRole('button', { name: 'sábado' }).click(); // tira o sábado
     await dialog.getByLabel('Valor (R$)').fill('1.500,00'); // alugada mensal: valor do aluguel
+    // Alugada para uma residente: não aparece no site.
+    await expect(dialog.getByRole('checkbox', { name: 'Mostrar no site casakaju.com' })).toBeChecked();
+    await dialog.getByRole('checkbox', { name: 'Mostrar no site casakaju.com' }).click();
     const [req] = await Promise.all([
       page.waitForRequest((r) => r.url().endsWith('/spaces') && r.method() === 'POST'),
       dialog.getByRole('button', { name: 'Cadastrar sala' }).click(),
@@ -1402,6 +1405,7 @@ test.describe('interação acessível', () => {
       rentAmountCents: 150000,
       rentDueDay: 10,
       tenantName: null,
+      showOnSite: false,
       availability: [1, 2, 3, 4, 5].map((weekday) => ({ weekday, opensAt: '08:00', closesAt: '22:00' })),
     });
     await expect(dialog).toBeHidden();
@@ -1862,6 +1866,17 @@ test.describe('interação acessível', () => {
     const client = page.getByRole('region', { name: 'Cliente' });
     await expect(client.getByText('marina@exemplo.com')).toBeVisible();
     await expect(client.getByText('20/12/2026')).toBeVisible();
+  });
+
+  test('orçamento pela página da sala no site: lista e detalhe mostram o espaço', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/orcamentos');
+    const panel = page.getByRole('tabpanel');
+    await expect(panel.getByText('Audiovisual · Estúdio Fotográfico')).toBeVisible();
+    await panel.getByRole('button', { name: /Estúdio Lume/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Estúdio Lume' });
+    await expect(dialog.getByText('Espaço', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Estúdio Fotográfico', { exact: true })).toBeVisible();
   });
 
   test('orçamentos: vazio explica de onde vêm; atalho em Contatos', async ({ page }) => {
