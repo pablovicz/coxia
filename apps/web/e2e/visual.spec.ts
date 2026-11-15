@@ -340,9 +340,10 @@ const expense = (id: string, kind: string, description: string, amountCents: num
   source,
 });
 const PROJECTS = [
-  { id: 'p1', title: 'XPO', status: 'active', groupName: 'PROJETO - XPO', activatedAt: '2026-11-02T13:00:00Z', closedAt: null, estimatedBudgetCents: 800000, openTasks: 3, overdueTasks: 1, toReview: 4, paidCents: 48000 },
-  { id: 'p2', title: 'Mostra de Dança', status: 'closing', groupName: 'PROJETO - Mostra de Dança', activatedAt: '2026-10-10T13:00:00Z', closedAt: null, estimatedBudgetCents: null, openTasks: 1, overdueTasks: 0, toReview: 0, paidCents: 0 },
-  { id: 'p3', title: 'Sarau de Verão', status: 'closed', groupName: 'PROJETO - Sarau', activatedAt: '2026-09-01T13:00:00Z', closedAt: '2026-10-20T21:00:00Z', estimatedBudgetCents: 300000, openTasks: 0, overdueTasks: 0, toReview: 0, paidCents: 285000 },
+  { id: 'p1', title: 'XPO', status: 'active', groupName: 'PROJETO - XPO', activatedAt: '2026-11-02T13:00:00Z', closedAt: null, startsOn: null, estimatedBudgetCents: 800000, openTasks: 3, overdueTasks: 1, toReview: 4, paidCents: 48000 },
+  { id: 'p2', title: 'Mostra de Dança', status: 'closing', groupName: 'PROJETO - Mostra de Dança', activatedAt: '2026-10-10T13:00:00Z', closedAt: null, startsOn: '2026-11-01', estimatedBudgetCents: null, openTasks: 1, overdueTasks: 0, toReview: 0, paidCents: 0 },
+  { id: 'p3', title: 'Sarau de Verão', status: 'closed', groupName: 'PROJETO - Sarau', activatedAt: '2026-09-01T13:00:00Z', closedAt: '2026-10-20T21:00:00Z', startsOn: null, estimatedBudgetCents: 300000, openTasks: 0, overdueTasks: 0, toReview: 0, paidCents: 285000 },
+  { id: 'p4', title: 'Festival de Verão', status: 'active', groupName: 'PROJETO - Festival de Verão', activatedAt: '2026-11-04T13:00:00Z', closedAt: null, startsOn: '2026-12-01', estimatedBudgetCents: 500000, openTasks: 2, overdueTasks: 0, toReview: 0, paidCents: 0 },
 ];
 const PROJECT_XPO = {
   id: 'p1',
@@ -367,6 +368,7 @@ const PROJECT_XPO = {
   },
   estimatedBudgetCents: 800000,
   groupCheckIns: true,
+  startsOn: null,
   groupName: 'PROJETO - XPO',
   activatedAt: '2026-11-02T13:00:00Z',
   closingRequestedAt: null,
@@ -772,6 +774,15 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/projects/p1/incomes') return respond(INCOMES.filter((i) => i.projectId === 'p1'));
     if (path === '/whatsapp/disconnect') return route.fulfill({ json: { connected: false } });
     if (/^\/bills(\/rb\d)?$/.test(path) && (method === 'POST' || method === 'PATCH')) return route.fulfill({ status: method === 'POST' ? 201 : 200, json: {} });
+    if (/^\/projects\/p\d\/documents$/.test(path) && method === 'GET')
+      return respond([
+        { id: 'd1', projectId: 'p1', kind: 'document', fileName: 'rider-tecnico.pdf', contentType: 'application/pdf', sizeBytes: 482000, createdAt: '2026-11-02T13:00:00Z' },
+        { id: 'd2', projectId: 'p1', kind: 'sketch', fileName: 'croqui-palco.png', contentType: 'image/png', sizeBytes: 1250000, createdAt: '2026-11-03T13:00:00Z' },
+        { id: 'd3', projectId: 'p1', kind: 'receipt', fileName: 'comprovante-grafica.pdf', contentType: 'application/pdf', sizeBytes: 95000, createdAt: '2026-11-05T13:00:00Z' },
+      ]);
+    if (/^\/projects\/p\d\/documents\/d\d\/file$/.test(path)) return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
+    if (/^\/projects\/p\d\/documents/.test(path) && method !== 'GET')
+      return route.fulfill({ status: 201, json: { id: 'd9', projectId: 'p9', kind: 'document', fileName: 'x.pdf', contentType: 'application/pdf', sizeBytes: 1, createdAt: '2026-11-06T12:00:00Z' } });
     if (path === '/projects/new/group-info')
       return respond({
         prefix: 'PROJETO',
@@ -798,6 +809,8 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/projects/p9/whatsapp-group') return route.fulfill({ status: 200, json: { status: 'created', groupName: 'PROJETO - Mostra de Inverno' } });
     if (path === '/projects') return respond(empty ? [] : PROJECTS);
     if (path === '/projects/p1' && method === 'GET') return respond(PROJECT_XPO);
+    if (path === '/projects/p1' && method === 'PATCH') return route.fulfill({ json: PROJECT_XPO });
+    if (path === '/projects/p1' && method === 'DELETE') return route.fulfill({ json: { ok: true } });
     if (path === '/projects/p3' && method === 'GET') return respond(PROJECT_CLOSED);
     if (path.startsWith('/projects/p1/') && method !== 'GET') return route.fulfill({ status: 200, json: {} });
     if (path === '/ops/overview') return respond(opsDown ? OPS_DOWN : OPS);
@@ -968,21 +981,21 @@ test.describe('golden visual', () => {
     await snap(page, 'project-close-dialog.png');
   });
 
-  test('configurações com operação', async ({ page }) => {
+  test('whatsapp: conexão e operação', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/configuracoes');
-    await expect(page.getByRole('heading', { name: 'Operação' })).toBeVisible();
+    await page.goto('/whatsapp');
+    await expect(page.getByRole('heading', { name: 'WhatsApp.', level: 1 })).toBeVisible();
     await expect(page.getByText('Ana Admin · PROJETO - XPO')).toBeVisible();
-    await snap(page, 'settings-ops.png', { fullPage: true });
+    await snap(page, 'whatsapp.png', { fullPage: true });
   });
 
-  test('operação: WhatsApp desconectado', async ({ page }) => {
+  test('whatsapp desconectado', async ({ page }) => {
     await mockApi(page, { opsDown: true });
-    await page.goto('/configuracoes');
+    await page.goto('/whatsapp');
     const alert = page.getByRole('alert').filter({ hasText: 'WhatsApp desconectado' });
     await expect(alert).toBeVisible();
     await expect(page.getByRole('img', { name: 'QR code para conectar o WhatsApp da Coxia' })).toBeVisible();
-    await snap(page, 'settings-ops-down.png', { fullPage: true });
+    await snap(page, 'whatsapp-down.png', { fullPage: true });
   });
 
   for (const [visao, name, text] of [
@@ -1269,7 +1282,7 @@ test.describe('interação acessível', () => {
 
   test('sem rolagem horizontal', async ({ page }) => {
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/whatsapp', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -1279,7 +1292,7 @@ test.describe('interação acessível', () => {
 
   test('reprocessar mensagem com falha chama a API', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/configuracoes');
+    await page.goto('/whatsapp');
     const [req] = await Promise.all([
       page.waitForRequest((r) => r.url().endsWith('/ops/messages/fm1/retry') && r.method() === 'POST'),
       page.getByRole('button', { name: 'Reprocessar' }).click(),
@@ -1287,11 +1300,26 @@ test.describe('interação acessível', () => {
     expect(req.headers()['idempotency-key']).toBeTruthy();
   });
 
-  test('operação só aparece para administração; "Sair" para todos', async ({ page }) => {
+  test('página WhatsApp só para administração; "Sair" para todos', async ({ page }) => {
     await mockApi(page, { role: 'staff' });
     await page.goto('/configuracoes');
     await expect(page.getByRole('button', { name: 'Sair' }).first()).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Operação' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /WhatsApp/ })).toHaveCount(0);
+    await page.goto('/whatsapp');
+    await expect(page).toHaveURL(/\/$/);
+  });
+
+  test('WhatsApp tem página própria: menu e atalho em Configurações', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/configuracoes');
+    await expect(page.getByText('Envios que não saíram')).toHaveCount(0);
+    await page.getByRole('main').getByRole('link', { name: /WhatsApp da Coxia/ }).click();
+    await expect(page).toHaveURL(/\/whatsapp$/);
+    await expect(page.getByRole('heading', { name: 'WhatsApp.', level: 1 })).toBeVisible();
+    if ((page.viewportSize()?.width ?? 0) >= 1024) {
+      const menu = page.getByRole('complementary', { name: 'Menu principal' });
+      await expect(menu.getByRole('link', { name: 'WhatsApp' })).toHaveAttribute('aria-current', 'page');
+    }
   });
 
   test('no celular, Configurações fica a um toque no cabeçalho', async ({ page }) => {
@@ -1305,7 +1333,7 @@ test.describe('interação acessível', () => {
   test('alvos de toque têm pelo menos 44px no celular', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'só no celular');
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/whatsapp', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
@@ -1390,7 +1418,7 @@ test.describe('interação acessível', () => {
 
   test('WhatsApp desconectado: código de pareamento usa o número da Coxia', async ({ page }) => {
     await mockApi(page, { opsDown: true });
-    await page.goto('/configuracoes');
+    await page.goto('/whatsapp');
     const field = page.getByLabel('Número do WhatsApp da Coxia');
     await expect(field).toHaveValue('5511900000000');
     const [req] = await Promise.all([
@@ -1581,7 +1609,7 @@ test.describe('interação acessível', () => {
       page.waitForRequest((r) => r.url().endsWith('/projects') && r.method() === 'POST'),
       dialog.getByRole('button', { name: 'Criar projeto e grupo' }).click(),
     ]);
-    expect(req.postDataJSON()).toEqual({ title: 'Mostra de Inverno', objective: null, estimatedBudgetCents: 1200000, groupCheckIns: false });
+    expect(req.postDataJSON()).toEqual({ title: 'Mostra de Inverno', objective: null, estimatedBudgetCents: 1200000, groupCheckIns: false, startsOn: null });
     await expect(page.getByText('Projeto criado e grupo “PROJETO - Mostra de Inverno” criado no WhatsApp.')).toBeVisible();
     await expect(page).toHaveURL(/\/projetos\/p9$/);
   });
@@ -1602,6 +1630,114 @@ test.describe('interação acessível', () => {
     ]);
     expect(req).toBeTruthy();
     await expect(page.getByText('Grupo “PROJETO - Mostra de Inverno” criado no WhatsApp.')).toBeVisible();
+  });
+
+  test('documentos do projeto: filtro por tipo, anexar como comprovante e remover', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos/p1');
+    const card = page.getByRole('region', { name: 'Documentos do projeto' });
+    await expect(card.getByText('rider-tecnico.pdf')).toBeVisible();
+    await card.getByRole('radio', { name: /Croquis/ }).click();
+    await expect(card.getByText('croqui-palco.png')).toBeVisible();
+    await expect(card.getByText('rider-tecnico.pdf')).toHaveCount(0);
+    await card.getByRole('radio', { name: 'Todos' }).click();
+
+    await card.getByLabel('Escolher documentos').setInputFiles({ name: 'nota-som.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 nota') });
+    // "nota" no nome já sugere comprovante; dá para trocar.
+    await expect(card.getByLabel('Tipo de nota-som.pdf')).toHaveValue('receipt');
+    const [up] = await Promise.all([
+      page.waitForRequest((r) => r.url().includes('/projects/p1/documents?kind=receipt') && r.method() === 'POST'),
+      card.getByRole('button', { name: 'Enviar documento' }).click(),
+    ]);
+    expect(up.headers()['content-type']).toBe('application/pdf');
+    expect(up.headers()['x-file-name']).toBe('nota-som.pdf');
+
+    const [del] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/projects/p1/documents/d2') && r.method() === 'DELETE'),
+      card.getByRole('button', { name: 'Remover croqui-palco.png' }).click(),
+    ]);
+    expect(del).toBeTruthy();
+  });
+
+  test('editar projeto: nome, objetivo, orçamento e mais documentos', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos/p1');
+    await page.getByRole('button', { name: 'Editar projeto' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Editar XPO' });
+    await dialog.getByLabel('Objetivo (opcional)').fill('Mostra de fim de ano dos alunos de dança');
+    await dialog.getByLabel('Orçamento estimado (R$, opcional)').fill('9.000,00');
+    await dialog.getByLabel('Data de início (opcional)').fill('2026-12-01');
+    await dialog.getByLabel('Escolher documentos').setInputFiles({ name: 'croqui-salao.png', mimeType: 'image/png', buffer: PNG });
+    await expect(dialog.getByLabel('Tipo de croqui-salao.png')).toHaveValue('sketch');
+    const patch = page.waitForRequest((r) => r.url().endsWith('/projects/p1') && r.method() === 'PATCH');
+    const upload = page.waitForRequest((r) => r.url().includes('/projects/p1/documents?kind=sketch') && r.method() === 'POST');
+    await dialog.getByRole('button', { name: 'Salvar' }).click();
+    expect((await patch).postDataJSON()).toEqual({ title: 'XPO', objective: 'Mostra de fim de ano dos alunos de dança', estimatedBudgetCents: 900000, groupCheckIns: true, startsOn: '2026-12-01' });
+    expect(await upload).toBeTruthy();
+  });
+
+  test('novo projeto com documentos: sobem depois da criação, com o tipo de cada um', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos');
+    await page.getByRole('button', { name: 'Novo projeto' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Novo projeto' });
+    await dialog.getByLabel('Nome do projeto').fill('Mostra de Inverno');
+    await dialog.getByLabel('Escolher documentos').setInputFiles([
+      { name: 'briefing.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 a') },
+      { name: 'planta-palco.png', mimeType: 'image/png', buffer: PNG },
+    ]);
+    await expect(dialog.getByLabel('Tipo de planta-palco.png')).toHaveValue('sketch');
+    await dialog.getByLabel('Tipo de briefing.pdf').selectOption('document');
+    const doc = page.waitForRequest((r) => r.url().includes('/projects/p9/documents?kind=document') && r.method() === 'POST');
+    const sketch = page.waitForRequest((r) => r.url().includes('/projects/p9/documents?kind=sketch') && r.method() === 'POST');
+    await dialog.getByRole('button', { name: 'Criar projeto e grupo' }).click();
+    expect((await doc).headers()['x-file-name']).toBe('briefing.pdf');
+    expect((await sketch).headers()['x-file-name']).toBe('planta-palco.png');
+  });
+
+  test('projetos em abas: em andamento, aguardando (início no futuro) e encerrados', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos');
+    const tabs = page.getByRole('tablist', { name: 'Situação dos projetos' });
+    await expect(tabs.getByRole('tab', { name: 'Em andamento (2)' })).toHaveAttribute('aria-selected', 'true');
+    const panel = page.getByRole('tabpanel');
+    // Já começou (início no passado) conta como em andamento.
+    await expect(panel.getByRole('link', { name: /XPO/ })).toBeVisible();
+    await expect(panel.getByRole('link', { name: /Mostra de Dança/ })).toBeVisible();
+    await expect(panel.getByRole('link', { name: /Festival de Verão/ })).toHaveCount(0);
+    await expect(panel.getByRole('link', { name: /Sarau de Verão/ })).toHaveCount(0);
+
+    await tabs.getByRole('tab', { name: 'Aguardando (1)' }).click();
+    await expect(page).toHaveURL(/\?aba=aguardando$/);
+    await expect(panel.getByRole('link', { name: /Festival de Verão/ })).toBeVisible();
+    await expect(panel.getByText('Começa em 01/12/2026')).toBeVisible();
+    await expect(panel.getByRole('link', { name: /XPO/ })).toHaveCount(0);
+
+    await tabs.getByRole('tab', { name: 'Encerrados (1)' }).click();
+    await expect(panel.getByRole('link', { name: /Sarau de Verão/ })).toBeVisible();
+    await expect(panel.getByRole('link', { name: /Festival de Verão/ })).toHaveCount(0);
+
+    await page.goto('/projetos?aba=aguardando');
+    await expect(tabs.getByRole('tab', { name: 'Aguardando (1)' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('excluir projeto: pede confirmação, apaga e volta para a lista', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos/p1');
+    await page.getByRole('button', { name: 'Excluir projeto' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Excluir XPO?' });
+    await expect(dialog.getByText('Não dá para desfazer.', { exact: false })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(dialog).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Excluir projeto' }).click();
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/projects/p1') && r.method() === 'DELETE'),
+      page.getByRole('dialog', { name: 'Excluir XPO?' }).getByRole('button', { name: 'Excluir projeto' }).click(),
+    ]);
+    expect(req).toBeTruthy();
+    await expect(page.getByText('XPO excluído.')).toBeVisible();
+    await expect(page).toHaveURL(/\/projetos$/);
   });
 
   test('novo contato: cadastra; número já existente avisa', async ({ page }) => {
@@ -1762,7 +1898,7 @@ test.describe('interação acessível', () => {
 
   test('desconectar o WhatsApp pede confirmação', async ({ page }) => {
     await mockApi(page);
-    await page.goto('/configuracoes');
+    await page.goto('/whatsapp');
     await page.getByRole('button', { name: 'Desconectar' }).click();
     const dialog = page.getByRole('dialog', { name: 'Desconectar o WhatsApp?' });
     await expect(dialog).toBeVisible();

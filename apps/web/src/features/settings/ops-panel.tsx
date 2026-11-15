@@ -2,13 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, TriangleAlert, Unplug } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/input';
-import { api, apiSend, type DeadDelivery, type FailedMessage, type OpsOverview } from '@/lib/api';
+import { Navigate } from 'react-router';
+import { api, apiSend, canManage, type DeadDelivery, type FailedMessage, type OpsOverview } from '@/lib/api';
 import { local } from '@/lib/format';
+import { useAuth } from '@/providers/auth-provider';
 import { WhatsappConnect } from './whatsapp-connect';
 
 const AI_LABEL: Record<string, string> = {
@@ -27,7 +30,7 @@ function duration(seconds: number): string {
 }
 
 /**
- * Operação: saúde da integração (WhatsApp, filas, IA) e reprocessamento manual.
+ * Página WhatsApp: conexão da Coxia, saúde da integração (filas, IA) e reprocessamento manual.
  * Só administração. Atualiza sozinho a cada 30 s.
  */
 export function OpsPanel({ tz }: { tz: string }) {
@@ -81,25 +84,25 @@ export function OpsPanel({ tz }: { tz: string }) {
   const aiFailures = o?.ai.reduce((n, a) => n + a.failures, 0) ?? 0;
 
   return (
-    <section aria-labelledby="ops-title" className="mt-8">
-      <div className="mb-4 flex items-end justify-between gap-3">
-        <div>
-          <h2 id="ops-title" className="font-display text-2xl font-semibold">
-            Operação
-          </h2>
-          <p className="text-sm text-muted-foreground">WhatsApp, filas e IA nas últimas 24 horas.</p>
-        </div>
-        <div className="flex gap-2">
-          {o && wa?.connected ? (
-            <Button variant="outline" className="text-destructive" onClick={() => setConfirmDisconnect(true)}>
-              <Unplug aria-hidden /> Desconectar
+    <>
+      <PageHeader
+        eyebrow="Integração"
+        title="WhatsApp."
+        description="Conexão da Coxia, envios, mensagens e IA nas últimas 24 horas."
+        action={
+          <div className="flex gap-2">
+            {o && wa?.connected ? (
+              <Button variant="outline" className="text-destructive" onClick={() => setConfirmDisconnect(true)}>
+                <Unplug aria-hidden /> Desconectar
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={refresh} aria-label="Atualizar">
+              <RefreshCw aria-hidden /> <span className="hidden sm:inline">Atualizar</span>
             </Button>
-          ) : null}
-          <Button variant="outline" onClick={refresh} aria-label="Atualizar operação">
-            <RefreshCw aria-hidden /> <span className="hidden sm:inline">Atualizar</span>
-          </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
+      <section aria-label="Operação do WhatsApp">
 
       {confirmDisconnect ? (
         <Dialog
@@ -283,6 +286,14 @@ export function OpsPanel({ tz }: { tz: string }) {
           </div>
         </>
       )}
-    </section>
+      </section>
+    </>
   );
+}
+
+/** /whatsapp: só administração; quem não é vai para a visão geral. */
+export function WhatsappPage() {
+  const { session } = useAuth();
+  if (!canManage(session?.user.role)) return <Navigate to="/" replace />;
+  return <OpsPanel tz={session?.organization.timezone ?? 'America/Sao_Paulo'} />;
 }

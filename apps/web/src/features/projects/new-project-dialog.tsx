@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
-import { api, apiSend, type CreateProjectResult, type ProjectGroupInfo } from '@/lib/api';
-import { parseBRL } from '@/lib/format';
+import { api, apiSend, type CreateProjectResult, type ProjectDetail, type ProjectGroupInfo } from '@/lib/api';
+import { centsToInput, parseBRL } from '@/lib/format';
+import { type PendingDocument, PendingDocuments, uploadPending } from './project-documents';
 
 /** Mesmo corte do servidor: "PROJETO - XPO" digitado vira só "XPO". */
 function bareTitle(title: string, prefix: string) {
@@ -31,6 +32,8 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   const [objective, setObjective] = useState('');
   const [budget, setBudget] = useState('');
   const [checkIns, setCheckIns] = useState(false);
+  const [startsOn, setStartsOn] = useState('');
+  const [pending, setPending] = useState<PendingDocument[]>([]);
   const [error, setError] = useState<string | null>(null);
   const prefix = info.data?.prefix ?? 'PROJETO';
   const name = bareTitle(title, prefix);
@@ -39,11 +42,17 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   const canCreateGroup = !!info.data?.whatsappConnected && withPhone.length > 0;
 
   const save = useMutation({
-    mutationFn: (body: unknown) => apiSend<CreateProjectResult>('/projects', 'POST', body),
+    mutationFn: async (body: unknown) => {
+      const r = await apiSend<CreateProjectResult>('/projects', 'POST', body);
+      // Documentos sobem depois (precisam do id do projeto); falha em um não desfaz o projeto.
+      const docs = pending.length ? await uploadPending(r.project.id, pending) : { ok: 0, errors: [] as string[] };
+      return { ...r, docs };
+    },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['projects'] });
       if (r.group.status === 'created') toast.success(`Projeto criado e grupo “${r.group.groupName}” criado no WhatsApp.`);
       else toast.warning(`Projeto criado. O grupo ficou para depois: ${r.group.reason}.`);
+      if (r.docs.errors.length) toast.error(`Alguns documentos não subiram: ${r.docs.errors.join(' ')}`);
       onClose();
       navigate(`/projetos/${r.project.id}`);
     },
@@ -56,7 +65,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
     if (!name) return setError('Informe o nome do projeto.');
     const cents = budget.trim() ? parseBRL(budget) : null;
     if (budget.trim() && cents === null) return setError('Orçamento inválido. Use, por exemplo, 8.000,00.');
-    save.mutate({ title: name, objective: objective.trim() || null, estimatedBudgetCents: cents, groupCheckIns: checkIns });
+    save.mutate({ title: name, objective: objective.trim() || null, estimatedBudgetCents: cents, groupCheckIns: checkIns, startsOn: startsOn || null });
   }
 
   return (
@@ -86,7 +95,11 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
           <Field label="Orçamento estimado (R$, opcional)">
             {(id) => <Input id={id} inputMode="decimal" className="tabular" value={budget} placeholder="0,00" onChange={(e) => setBudget(e.target.value)} />}
           </Field>
+          <Field label="Data de início (opcional)" hint="Com data no futuro, o projeto fica em “Aguardando” até começar">
+            {(id, describedBy) => <Input id={id} type="date" className="sm:w-52" value={startsOn} aria-describedby={describedBy} onChange={(e) => setStartsOn(e.target.value)} />}
+          </Field>
           <Checkbox label="Check-in diário de pendências no grupo" checked={checkIns} onChange={setCheckIns} />
+          <PendingDocuments value={pending} onChange={setPending} onError={setError} />
         </div>
 
         <div className="flex flex-col gap-4">
@@ -154,5 +167,79 @@ export function CreateWhatsappGroupCard({ projectId }: { projectId: string }) {
         <MessageCircle aria-hidden /> Criar no WhatsApp
       </Button>
     </div>
+  );
+}
+
+/** Editar projeto: nome, objetivo, orçamento, check-in e mais documentos. */
+export function EditProjectDialog({ project, onClose }: { project: ProjectDetail; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [title, setTitle] = useState(project.title);
+  const [objective, setObjective] = useState(project.objective ?? '');
+  const [budget, setBudget] = useState(project.estimatedBudgetCents != null ? centsToInput(project.estimatedBudgetCents) : '');
+  const [checkIns, setCheckIns] = useState(project.groupCheckIns);
+  const [startsOn, setStartsOn] = useState(project.startsOn ?? '');
+  const [pending, setPending] = useState<PendingDocument[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: async (body: unknown) => {
+      await apiSend(`/projects/${project.id}`, 'PATCH', body);
+      return pending.length ? uploadPending(project.id, pending) : { ok: 0, errors: [] as string[] };
+    },
+    onSuccess: (docs) => {
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      toast.success(docs.ok ? `Projeto atualizado; ${docs.ok === 1 ? '1 documento anexado' : `${docs.ok} documentos anexados`}.` : 'Projeto atualizado.');
+      if (docs.errors.length) toast.error(`Alguns documentos não subiram: ${docs.errors.join(' ')}`);
+      onClose();
+    },
+    onError: (e) => setError(e.message),
+  });
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!title.trim()) return setError('Informe o nome do projeto.');
+    const cents = budget.trim() ? parseBRL(budget) : null;
+    if (budget.trim() && cents === null) return setError('Orçamento inválido. Use, por exemplo, 8.000,00.');
+    save.mutate({ title: title.trim(), objective: objective.trim() || null, estimatedBudgetCents: cents, groupCheckIns: checkIns, startsOn: startsOn || null });
+  }
+  return (
+    <Dialog
+      open
+      size="wide"
+      onOpenChange={(v) => !v && onClose()}
+      title={`Editar ${project.title}`}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="edit-project" loading={save.isPending}>
+            Salvar
+          </Button>
+        </>
+      }
+    >
+      <form id="edit-project" onSubmit={submit} noValidate className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
+        <div className="flex flex-col gap-4">
+          <Field label="Nome do projeto">{(id) => <Input id={id} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />}</Field>
+          <Field label="Objetivo (opcional)">{(id) => <Textarea id={id} rows={4} value={objective} maxLength={2000} onChange={(e) => setObjective(e.target.value)} />}</Field>
+          <Field label="Orçamento estimado (R$, opcional)">
+            {(id) => <Input id={id} inputMode="decimal" className="tabular" value={budget} placeholder="0,00" onChange={(e) => setBudget(e.target.value)} />}
+          </Field>
+          <Field label="Data de início (opcional)" hint="Com data no futuro, o projeto fica em “Aguardando” até começar">
+            {(id, describedBy) => <Input id={id} type="date" className="sm:w-52" value={startsOn} aria-describedby={describedBy} onChange={(e) => setStartsOn(e.target.value)} />}
+          </Field>
+          <Checkbox label="Check-in diário de pendências no grupo" checked={checkIns} onChange={setCheckIns} />
+        </div>
+        <div className="flex flex-col gap-4">
+          <PendingDocuments value={pending} onChange={setPending} onError={setError} />
+          <p className="text-sm text-muted-foreground">Os documentos já anexados ficam no quadro “Documentos” do projeto.</p>
+        </div>
+      </form>
+      {error ? (
+        <p role="alert" className="mt-4 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </Dialog>
   );
 }

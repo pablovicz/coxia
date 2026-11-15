@@ -18,7 +18,19 @@ export async function createApp(env: ApiEnv): Promise<NestExpressApplication> {
   app.useBodyParser('json', { limit: '1mb' });
   // Fotos de sala chegam como corpo bruto; o controller confere tipo (bytes iniciais) e tamanho.
   // Corpo bruto: fotos das salas (até 5 MB) e comprovantes de pagamento (foto ou PDF, até 10 MB).
-  app.useBodyParser('raw', { type: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'], limit: '11mb' });
+  // Documentos de projeto também aceitam Word, Excel e PowerPoint (até 20 MB).
+  app.useBodyParser('raw', {
+    type: [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ],
+    limit: '21mb',
+  });
   app.enableCors({
     origin: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
     credentials: false,

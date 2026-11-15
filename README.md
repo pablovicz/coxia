@@ -25,9 +25,9 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 | Tela **Contatos** (`/contatos`): quem está nos grupos do WhatsApp da casa, com busca por nome (sem acento) ou trecho do telefone, filtro por grupo, histórico de entrada/saída dos grupos, marca de quem é da equipe, nome e observações dados pela equipe; perfil leitura não vê (telefone é dado pessoal) | `apps/web/src/features/contacts`, `packages/domain/src/contacts.ts` |
 | Contatos entram sozinhos: quem escreve (grupo ou conversa direta), avisos de participante adicionado/removido e a lista completa de participantes da Z-API (`group-metadata`, que traz os nomes) — na primeira mensagem do grupo, a cada aviso de entrada/saída e a cada 6 h (grupos com movimento nos últimos 90 dias); o número da própria Coxia fica de fora | `apps/worker/src/inbound/group-contacts.service.ts` |
 | **Cartão de contato** enviado pela equipe (conversa direta ou grupo) vira contato: cada telefone do cartão (lista `phones` da Z-API ou, sem ela, o vCard), com o nome do cartão sem sobrescrever o nome dado pela equipe. Em conversa direta a Coxia confirma ("📇 Contato salvo: …"); em grupo, fica em silêncio. Cartão de quem não é da equipe é ignorado | `ContactService.saveFromCards`, `contactCardReply`, `extractContacts` no normalizador |
-| WhatsApp desconectado: a tela de operação mostra o **QR code** (renovado a cada 15 s, até 3 vezes) e a opção de **código de pareamento** pelo número; fecha sozinha quando a sessão volta e retoma a fila. Só administração; pedidos auditados, sem cache | `apps/web/src/features/settings/whatsapp-connect.tsx`, `GET /whatsapp/qr-code`, `POST /whatsapp/phone-code` |
+| WhatsApp desconectado: a página **WhatsApp** (`/whatsapp`) mostra o **QR code** (renovado a cada 15 s, até 3 vezes) e a opção de **código de pareamento** pelo número; fecha sozinha quando a sessão volta e retoma a fila. Só administração; pedidos auditados, sem cache | `apps/web/src/features/settings/whatsapp-connect.tsx`, `GET /whatsapp/qr-code`, `POST /whatsapp/phone-code` |
 
-| Botão **Desconectar** na operação (com confirmação): encerra a sessão na Z-API, pausa a fila na hora e mostra o QR code para conectar de novo | `POST /whatsapp/disconnect` |
+| Botão **Desconectar** na página WhatsApp (com confirmação): encerra a sessão na Z-API, pausa a fila na hora e mostra o QR code para conectar de novo | `POST /whatsapp/disconnect` |
 
 ### Contas e lembretes separados (pós-Etapa 4)
 
@@ -81,6 +81,10 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 | **Novo projeto** (nome obrigatório; objetivo, orçamento e check-in opcionais). O título fica sem o prefixo, mesmo que digitem "PROJETO - XPO"; nome repetido em andamento é recusado | `ProjectService.createFromWeb`, `features/projects/new-project-dialog.tsx` |
 | A Coxia cria o grupo **"PROJETO - Nome"** (prefixo da organização) com ela e **todas as administradoras** com telefone (dona e admins), liga ao projeto e manda as boas-vindas; quem está sem telefone aparece no formulário | `POST /projects`, Z-API `create-group`, `ProjectService.adminPhones`, `linkCreatedGroup` |
 | WhatsApp desconectado (ou falha na Z-API): o projeto é criado e a página dele mostra **"Criar no WhatsApp"** para tentar de novo | `POST /projects/:id/whatsapp-group` |
+| **Documentos do projeto** de três tipos (documento, **croqui**, **comprovante**): PDF, foto ou Word/Excel/PowerPoint até 20 MB, tipo conferido pelos bytes. Anexados na criação, em **Editar projeto** ou no quadro "Documentos" (filtro por tipo, abrir, remover) | `project_documents`, `/projects/:id/documents`, `features/projects/project-documents.tsx` |
+| **Editar projeto**: nome, objetivo, orçamento, data de início, check-in e mais documentos | `EditProjectDialog`, `PATCH /projects/:id` |
+| **Abas em Projetos**: Em andamento, **Aguardando** (data de início no futuro, com "Começa em dd/mm/aaaa") e Encerrados; a aba fica na URL (`?aba=`) | `projects.starts_on`, `projects-page.tsx` |
+| **Excluir projeto** (administração), com confirmação: saem tarefas, decisões, despesas, relatório e documentos (também do bucket); compromissos, lembretes e entradas ficam sem o vínculo. O grupo do WhatsApp continua, mas não vira projeto de novo sozinho | `DELETE /projects/:id`, `whatsapp_groups.activation_blocked_at` |
 
 ### Residentes, contatos e equipe (pós-Etapa 4)
 
@@ -121,7 +125,7 @@ As séries semanais são geradas até 182 dias à frente: nas visões de semestr
 | Testes de concorrência com Postgres real; corrigidos: pagamentos simultâneos que se sobrescreviam, conta quitada várias vezes, mesmo comprovante em duas contas, revisões/encerramento duplicados | `packages/domain/test/concurrency.int.test.ts` |
 | Outbox pausa com o WhatsApp desconectado (sem gastar tentativas) e retoma sozinho; quedas e retornos auditados | `apps/worker/src/maintenance` |
 | Toda chamada à IA registrada (sucesso e falha, tokens, latência); mensagens presas em `processing` voltam à fila | `packages/domain/src/ai-tracking.ts` |
-| Tela de operação (admin): conexão, filas, atraso, envios, IA por operação, reprocessar falhas e dead-letter | `apps/api/src/ops`, `apps/web/src/features/settings` |
+| Página **WhatsApp** (`/whatsapp`, só administração, no menu e com atalho em Configurações): conexão, filas, atraso, envios, IA por operação, reprocessar falhas e dead-letter | `apps/api/src/ops`, `apps/web/src/features/settings` |
 | Retenção diária: apaga texto, payload, transcrição e mídia antigos; guarda comprovantes | `MaintenanceService.applyRetention` |
 | Segurança: papel conferido no banco a cada requisição (revogação imediata), limite de tentativas de login, overrides de dependências vulneráveis | `apps/api/src/auth` |
 | Celular: alvos de toque ≥ 44px verificados por teste, acesso a Configurações/Sair no cabeçalho | `apps/web` |

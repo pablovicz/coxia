@@ -1,9 +1,9 @@
-import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, LogOut, ReceiptText, Settings, Users } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, LogOut, MessageCircle, ReceiptText, Settings, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { ThemeSwitch } from '@/components/theme-switch';
 import { UserAvatar } from '@/components/user-avatar';
 import { Button } from '@/components/ui/button';
-import { canSeeContacts } from '@/lib/api';
+import { canManage, canSeeContacts } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -21,6 +21,8 @@ export const NAV_ITEMS = [
   { to: '/contatos', label: 'Contatos', short: 'Contatos', icon: Users, mobile: true, team: true },
   // Residentes: no celular, pelo botão no topo de Contatos.
   { to: '/residentes', label: 'Residentes', short: 'Residentes', icon: UserCheck, mobile: false, team: true },
+  // Conexão e operação do WhatsApp: só administração; no celular, pelo atalho em Configurações.
+  { to: '/whatsapp', label: 'WhatsApp', short: 'WhatsApp', icon: MessageCircle, mobile: false, admin: true },
   { to: '/configuracoes', label: 'Configurações', short: 'Ajustes', icon: Settings, mobile: false },
 ] as const;
 
@@ -43,7 +45,10 @@ function Brand() {
  */
 export function AppShell() {
   const { session, logout } = useAuth();
-  const items = NAV_ITEMS.filter((i) => !('team' in i) || canSeeContacts(session?.user.role));
+  const role = session?.user.role;
+  const items = NAV_ITEMS.filter(
+    (i) => (!('team' in i) || canSeeContacts(role)) && (!('admin' in i) || canManage(role)),
+  );
   const mobileItems = items.filter((i) => i.mobile);
 
   return (

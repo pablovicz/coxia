@@ -237,6 +237,7 @@ model Organization {
   reminders              Reminder[]
   appointments           Appointment[]
   residents              Resident[]
+  projectDocuments       ProjectDocument[]
   recurringBills         RecurringBill[]
   billOccurrences        BillOccurrence[]
   paymentAttachments     PaymentAttachment[]
@@ -309,16 +310,18 @@ model WhatsappInstance {
 }
 
 model WhatsappGroup {
-  id               String    @id @default(cuid())
-  organizationId   String    @map("organization_id")
-  instanceId       String    @map("instance_id")
+  id                  String    @id @default(cuid())
+  organizationId      String    @map("organization_id")
+  instanceId          String    @map("instance_id")
   /// ID estável do grupo no provedor. Nunca usar o nome como chave.
-  externalGroupId  String    @map("external_group_id")
-  name             String?
-  lastSeenAt       DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  externalGroupId     String    @map("external_group_id")
+  name                String?
+  lastSeenAt          DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
   /// Última leitura da lista de participantes no provedor (contatos).
-  contactsSyncedAt DateTime? @map("contacts_synced_at") @db.Timestamptz(6)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  contactsSyncedAt    DateTime? @map("contacts_synced_at") @db.Timestamptz(6)
+  /// Projeto deste grupo foi excluído: mensagens novas não criam outro projeto sozinhas.
+  activationBlockedAt DateTime? @map("activation_blocked_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
 
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   instance       WhatsappInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
@@ -476,6 +479,8 @@ model Project {
   currency             String        @default("BRL")
   createdByPhone       String?       @map("created_by_phone")
   activatedAt          DateTime?     @map("activated_at") @db.Timestamptz(6)
+  /// Data de início (opcional): no futuro, o projeto fica em "Aguardando".
+  startsOn             DateTime?     @map("starts_on") @db.Date
   closingRequestedAt   DateTime?     @map("closing_requested_at") @db.Timestamptz(6)
   closedAt             DateTime?     @map("closed_at") @db.Timestamptz(6)
   closedByPhone        String?       @map("closed_by_phone")
@@ -492,6 +497,7 @@ model Project {
   summaries    ProjectSummary[]
 
   appointments Appointment[]
+  documents    ProjectDocument[]
   reminders    Reminder[]
 
   @@index([organizationId, status])
@@ -1208,4 +1214,32 @@ model Resident {
 
   @@index([organizationId])
   @@map("residents")
+}
+
+// ───────────── Documentos do projeto (enviados pelo painel) ─────────────
+
+enum ProjectDocumentKind {
+  document
+  sketch
+  receipt
+}
+
+/// Arquivo do projeto: documento geral, croqui ou comprovante. O arquivo fica no bucket (privado).
+model ProjectDocument {
+  id               String              @id @default(cuid())
+  organizationId   String              @map("organization_id")
+  projectId        String              @map("project_id")
+  kind             ProjectDocumentKind @default(document)
+  fileName         String              @map("file_name")
+  contentType      String              @map("content_type")
+  sizeBytes        Int                 @map("size_bytes")
+  storageKey       String              @map("storage_key")
+  uploadedByUserId String?             @map("uploaded_by_user_id")
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, kind])
+  @@map("project_documents")
 }

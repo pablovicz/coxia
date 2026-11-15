@@ -13,6 +13,8 @@ const createProjectSchema = z.object({
   objective: z.string().max(2000).nullish(),
   estimatedBudgetCents: z.number().int().nonnegative().nullish(),
   groupCheckIns: z.boolean().optional(),
+  /** Data de início (YYYY-MM-DD); no futuro o projeto fica em "Aguardando". */
+  startsOn: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/).nullish(),
   /** false: só cria o projeto (o grupo fica para "Criar no WhatsApp"). */
   createGroup: z.boolean().optional(),
 });

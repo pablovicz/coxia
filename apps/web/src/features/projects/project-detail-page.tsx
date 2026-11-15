@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, FileAudio, ListChecks, Paperclip, Plus } from 'lucide-react';
+import { ChevronLeft, FileAudio, ListChecks, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { EmptyState, PageHeader } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +25,8 @@ import {
 } from '@/lib/api';
 import { formatBRL, local, todayIn } from '@/lib/format';
 import { useAuth } from '@/providers/auth-provider';
-import { CreateWhatsappGroupCard } from './new-project-dialog';
+import { CreateWhatsappGroupCard, EditProjectDialog } from './new-project-dialog';
+import { ProjectDocumentsCard } from './project-documents';
 import { EXPENSE_STATUS, PROJECT_STATUS, TASK_STATUS } from './status';
 
 const dayMonth = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -39,6 +40,8 @@ export function ProjectDetailPage() {
   const role = session?.user.role;
   const project = useQuery({ queryKey: ['projects', id], queryFn: () => api<ProjectDetail>(`/projects/${id}`) });
   const [closing, setClosing] = useState(false);
+  const [editingProject, setEditingProject] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [newTask, setNewTask] = useState(false);
 
   if (project.isPending) {
@@ -85,9 +88,17 @@ export function ProjectDetailPage() {
         description={p.objective ?? 'Objetivo ainda não definido: mande o briefing em áudio no grupo.'}
         action={
           admin ? (
-            <Button variant="outline" onClick={() => setClosing(true)}>
-              Encerrar projeto
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setEditingProject(true)}>
+                <Pencil aria-hidden /> Editar projeto
+              </Button>
+              <Button variant="outline" onClick={() => setClosing(true)}>
+                Encerrar projeto
+              </Button>
+              <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleting(true)}>
+                <Trash2 aria-hidden /> Excluir projeto
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -140,6 +151,7 @@ export function ProjectDetailPage() {
         </div>
         <div className="grid min-w-0 content-start gap-4 [&>*]:min-w-0">
           <BriefingCard project={p} />
+          <ProjectDocumentsCard projectId={p.id} canUpload={staff} canDelete={admin} />
           <Card>
             <CardHeader>
               <CardTitle>Decisões</CardTitle>
@@ -169,6 +181,8 @@ export function ProjectDetailPage() {
       </div>
 
       {closing ? <CloseDialog project={p} onClose={() => setClosing(false)} /> : null}
+      {editingProject ? <EditProjectDialog project={p} onClose={() => setEditingProject(false)} /> : null}
+      {deleting ? <DeleteProjectDialog project={p} onClose={() => setDeleting(false)} /> : null}
       {newTask ? <TaskDialog projectId={p.id} onClose={() => setNewTask(false)} /> : null}
     </>
   );
@@ -506,6 +520,53 @@ function SettingsCard({ project: p }: { project: ProjectDetail }) {
         <p className="text-[13px] text-muted-foreground">No horário do briefing, só quando houver tarefa atrasada ou vencendo.</p>
       </CardContent>
     </Card>
+  );
+}
+
+/** Exclusão definitiva: diferente de encerrar, não guarda histórico. */
+function DeleteProjectDialog({ project: p, onClose }: { project: ProjectDetail; onClose: () => void }) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const remove = useMutation({
+    mutationFn: () => apiSend(`/projects/${p.id}`, 'DELETE'),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ['projects', p.id] });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['overview'] });
+      toast.success(`${p.title} excluído.`);
+      navigate('/projetos', { replace: true });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => !v && onClose()}
+      title={`Excluir ${p.title}?`}
+      description="Não dá para desfazer. Para guardar o histórico, use “Encerrar projeto”."
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="destructive" loading={remove.isPending} onClick={() => remove.mutate()}>
+            Excluir projeto
+          </Button>
+        </>
+      }
+    >
+      <div className="rounded-md bg-muted p-4 text-sm">
+        <p className="font-medium">Saem junto com o projeto:</p>
+        <ul className="mt-1 list-inside list-disc text-muted-foreground">
+          <li>tarefas, decisões, despesas e o relatório</li>
+          <li>documentos, croquis e comprovantes anexados</li>
+        </ul>
+        <p className="mt-2 text-muted-foreground">
+          Compromissos, lembretes e entradas ficam, sem o vínculo.
+          {p.groupName ? ` O grupo “${p.groupName}” continua no WhatsApp, mas não vira projeto de novo sozinho.` : ''}
+        </p>
+      </div>
+    </Dialog>
   );
 }
 

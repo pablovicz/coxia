@@ -207,6 +207,58 @@ export interface RecurringBill {
 export type PaymentMethod = 'boleto' | 'pix' | 'credit_card';
 export const PAYMENT_METHODS: Record<PaymentMethod, string> = { boleto: 'Boleto', pix: 'PIX', credit_card: 'Cartão de crédito' };
 
+// ───────────── Documentos do projeto ─────────────
+
+export type ProjectDocumentKind = 'document' | 'sketch' | 'receipt';
+export const DOCUMENT_KINDS: Record<ProjectDocumentKind, { label: string; plural: string }> = {
+  document: { label: 'Documento', plural: 'Documentos' },
+  sketch: { label: 'Croqui', plural: 'Croquis' },
+  receipt: { label: 'Comprovante', plural: 'Comprovantes' },
+};
+export const DOCUMENT_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
+export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
+
+export interface ProjectDocument {
+  id: string;
+  projectId: string;
+  kind: ProjectDocumentKind;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export async function uploadProjectDocument(projectId: string, kind: ProjectDocumentKind, file: File): Promise<ProjectDocument> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/projects/${projectId}/documents?kind=${kind}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  if (res.status === 401) {
+    tokenStore.set(null);
+    window.dispatchEvent(new Event('coxia:unauthorized'));
+  }
+  const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
+  if (!res.ok) throw new ApiBodyError(res.status, json);
+  return json as unknown as ProjectDocument;
+}
+
+export async function fetchProjectDocument(projectId: string, documentId: string): Promise<Blob> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/projects/${projectId}/documents/${documentId}/file`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
+  return res.blob();
+}
+
 /** Formulário de novo projeto: prefixo do grupo, WhatsApp e quem entra. */
 export interface ProjectGroupInfo {
   prefix: string;
@@ -410,6 +462,8 @@ export interface ProjectListItem {
   groupName: string | null;
   activatedAt: string | null;
   closedAt: string | null;
+  /** Data de início (YYYY-MM-DD); no futuro, o projeto está "Aguardando". */
+  startsOn: string | null;
   estimatedBudgetCents: number | null;
   openTasks: number;
   overdueTasks: number;
@@ -483,6 +537,7 @@ export interface ProjectDetail {
   briefing: ProjectBriefing | null;
   estimatedBudgetCents: number | null;
   groupCheckIns: boolean;
+  startsOn: string | null;
   groupName: string | null;
   activatedAt: string | null;
   closingRequestedAt: string | null;

@@ -12,6 +12,7 @@ import { ResidentDetailPage } from '@/features/residents/resident-detail-page';
 import { ResidentsPage } from '@/features/residents/residents-page';
 import { TeamCalendarPage } from '@/features/calendar/team-calendar-page';
 import { SettingsPage } from '@/features/settings/settings-page';
+import { WhatsappPage } from '@/features/settings/ops-panel';
 import { AgendaPage } from '@/features/rooms/agenda-page';
 import { RoomsPage } from '@/features/rooms/rooms-page';
 import { useAuth } from '@/providers/auth-provider';
@@ -47,6 +48,7 @@ export function App() {
           <Route path="residentes" element={<ResidentsPage />} />
           <Route path="residentes/:id" element={<ResidentDetailPage />} />
           <Route path="contatos" element={<ContactsPage />} />
+          <Route path="whatsapp" element={<WhatsappPage />} />
           <Route path="configuracoes" element={<SettingsPage />} />
         </Route>
       </Route>

@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, FolderKanban, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { DateTime } from 'luxon';
+import { Link, useSearchParams } from 'react-router';
 import { EmptyState, PageHeader } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,16 +11,40 @@ import { Skeleton } from '@/components/ui/input';
 import { api, canManage, type ProjectListItem } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { NewProjectDialog } from './new-project-dialog';
-import { formatBRL } from '@/lib/format';
+import { formatBRL, todayIn } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { PROJECT_STATUS } from './status';
+
+type Tab = 'andamento' | 'aguardando' | 'encerrados';
+
+const TABS: Array<{ id: Tab; label: string; empty: string }> = [
+  { id: 'andamento', label: 'Em andamento', empty: 'Nenhum projeto em andamento no momento.' },
+  { id: 'aguardando', label: 'Aguardando', empty: 'Nenhum projeto com início marcado para o futuro.' },
+  { id: 'encerrados', label: 'Encerrados', empty: 'Nenhum projeto encerrado ainda.' },
+];
+
+/** Encerrado; aguardando (início no futuro); ou em andamento (o resto). */
+export function projectTab(p: Pick<ProjectListItem, 'status' | 'startsOn'>, today: string): Tab {
+  if (p.status === 'closed') return 'encerrados';
+  return p.startsOn && p.startsOn > today ? 'aguardando' : 'andamento';
+}
 
 export function ProjectsPage() {
   const { session } = useAuth();
   const admin = canManage(session?.user.role);
+  const tz = session?.organization.timezone ?? 'America/Sao_Paulo';
+  const today = todayIn(tz);
   const [creating, setCreating] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = TABS.some((t) => t.id === params.get('aba')) ? (params.get('aba') as Tab) : 'andamento';
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => api<ProjectListItem[]>('/projects') });
-  const open = (projects.data ?? []).filter((p) => p.status !== 'closed');
-  const closed = (projects.data ?? []).filter((p) => p.status === 'closed');
+  const all = projects.data ?? [];
+  const byTab = (t: Tab) => all.filter((p) => projectTab(p, today) === t);
+  const list =
+    tab === 'aguardando'
+      ? byTab(tab).sort((a, b) => (a.startsOn ?? '').localeCompare(b.startsOn ?? ''))
+      : byTab(tab);
+  const current = TABS.find((t) => t.id === tab)!;
 
   return (
     <>
@@ -46,31 +71,47 @@ export function ProjectsPage() {
         <p role="alert" className="text-sm text-destructive">
           Não foi possível carregar os projetos.
         </p>
-      ) : projects.data.length === 0 ? (
+      ) : all.length === 0 ? (
         <EmptyState icon={FolderKanban} title="Nenhum projeto ativo">
           Crie aqui em “Novo projeto” (a Coxia monta o grupo no WhatsApp) ou crie no WhatsApp um grupo “PROJETO - Nome” com o número da Coxia.
         </EmptyState>
       ) : (
         <>
-          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Projetos ativos">
-            {open.map((p) => (
-              <ProjectCard key={p.id} project={p} />
+          <div
+            role="tablist"
+            aria-label="Situação dos projetos"
+            className="mb-4 grid grid-cols-3 gap-1 rounded-md border bg-card p-1 sm:inline-grid sm:w-auto"
+          >
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                id={`tab-${t.id}`}
+                aria-selected={tab === t.id}
+                aria-controls="panel-projetos"
+                onClick={() => setParams(t.id === 'andamento' ? {} : { aba: t.id }, { replace: true })}
+                className={cn(
+                  'min-h-11 rounded-sm px-3 text-sm font-medium text-muted-foreground sm:px-4 lg:min-h-9',
+                  tab === t.id && 'bg-primary text-primary-foreground',
+                )}
+              >
+                {t.label} <span className="tabular opacity-80">({byTab(t.id).length})</span>
+              </button>
             ))}
-          </ul>
-          {open.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum projeto ativo no momento.</p> : null}
+          </div>
 
-          {closed.length ? (
-            <section className="mt-8" aria-labelledby="encerrados">
-              <h2 id="encerrados" className="mb-3 text-sm font-semibold text-muted-foreground">
-                Encerrados
-              </h2>
-              <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {closed.map((p) => (
-                  <ProjectCard key={p.id} project={p} />
+          <div id="panel-projetos" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+            {list.length ? (
+              <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label={`Projetos: ${current.label}`}>
+                {list.map((p) => (
+                  <ProjectCard key={p.id} project={p} waiting={tab === 'aguardando'} />
                 ))}
               </ul>
-            </section>
-          ) : null}
+            ) : (
+              <p className="text-sm text-muted-foreground">{current.empty}</p>
+            )}
+          </div>
         </>
       )}
       {creating ? <NewProjectDialog onClose={() => setCreating(false)} /> : null}
@@ -78,7 +119,7 @@ export function ProjectsPage() {
   );
 }
 
-function ProjectCard({ project: p }: { project: ProjectListItem }) {
+function ProjectCard({ project: p, waiting }: { project: ProjectListItem; waiting: boolean }) {
   const status = PROJECT_STATUS[p.status];
   const tasks = p.openTasks ? `${p.openTasks} tarefa${p.openTasks > 1 ? 's' : ''} em aberto` : 'Nenhuma tarefa em aberto';
   return (
@@ -101,7 +142,11 @@ function ProjectCard({ project: p }: { project: ProjectListItem }) {
             <ChevronRight size={18} aria-hidden className="mt-1 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant={status.variant}>{status.label}</Badge>
+            {waiting && p.startsOn ? (
+              <Badge variant="info">Começa em {DateTime.fromISO(p.startsOn).toFormat('dd/LL/yyyy')}</Badge>
+            ) : (
+              <Badge variant={status.variant}>{status.label}</Badge>
+            )}
             {p.toReview ? <Badge variant="info">{p.toReview} para revisar</Badge> : null}
             {p.overdueTasks ? <Badge variant="late">! {p.overdueTasks} atrasada{p.overdueTasks > 1 ? 's' : ''}</Badge> : null}
           </div>

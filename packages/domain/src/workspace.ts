@@ -95,6 +95,7 @@ export class ProjectWorkspaceService {
     let projectId = ctx.projectId;
     if (!projectId) {
       if (!isManager || !ctx.senderPhone || !ctx.groupName) return { projectId: null, reply: null, actions: ['not_authorized_to_activate'] };
+      if (await this.projects.isActivationBlocked(ctx.whatsappGroupId)) return { projectId: null, reply: null, actions: ['activation_blocked'] };
       const { project, created } = await this.projects.activateFromGroup(
         ctx.organizationId,
         { whatsappGroupId: ctx.whatsappGroupId, groupName: ctx.groupName, activatedByPhone: ctx.senderPhone },

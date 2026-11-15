@@ -1,11 +1,11 @@
-import { LogOut } from 'lucide-react';
+import { ChevronRight, LogOut, MessageCircle } from 'lucide-react';
+import { Link } from 'react-router';
 import { PageHeader } from '@/components/empty-state';
 import { ThemeSwitch } from '@/components/theme-switch';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { canManage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
-import { OpsPanel } from './ops-panel';
 import { AccountAvatar, AccountPhone, ROLE_LABEL, TeamPanel } from './team-panel';
 
 
@@ -53,7 +53,18 @@ export function SettingsPage() {
         </Card>
       </div>
       {canManage(session?.user.role) ? <TeamPanel /> : null}
-      {canManage(session?.user.role) ? <OpsPanel tz={tz} /> : null}
+      {canManage(session?.user.role) ? (
+        <Link to="/whatsapp" className="group mt-4 block rounded-lg">
+          <Card className="flex items-center gap-4 p-5 transition-colors group-hover:border-primary/40">
+            <MessageCircle aria-hidden className="size-6 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">WhatsApp da Coxia</p>
+              <p className="text-sm text-muted-foreground">Conexão, envios e mensagens com falha</p>
+            </div>
+            <ChevronRight size={18} aria-hidden className="shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </Card>
+        </Link>
+      ) : null}
     </>
   );
 }

@@ -341,6 +341,16 @@ export interface ProjectPatch {
   objective?: string | null;
   estimatedBudgetCents?: number | null;
   groupCheckIns?: boolean;
+  /** Data de início (YYYY-MM-DD): no futuro, o projeto fica em "Aguardando". */
+  startsOn?: IsoDate | null;
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function startsOnOf(v: string | null | undefined): Date | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === '') return null;
+  if (!ISO_DATE_RE.test(v)) throw new DomainError('validation', 'Data de início inválida');
+  return fromIsoDate(v);
 }
 
 export interface TaskInput {
@@ -382,7 +392,7 @@ export class ProjectService {
    */
   async createFromWeb(
     organizationId: string,
-    input: { title: string; objective?: string | null; estimatedBudgetCents?: number | null; groupCheckIns?: boolean },
+    input: { title: string; objective?: string | null; estimatedBudgetCents?: number | null; groupCheckIns?: boolean; startsOn?: IsoDate | null },
     actor: Actor,
     now = new Date(),
   ) {
@@ -404,6 +414,7 @@ export class ProjectService {
           objective: input.objective?.trim() || null,
           estimatedBudgetCents: input.estimatedBudgetCents ?? null,
           groupCheckIns: input.groupCheckIns ?? false,
+          startsOn: startsOnOf(input.startsOn) ?? null,
           createdByPhone: actor.phone ?? null,
           activatedAt: now,
         },
@@ -444,6 +455,72 @@ export class ProjectService {
       await audit(tx, organizationId, actor, 'project.group_created', 'project', projectId, { after: { groupName: group.name, externalGroupId: group.externalGroupId } });
       return { group: g, channel };
     });
+  }
+
+  /**
+   * Exclui o projeto e o que é dele (tarefas, decisões, despesas, eventos, resumos, documentos).
+   * Compromissos, lembretes e entradas ficam, sem o vínculo. O grupo do WhatsApp continua, mas
+   * deixa de criar projeto sozinho. Devolve as chaves dos arquivos para a api apagar do bucket.
+   */
+  async deleteProject(organizationId: string, projectId: string, actor: Actor, now = new Date()) {
+    const project = await this.getProject(organizationId, projectId);
+    const [channels, documents] = await Promise.all([
+      this.db.projectChannel.findMany({ where: { projectId }, select: { whatsappGroupId: true } }),
+      this.db.projectDocument.findMany({ where: { projectId }, select: { storageKey: true } }),
+    ]);
+    await this.db.$transaction(async (tx) => {
+      if (channels.length) {
+        await tx.whatsappGroup.updateMany({ where: { id: { in: channels.map((c) => c.whatsappGroupId) } }, data: { activationBlockedAt: now } });
+      }
+      await tx.project.delete({ where: { id: projectId } });
+      await audit(tx, organizationId, actor, 'project.delete', 'project', projectId, { before: { title: project.title, status: project.status } });
+    });
+    return { storageKeys: documents.map((d) => d.storageKey) };
+  }
+
+  /** Grupo cujo projeto foi excluído: não vira projeto de novo sozinho. */
+  async isActivationBlocked(whatsappGroupId: string) {
+    const g = await this.db.whatsappGroup.findUnique({ where: { id: whatsappGroupId }, select: { activationBlockedAt: true } });
+    return !!g?.activationBlockedAt;
+  }
+
+  // ───────────── documentos (documento, croqui, comprovante) ─────────────
+
+  async listDocuments(organizationId: string, projectId: string) {
+    await this.getProject(organizationId, projectId);
+    return this.db.projectDocument.findMany({ where: { organizationId, projectId }, orderBy: [{ kind: 'asc' }, { createdAt: 'desc' }] });
+  }
+
+  async getDocument(organizationId: string, projectId: string, documentId: string) {
+    const d = await this.db.projectDocument.findFirst({ where: { id: documentId, organizationId, projectId } });
+    if (!d) throw new DomainError('not_found', 'Documento não encontrado');
+    return d;
+  }
+
+  /** O arquivo já está no bucket (a api guarda); aqui só o registro. */
+  async addDocument(
+    organizationId: string,
+    projectId: string,
+    file: { kind: 'document' | 'sketch' | 'receipt'; fileName: string; contentType: string; sizeBytes: number; storageKey: string },
+    actor: Actor,
+  ) {
+    await this.getProject(organizationId, projectId);
+    const fileName = file.fileName.trim().slice(0, 200) || 'arquivo';
+    return this.db.$transaction(async (tx) => {
+      const d = await tx.projectDocument.create({ data: { organizationId, projectId, ...file, fileName, uploadedByUserId: actor.userId ?? null } });
+      await audit(tx, organizationId, actor, 'project.document_added', 'project', projectId, { after: { documentId: d.id, kind: d.kind, fileName } });
+      return d;
+    });
+  }
+
+  /** Remove o registro; devolve a chave do arquivo para a api apagar do bucket. */
+  async removeDocument(organizationId: string, projectId: string, documentId: string, actor: Actor) {
+    const d = await this.getDocument(organizationId, projectId, documentId);
+    await this.db.$transaction(async (tx) => {
+      await tx.projectDocument.delete({ where: { id: d.id } });
+      await audit(tx, organizationId, actor, 'project.document_removed', 'project', projectId, { before: { documentId: d.id, kind: d.kind, fileName: d.fileName } });
+    });
+    return { storageKey: d.storageKey };
   }
 
   /** Quem pode criar/encerrar workspaces e validar lançamentos pelo WhatsApp. */
@@ -531,6 +608,7 @@ export class ProjectService {
       status: p.status,
       groupName: p.channels[0]?.displayName ?? null,
       activatedAt: p.activatedAt,
+      startsOn: p.startsOn ? toIsoDate(p.startsOn) : null,
       closedAt: p.closedAt,
       estimatedBudgetCents: p.estimatedBudgetCents,
       openTasks: p.tasks.filter((t) => t.status === 'open').length,
@@ -566,6 +644,7 @@ export class ProjectService {
       briefing: p.briefing as ProjectBriefing | null,
       estimatedBudgetCents: p.estimatedBudgetCents,
       groupCheckIns: p.groupCheckIns,
+      startsOn: p.startsOn ? toIsoDate(p.startsOn) : null,
       groupName: p.channels[0]?.displayName ?? null,
       activatedAt: p.activatedAt,
       closingRequestedAt: p.closingRequestedAt,
@@ -647,6 +726,7 @@ export class ProjectService {
           objective: patch.objective,
           estimatedBudgetCents: patch.estimatedBudgetCents,
           groupCheckIns: patch.groupCheckIns,
+          startsOn: startsOnOf(patch.startsOn),
         },
       });
       await audit(tx, organizationId, actor, 'project.update', 'project', projectId, { before, after: patch });

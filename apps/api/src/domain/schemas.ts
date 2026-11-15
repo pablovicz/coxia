@@ -166,6 +166,7 @@ export const projectPatchSchema = z.object({
   objective: z.string().max(2000).nullish(),
   estimatedBudgetCents: z.number().int().nonnegative().nullish(),
   groupCheckIns: z.boolean().optional(),
+  startsOn: isoDate.nullish(),
 });
 
 export const taskSchema = z.object({

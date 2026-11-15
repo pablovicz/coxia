@@ -67,6 +67,23 @@ const MAX_PROOF_BYTES = 10 * 1024 * 1024;
 const PROOF_EXT: Record<string, string> = { ...PHOTO_EXT, 'application/pdf': 'pdf' };
 const PROOF_TYPE: Record<string, string> = Object.fromEntries(Object.entries(PROOF_EXT).map(([type, ext]) => [ext, type]));
 
+/** Documentos de projeto: PDF, foto ou Office (docx/xlsx/pptx), até 20 MB. */
+const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
+const OFFICE_TYPES: Record<string, string> = {
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+};
+
+/** Tipo do documento pelos bytes: PDF e fotos pela assinatura; Office é um zip ("PK") com o tipo declarado. */
+export function sniffDocument(buf: Buffer, declared: string | undefined): string | null {
+  const proof = sniffProof(buf);
+  if (proof) return proof;
+  const type = declared?.split(';')[0]!.trim();
+  if (type && OFFICE_TYPES[type] && buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04) return type;
+  return null;
+}
+
 /** Tipo do comprovante pelos primeiros bytes (foto ou PDF). */
 export function sniffProof(buf: Buffer): string | null {
   if (buf.length >= 5 && buf.subarray(0, 5).toString('ascii') === '%PDF-') return 'application/pdf';
@@ -737,7 +754,64 @@ export class ProjectsController {
   constructor(
     private readonly projects: ProjectService,
     private readonly incomes: IncomeService,
+    private readonly storage: StorageService,
   ) {}
+
+  // ───────────── documentos: documento, croqui, comprovante ─────────────
+
+  @Get(':id/documents')
+  documents(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.projects.listDocuments(user.organizationId, id);
+  }
+
+  /** Arquivo como corpo bruto; tipo em ?kind= e nome no cabeçalho x-file-name. */
+  @Roles('owner', 'admin', 'staff')
+  @Post(':id/documents')
+  async addDocument(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Query(v(z.object({ kind: z.enum(['document', 'sketch', 'receipt']).default('document') }))) q: { kind: 'document' | 'sketch' | 'receipt' },
+    @Headers('content-type') contentType?: string,
+    @Headers('x-file-name') fileName?: string,
+  ) {
+    const what = 'Envie PDF, foto (JPG, PNG, WebP) ou arquivo do Word, Excel ou PowerPoint';
+    if (!Buffer.isBuffer(body) || body.length === 0) throw new DomainError('validation', what, { code: 'invalid_file' });
+    if (body.length > MAX_DOCUMENT_BYTES) throw new DomainError('validation', 'O arquivo deve ter até 20 MB', { code: 'file_too_large' });
+    const type = sniffDocument(body, contentType);
+    if (!type || (contentType && contentType.split(';')[0]!.trim() !== type)) throw new DomainError('validation', what, { code: 'invalid_file' });
+    const ext = PROOF_EXT[type] ?? OFFICE_TYPES[type]!;
+    const key = `${user.organizationId}/projects/${id}/documents/${randomUUID()}.${ext}`;
+    await this.storage.put(key, body, type);
+    try {
+      const name = fileName ? decodeURIComponent(fileName) : `documento.${ext}`;
+      return await this.projects.addDocument(user.organizationId, id, { kind: q.kind, fileName: name, contentType: type, sizeBytes: body.length, storageKey: key }, webActor(user));
+    } catch (err) {
+      await this.storage.delete(key).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  /** O arquivo passa pela api (bucket privado); o nome original vai no download. */
+  @Get(':id/documents/:documentId/file')
+  async documentFile(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('documentId') documentId: string, @Res() res: Response) {
+    const d = await this.projects.getDocument(user.organizationId, id, documentId);
+    const stream = await this.storage.get(d.storageKey);
+    res.setHeader('content-type', d.contentType);
+    res.setHeader('content-length', String(d.sizeBytes));
+    res.setHeader('content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(d.fileName)}`);
+    res.setHeader('cache-control', 'private, max-age=86400, immutable');
+    res.setHeader('x-content-type-options', 'nosniff');
+    stream.pipe(res);
+  }
+
+  @Roles('owner', 'admin')
+  @Delete(':id/documents/:documentId')
+  async removeDocument(@CurrentUser() user: AuthUser, @Param('id') id: string, @Param('documentId') documentId: string) {
+    const { storageKey } = await this.projects.removeDocument(user.organizationId, id, documentId, webActor(user));
+    await this.storage.delete(storageKey).catch(() => undefined);
+    return { ok: true };
+  }
 
   /** Entradas previstas e recebidas do projeto (patrocínio, parcelas, bilheteria). */
   @Get(':id/incomes')
@@ -760,6 +834,15 @@ export class ProjectsController {
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body(v(projectPatchSchema)) body: z.infer<typeof projectPatchSchema>) {
     return this.projects.update(user.organizationId, id, body, webActor(user));
+  }
+
+  /** Exclui o projeto e o que é dele; os arquivos dos documentos saem do bucket. */
+  @Roles('owner', 'admin')
+  @Delete(':id')
+  async remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const { storageKeys } = await this.projects.deleteProject(user.organizationId, id, webActor(user));
+    await Promise.all(storageKeys.map((k) => this.storage.delete(k).catch(() => undefined)));
+    return { ok: true };
   }
 
   @Roles('owner', 'admin', 'staff')
