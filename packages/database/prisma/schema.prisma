@@ -238,6 +238,7 @@ model Organization {
   appointments           Appointment[]
   residents              Resident[]
   projectDocuments       ProjectDocument[]
+  quoteRequests          QuoteRequest[]
   recurringBills         RecurringBill[]
   billOccurrences        BillOccurrence[]
   paymentAttachments     PaymentAttachment[]
@@ -356,13 +357,14 @@ model Contact {
   createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  groups       ContactGroup[]
-  reminders    Reminder[]
-  bookings     Booking[]
-  appointments AppointmentParticipant[]
-  incomes      Income[]
-  resident     Resident?
+  organization  Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  groups        ContactGroup[]
+  reminders     Reminder[]
+  bookings      Booking[]
+  appointments  AppointmentParticipant[]
+  incomes       Income[]
+  resident      Resident?
+  quoteRequests QuoteRequest[]
 
   @@unique([organizationId, phone])
   @@index([organizationId, lastMessageAt])
@@ -498,6 +500,7 @@ model Project {
 
   appointments Appointment[]
   documents    ProjectDocument[]
+  quoteRequest QuoteRequest?
   reminders    Reminder[]
 
   @@index([organizationId, status])
@@ -1242,4 +1245,45 @@ model ProjectDocument {
 
   @@index([projectId, kind])
   @@map("project_documents")
+}
+
+// ───────────── Pedidos de orçamento (site público casakaju.com) ─────────────
+
+/// novo → em conversa (pelo WhatsApp) → aprovado (virou projeto) | arquivado
+enum QuoteRequestStatus {
+  new
+  contacted
+  approved
+  archived
+}
+
+/// Pedido de orçamento enviado pelo formulário do site. Quem pede vira contato (pelo WhatsApp).
+model QuoteRequest {
+  id             String             @id @default(cuid())
+  organizationId String             @map("organization_id")
+  contactId      String?            @map("contact_id")
+  name           String
+  email          String
+  phone          String
+  /// theater | audiovisual | large_event | private_event | other
+  segment        String
+  /// costume | set_design | lighting | props | puppets | space_rental | course | other
+  services       String[]           @default([])
+  description    String
+  neededBy       DateTime?          @map("needed_by") @db.Date
+  status         QuoteRequestStatus @default(new)
+  /// Anotações da equipe (andamento, valor combinado...).
+  notes          String?
+  source         String             @default("site")
+  /// Projeto criado a partir do orçamento ("Promover a projeto").
+  projectId      String?            @unique @map("project_id")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@map("quote_requests")
 }

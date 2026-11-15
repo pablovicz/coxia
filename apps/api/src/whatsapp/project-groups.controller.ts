@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import { enqueueDelivery } from '@coxia/database';
-import { type Actor, composeWorkspaceWelcome, DomainError, getOrganization, ProjectService } from '@coxia/domain';
+import { type Actor, composeWorkspaceWelcome, DomainError, getOrganization, ProjectService, QuoteRequestService } from '@coxia/domain';
 import type { WhatsappProvider } from '@coxia/shared';
 import { z } from 'zod';
 import { type AuthUser, CurrentUser, Roles } from '../auth/decorators';
@@ -15,6 +15,8 @@ const createProjectSchema = z.object({
   groupCheckIns: z.boolean().optional(),
   /** Data de início (YYYY-MM-DD); no futuro o projeto fica em "Aguardando". */
   startsOn: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/).nullish(),
+  /** "Promover a projeto": o orçamento do site que vira este projeto. */
+  quoteRequestId: z.string().min(1).max(40).optional(),
   /** false: só cria o projeto (o grupo fica para "Criar no WhatsApp"). */
   createGroup: z.boolean().optional(),
 });
@@ -35,6 +37,7 @@ export class ProjectGroupsController {
   constructor(
     @Inject(WHATSAPP_PROVIDER) private readonly provider: WhatsappProvider,
     private readonly projects: ProjectService,
+    private readonly quotes: QuoteRequestService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -59,7 +62,11 @@ export class ProjectGroupsController {
   @Roles('owner', 'admin')
   @Post()
   async create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(createProjectSchema)) body: z.infer<typeof createProjectSchema>) {
-    const { project, groupName } = await this.projects.createFromWeb(user.organizationId, body, webActor(user));
+    // Orçamento: confere antes de criar (não promove duas vezes) e liga logo depois.
+    if (body.quoteRequestId) await this.quotes.assertPromotable(user.organizationId, body.quoteRequestId);
+    const { quoteRequestId, ...input } = body;
+    const { project, groupName } = await this.projects.createFromWeb(user.organizationId, input, webActor(user));
+    if (quoteRequestId) await this.quotes.linkProject(user.organizationId, quoteRequestId, project.id, webActor(user));
     const group: GroupResult = body.createGroup === false ? { status: 'unavailable', reason: 'Grupo não pedido' } : await this.createGroup(user, project.id, project.title);
     return { project, groupName, group };
   }

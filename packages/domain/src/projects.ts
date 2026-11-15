@@ -472,6 +472,8 @@ export class ProjectService {
       if (channels.length) {
         await tx.whatsappGroup.updateMany({ where: { id: { in: channels.map((c) => c.whatsappGroupId) } }, data: { activationBlockedAt: now } });
       }
+      // Orçamento que virou este projeto volta para "em conversa" (sem o vínculo).
+      await tx.quoteRequest.updateMany({ where: { projectId }, data: { status: 'contacted', projectId: null } });
       await tx.project.delete({ where: { id: projectId } });
       await audit(tx, organizationId, actor, 'project.delete', 'project', projectId, { before: { title: project.title, status: project.status } });
     });
@@ -631,6 +633,7 @@ export class ProjectService {
           orderBy: { createdAt: 'desc' },
         },
         summaries: { orderBy: { generatedAt: 'desc' }, take: 5 },
+        quoteRequest: { select: { id: true, name: true, phone: true, email: true, segment: true, services: true, neededBy: true, createdAt: true } },
       },
     });
     if (!p) throw new DomainError('not_found', 'Projeto não encontrado');
@@ -682,6 +685,8 @@ export class ProjectService {
         source: evidence.get(e.sourceMessageId) ?? null,
       })),
       summaries: p.summaries.map((s) => ({ id: s.id, kind: s.kind, content: s.content, generatedAt: s.generatedAt })),
+      /** Orçamento do site que virou este projeto (cliente e contato). */
+      quoteRequest: p.quoteRequest ? { ...p.quoteRequest, neededBy: p.quoteRequest.neededBy ? toIsoDate(p.quoteRequest.neededBy) : null } : null,
     };
   }
 

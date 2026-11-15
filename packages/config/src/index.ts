@@ -48,6 +48,8 @@ export const apiEnvSchema = baseEnvSchema
     JWT_SECRET: z.string().min(32),
     JWT_EXPIRES_IN: z.string().default('12h'),
     CORS_ORIGINS: z.string().default('http://localhost:5173'),
+    /** Organização que recebe os pedidos de orçamento do site público; vazio = a única que existe. */
+    SITE_ORGANIZATION_SLUG: z.string().optional(),
   });
 
 export const workerEnvSchema = baseEnvSchema

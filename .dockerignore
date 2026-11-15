@@ -9,3 +9,5 @@
 .git
 .env
 docs
+**/.next
+**/out

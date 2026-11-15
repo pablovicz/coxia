@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Plus, Search, UserCheck, Users } from 'lucide-react';
+import { ExternalLink, Inbox, Plus, Search, UserCheck, Users } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, PageHeader } from '@/components/empty-state';
@@ -70,6 +70,11 @@ export function ContactsPage() {
             <Button variant="outline" asChild>
               <Link to="/residentes">
                 <UserCheck aria-hidden /> Residentes
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/orcamentos">
+                <Inbox aria-hidden /> Orçamentos
               </Link>
             </Button>
             <Button onClick={() => setCreating(true)}>

@@ -1,0 +1,54 @@
+# Renderizado pelo entrypoint do nginx (envsubst) com ${PORT}.
+server {
+  listen ${PORT};
+  listen [::]:${PORT};
+  root /usr/share/nginx/html;
+  server_tokens off;
+  absolute_redirect off;
+
+  gzip on;
+  gzip_comp_level 6;
+  gzip_min_length 512;
+  gzip_types text/css application/javascript application/json image/svg+xml text/plain application/xml text/xml;
+
+  add_header X-Content-Type-Options nosniff always;
+  add_header Referrer-Policy strict-origin-when-cross-origin always;
+  add_header X-Frame-Options DENY always;
+
+  # Um endereço só para o Google: www vai para o domínio principal.
+  if ($host = www.casakaju.com) {
+    return 301 https://casakaju.com$request_uri;
+  }
+
+  location = /health {
+    access_log off;
+    default_type application/json;
+    return 200 '{"status":"ok","service":"site"}';
+  }
+
+  # JS/CSS com hash no nome (Next): cache longo.
+  location /_next/static/ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+    try_files $uri =404;
+  }
+
+  # Imagens e ícones: mudam pouco.
+  location ~* \.(webp|png|jpg|jpeg|svg|ico|woff2)$ {
+    expires 30d;
+    add_header Cache-Control "public";
+    try_files $uri =404;
+  }
+
+  # Páginas: HTML pronto de cada rota (/orcamento/ → orcamento/index.html), sem cache longo.
+  # (add_header aqui substitui os do server: os de segurança se repetem.)
+  location / {
+    add_header Cache-Control "no-cache";
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options DENY always;
+    try_files $uri $uri/index.html $uri.html =404;
+  }
+
+  error_page 404 /404.html;
+}

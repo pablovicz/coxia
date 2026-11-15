@@ -1,0 +1,92 @@
+@import 'tailwindcss';
+
+/* Paleta da Casa Kaju: rosa, verde-escuro, rosé e vinho (da identidade do site atual). */
+@theme {
+  --color-kaju-green: #1e4b36;
+  --color-kaju-green-deep: #163a29;
+  --color-kaju-pink: #e6bcc0;
+  --color-kaju-blush: #f6e4e6;
+  --color-kaju-cream: #fcf6f6;
+  --color-kaju-rose: #c9767f;
+  --color-kaju-rose-deep: #a9545e;
+  --color-kaju-wine: #8f1022;
+  --color-kaju-mint: #a9c8b4;
+  --color-kaju-field: #dccdcd;
+
+  --font-sans: var(--font-montserrat), system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-montserrat), system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-kaju-green);
+    color: var(--color-kaju-green-deep);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-kaju-wine);
+    outline-offset: 3px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+@layer components {
+  /* Linha pontilhada que separa as seções (como no site atual). */
+  .dots {
+    height: 8px;
+    background-image: radial-gradient(circle, var(--color-kaju-pink) 2.5px, transparent 3px);
+    background-size: 16px 8px;
+    background-repeat: repeat-x;
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+    line-height: 1.1;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 48px;
+    padding: 0 1.5rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.02em;
+    transition: background-color 150ms, color 150ms, transform 150ms;
+    cursor: pointer;
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .btn-rose {
+    background: var(--color-kaju-rose);
+    color: #fff;
+  }
+  .btn-rose:hover {
+    background: var(--color-kaju-rose-deep);
+  }
+  .btn-green {
+    background: var(--color-kaju-green);
+    color: var(--color-kaju-cream);
+  }
+  .btn-green:hover {
+    background: var(--color-kaju-green-deep);
+  }
+  .btn-outline {
+    border: 2px solid currentColor;
+  }
+}

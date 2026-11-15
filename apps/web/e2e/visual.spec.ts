@@ -150,6 +150,13 @@ const BILLS = [
   bill('c4', 'Internet', '20', 14990, 0, 'pending'),
   bill('c5', 'Telefone', '30', 9900, 0, 'pending'),
 ];
+const QUOTES = [
+  { id: 'q1', contactId: 'ct9', name: 'Marina Lopes', email: 'marina@exemplo.com', phone: '5541988887777', segment: 'theater', services: ['costume', 'props'], description: 'Figurino e adereços para 6 atores. Estreia em dezembro, no Guairinha.', neededBy: '2026-12-20', status: 'new', notes: null, source: 'site', projectId: null, project: null, projectDraft: { title: 'Figurino - Marina Lopes', objective: 'Figurino e adereços para 6 atores. Estreia em dezembro, no Guairinha.\n\nCliente: Marina Lopes · Segmento: Teatro · Serviços: Figurino, Adereços · Para quando: 20/12/2026' }, createdAt: '2026-11-06T13:20:00Z', updatedAt: '2026-11-06T13:20:00Z' },
+  { id: 'q2', contactId: 'ct10', name: 'Estúdio Lume', email: 'contato@lume.co', phone: '5541977776666', segment: 'audiovisual', services: ['space_rental'], description: 'Diária do estúdio fotográfico para um ensaio de moda.', neededBy: null, status: 'new', notes: null, source: 'site', projectId: null, project: null, projectDraft: { title: 'Aluguel de espaço - Estúdio Lume', objective: 'Diária do estúdio fotográfico.' }, createdAt: '2026-11-05T18:00:00Z', updatedAt: '2026-11-05T18:00:00Z' },
+  { id: 'q3', contactId: null, name: 'Pedro Alves', email: 'pedro@exemplo.com', phone: '5541966665555', segment: 'private_event', services: ['set_design'], description: 'Cenografia para festa de 15 anos.', neededBy: '2027-02-10', status: 'contacted', notes: 'Orçamento enviado em 04/11', source: 'site', projectId: null, project: null, projectDraft: { title: 'Cenografia - Pedro Alves', objective: 'Cenografia para festa de 15 anos.' }, createdAt: '2026-11-01T12:00:00Z', updatedAt: '2026-11-04T12:00:00Z' },
+  { id: 'q4', contactId: null, name: 'Cia. Ventania', email: 'cia@ventania.art', phone: '5541955554444', segment: 'theater', services: ['set_design', 'lighting'], description: 'Cenário e luz para o espetáculo Ventania.', neededBy: null, status: 'approved', notes: null, source: 'site', projectId: 'p1', project: { id: 'p1', title: 'XPO' }, projectDraft: { title: 'Cenografia - Cia. Ventania', objective: 'Cenário e luz.' }, createdAt: '2026-10-20T12:00:00Z', updatedAt: '2026-10-25T12:00:00Z' },
+];
+
 /** Detalhe (GET /bills/:id/details) montado a partir das ocorrências simuladas. */
 function billDetails(billId: string) {
   const occ = [...BILLS, ONE_OFF, PARCELADA].find((o) => o.recurringBill.id === billId);
@@ -386,6 +393,7 @@ const PROJECT_XPO = {
   estimatedBudgetCents: 800000,
   groupCheckIns: true,
   startsOn: null,
+  quoteRequest: null,
   groupName: 'PROJETO - XPO',
   activatedAt: '2026-11-02T13:00:00Z',
   closingRequestedAt: null,
@@ -771,6 +779,8 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (/^\/bills\/[\w-]+\/details$/.test(path)) return respond(billDetails(path.split('/')[2]!));
     if (path === '/bills/summary') return respond(empty ? { ...SUMMARY, expectedCents: 0, paidCents: 0, total: 0, paid: 0, pending: 0, overdue: 0, variableWithoutAmount: 0 } : SUMMARY);
     if (/^\/bills\/rb\d$/.test(path) && method === 'DELETE') return route.fulfill({ json: { ok: true } });
+    if (path === '/quote-requests') return respond(empty ? { items: [], counts: { new: 0, contacted: 0, approved: 0, archived: 0 } } : { items: QUOTES, counts: { new: 2, contacted: 1, approved: 1, archived: 0 } });
+    if (/^\/quote-requests\/q\d$/.test(path) && method === 'PATCH') return route.fulfill({ json: { ...QUOTES[0], ...route.request().postDataJSON() } });
     if (path === '/bills') return respond(empty ? [] : RECURRING);
     if (path === '/reminders' && method === 'POST') return route.fulfill({ status: 201, json: reminder({ id: 'r9', ...route.request().postDataJSON() }) });
     if (path === '/calendar') return respond(empty ? { appointments: [], reminders: [], bills: [] } : TEAM_CALENDAR);
@@ -1300,7 +1310,7 @@ test.describe('interação acessível', () => {
 
   test('sem rolagem horizontal', async ({ page }) => {
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/whatsapp', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/orcamentos', '/whatsapp', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -1351,7 +1361,7 @@ test.describe('interação acessível', () => {
   test('alvos de toque têm pelo menos 44px no celular', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'só no celular');
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/whatsapp', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/orcamentos', '/whatsapp', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
@@ -1782,6 +1792,94 @@ test.describe('interação acessível', () => {
     await mockApi(page, { role: 'staff' });
     await page.goto('/contas');
     await expect(page.getByRole('button', { name: /^Excluir / })).toHaveCount(0);
+  });
+
+  test('orçamentos do site: abas por situação, detalhe, mudar situação e anotar', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/orcamentos');
+    const tabs = page.getByRole('tablist', { name: 'Situação dos orçamentos' });
+    await expect(tabs.getByRole('tab', { name: 'Novos (2)' })).toHaveAttribute('aria-selected', 'true');
+    const panel = page.getByRole('tabpanel');
+    await expect(panel.getByText('Pedro Alves')).toHaveCount(0);
+    await expect(panel.getByText('Teatro · Figurino, Adereços · para 20/12/2026')).toBeVisible();
+
+    await panel.getByRole('button', { name: /Marina Lopes/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Marina Lopes' });
+    await expect(dialog.getByText('marina@exemplo.com')).toBeVisible();
+    // "Aprovado" só pelo "Promover a projeto".
+    await expect(dialog.getByRole('button', { name: 'Aprovado' })).toHaveCount(0);
+    await dialog.getByLabel('Anotações da equipe').fill('Ligar na segunda');
+    const notes = page.waitForRequest((r) => r.url().endsWith('/quote-requests/q1') && r.method() === 'PATCH');
+    await dialog.getByRole('button', { name: 'Salvar anotações' }).click();
+    expect((await notes).postDataJSON()).toEqual({ notes: 'Ligar na segunda' });
+
+    const move = page.waitForRequest((r) => r.url().endsWith('/quote-requests/q1') && r.method() === 'PATCH' && r.postDataJSON().status);
+    await dialog.getByRole('button', { name: 'Em conversa' }).click();
+    expect((await move).postDataJSON()).toEqual({ status: 'contacted' });
+    await expect(page.getByText('Orçamento movido para “Em conversa”.')).toBeVisible();
+
+    await tabs.getByRole('tab', { name: 'Em conversa (1)' }).click();
+    await expect(page).toHaveURL(/\?situacao=contacted$/);
+    await expect(panel.getByRole('button', { name: /Pedro Alves/ })).toBeVisible();
+
+    await tabs.getByRole('tab', { name: 'Aprovados (1)' }).click();
+    await expect(panel.getByText('Projeto: XPO')).toBeVisible();
+    await panel.getByRole('button', { name: /Cia\. Ventania/ }).click();
+    const approved = page.getByRole('dialog', { name: 'Cia. Ventania' });
+    await expect(approved.getByRole('button', { name: 'Promover a projeto' })).toHaveCount(0);
+    await approved.getByRole('link', { name: 'Abrir projeto' }).click();
+    await expect(page).toHaveURL(/\/projetos\/p1$/);
+  });
+
+  test('promover a projeto: o formulário de projeto já vem com o orçamento e o projeto mostra o cliente', async ({ page }) => {
+    await mockApi(page);
+    await page.route(/\/projects\/p9$/, (route) =>
+      route.fulfill({
+        json: {
+          ...PROJECT_XPO,
+          id: 'p9',
+          title: 'Figurino - Marina Lopes',
+          groupName: 'PROJETO - Figurino - Marina Lopes',
+          quoteRequest: { id: 'q1', name: 'Marina Lopes', phone: '5541988887777', email: 'marina@exemplo.com', segment: 'theater', services: ['costume', 'props'], neededBy: '2026-12-20', createdAt: '2026-11-06T13:20:00Z' },
+        },
+      }),
+    );
+    await page.goto('/orcamentos');
+    await page.getByRole('tabpanel').getByRole('button', { name: /Marina Lopes/ }).click();
+    await page.getByRole('dialog', { name: 'Marina Lopes' }).getByRole('button', { name: 'Promover a projeto' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Promover a projeto' });
+    await expect(dialog.getByText('Orçamento de Marina Lopes', { exact: false })).toBeVisible();
+    await expect(dialog.getByLabel('Nome do projeto')).toHaveValue('Figurino - Marina Lopes');
+    await expect(dialog.getByLabel('Objetivo (opcional)')).toHaveValue(/Cliente: Marina Lopes · Segmento: Teatro/);
+    await dialog.getByLabel('Orçamento estimado (R$, opcional)').fill('4.500,00');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/projects') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Criar projeto e grupo' }).click(),
+    ]);
+    expect(req.postDataJSON()).toMatchObject({ title: 'Figurino - Marina Lopes', estimatedBudgetCents: 450000, quoteRequestId: 'q1' });
+    await expect(page).toHaveURL(/\/projetos\/p9$/);
+    const client = page.getByRole('region', { name: 'Cliente' });
+    await expect(client.getByText('marina@exemplo.com')).toBeVisible();
+    await expect(client.getByText('20/12/2026')).toBeVisible();
+  });
+
+  test('orçamentos: vazio explica de onde vêm; atalho em Contatos', async ({ page }) => {
+    await mockApi(page, { data: 'empty' });
+    await page.goto('/orcamentos');
+    await expect(page.getByText('Nenhum orçamento ainda')).toBeVisible();
+    await page.goto('/contatos');
+    await page.getByRole('main').getByRole('link', { name: 'Orçamentos' }).click();
+    await expect(page).toHaveURL(/\/orcamentos$/);
+  });
+
+  test('orçamentos: perfil leitura não tem Orçamentos no menu', async ({ page }) => {
+    test.skip((page.viewportSize()?.width ?? 0) < 1024, 'menu lateral só no computador');
+    await mockApi(page, { role: 'viewer' });
+    await page.goto('/');
+    const menu = page.getByRole('complementary', { name: 'Menu principal' });
+    await expect(menu.getByRole('link', { name: 'Projetos' })).toBeVisible();
+    await expect(menu.getByRole('link', { name: 'Orçamentos' })).toHaveCount(0);
   });
 
   test('novo contato: cadastra; número já existente avisa', async ({ page }) => {

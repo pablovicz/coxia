@@ -15,7 +15,8 @@
  * A CONFIRMAR no primeiro `railway config plan`:
  *  - nomes das variáveis expostas pelo bucket (ENDPOINT, BUCKET, ACCESS_KEY_ID, SECRET_ACCESS_KEY, REGION);
  *  - região do bucket (não pode ser alterada depois de criado);
- *  - geração dos domínios públicos de `api` e `web` (domínio customizado ou gerado pelo Railway).
+ *  - geração dos domínios públicos de `api`, `web` e `site` (domínio customizado ou gerado pelo Railway).
+ *  - `site` recebe casakaju.com (e www.casakaju.com, que o nginx redireciona para casakaju.com).
  */
 import { bucket, defineRailway, github, group, postgres, preserve, project, redis, ref, service } from 'railway/iac';
 
@@ -94,8 +95,9 @@ export default defineRailway((ctx) => {
       ...storageEnv,
       JWT_SECRET: preserve(),
       JWT_EXPIRES_IN: '12h',
-      // Domínio próprio do web + o gerado pelo Railway (lista separada por vírgula).
-      CORS_ORIGINS: 'https://coxia.casakaju.com,https://coxia.up.railway.app,https://${{web.RAILWAY_PUBLIC_DOMAIN}}',
+      // Domínios do painel (web) e do site público (site), próprios e gerados pelo Railway.
+      CORS_ORIGINS:
+        'https://coxia.casakaju.com,https://coxia.up.railway.app,https://${{web.RAILWAY_PUBLIC_DOMAIN}},https://casakaju.com,https://www.casakaju.com,https://${{site.RAILWAY_PUBLIC_DOMAIN}}',
     },
   });
 
@@ -127,7 +129,19 @@ export default defineRailway((ctx) => {
     },
   });
 
+  // Site público casakaju.com: páginas estáticas (Next.js) e o formulário de orçamento, que vai para a api.
+  const site = service('site', {
+    source: source(),
+    healthcheck: '/health',
+    env: {
+      RAILWAY_DOCKERFILE_PATH: 'apps/site/Dockerfile',
+      PORT: '8080',
+      // Usado como build arg (ARG NEXT_PUBLIC_API_URL no Dockerfile).
+      NEXT_PUBLIC_API_URL: 'https://${{api.RAILWAY_PUBLIC_DOMAIN}}',
+    },
+  });
+
   return project('coxia', {
-    resources: [group('Dados', [db, cache, media]), group('Backend', [api, worker, ai]), web],
+    resources: [group('Dados', [db, cache, media]), group('Backend', [api, worker, ai]), web, site],
   });
 });

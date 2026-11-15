@@ -87,6 +87,16 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 | **Abas em Projetos**: Em andamento, **Aguardando** (data de início no futuro, com "Começa em dd/mm/aaaa") e Encerrados; a aba fica na URL (`?aba=`) | `projects.starts_on`, `projects-page.tsx` |
 | **Excluir projeto** (administração), com confirmação: saem tarefas, decisões, despesas, relatório e documentos (também do bucket); compromissos, lembretes e entradas ficam sem o vínculo. O grupo do WhatsApp continua, mas não vira projeto de novo sozinho | `DELETE /projects/:id`, `whatsapp_groups.activation_blocked_at` |
 
+### Site público casakaju.com e orçamentos (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| **Site da Casa Kaju** (`apps/site`, Next.js com exportação estática servida pelo nginx: HTML pronto, sem servidor Node). Home com a marca, espaços para alugar, sócias, cursos e design cênico; página **/orcamento**. SEO: metadados e Open Graph por página, `sitemap.xml`, `robots.txt`, dados estruturados (LocalBusiness), canonical, `www` → `casakaju.com`; fontes servidas pelo próprio site; imagens WebP | `apps/site` |
+| **Formulário de orçamento**: nome, e-mail, WhatsApp, segmento, serviços (design cênico, aluguel de espaço, cursos), descrição e prazo. Os círculos de espaços e os cursos abrem o formulário com o serviço já marcado (`?servico=&interesse=`). Validação no site e na api; campo-armadilha para robôs; limite de 5 envios por IP em 10 min; envio repetido em 10 min não duplica | `components/quote-form.tsx`, `POST /public/quote-requests` |
+| Cada pedido vira **orçamento** na Coxia, quem pediu vira **contato** (pelo WhatsApp, sem trocar o nome dado pela equipe) e as **administradoras recebem o aviso no WhatsApp** | `QuoteRequestService.submit`, `quote_requests` |
+| **Orçamentos** no painel: abas Novos, Em conversa, Aprovados, Arquivados; detalhe com contato, "Responder no WhatsApp", e-mail e anotações | `/orcamentos`, `features/quotes` |
+| **Promover a projeto**: abre o "Novo projeto" com nome e objetivo vindos do orçamento (descrição, cliente, segmento, serviços e prazo); ao criar, o orçamento fica "Aprovado" e ligado ao projeto, que mostra o cartão **Cliente**. "Aprovado" só por esse caminho; excluir o projeto devolve o orçamento para "Em conversa" | `POST /projects` com `quoteRequestId`, `projectDraftFromQuote`, `linkProject` |
+
 ### Residentes, contatos e equipe (pós-Etapa 4)
 
 | Entregue | Onde |
@@ -192,7 +202,7 @@ web (React SPA) ────────┘   └────────── 
 
 ## Rodando localmente
 
-Pré-requisitos: Node ≥ 20.17, pnpm 10, Docker, Python 3.12+ e [uv](https://docs.astral.sh/uv/).
+Pré-requisitos: Node ≥ 20.17 (o build do `site` pede Node ≥ 22: `pnpm --filter @coxia/site dev` roda o site em http://localhost:3100), pnpm 10, Docker, Python 3.12+ e [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cp .env.example .env          # ajuste POSTGRES_PORT se já houver um Postgres na 5432
@@ -240,7 +250,9 @@ curl -X POST http://localhost:3000/webhooks/zapi/dev-webhook-secret-change-me \
 
 ## Deploy (Railway)
 
-Infraestrutura declarada em [.railway/railway.ts](.railway/railway.ts): `api`, `worker`, `ai`, `web`, PostgreSQL, Redis e bucket.
+Infraestrutura declarada em [.railway/railway.ts](.railway/railway.ts): `api`, `worker`, `ai`, `web` (painel, coxia.casakaju.com), `site` (público, casakaju.com), PostgreSQL, Redis e bucket.
+
+O `site` é gerado no build com `NEXT_PUBLIC_API_URL` (a api); a api precisa ter `https://casakaju.com` e `https://www.casakaju.com` em `CORS_ORIGINS`. Com mais de uma organização, defina `SITE_ORGANIZATION_SLUG` na api (qual recebe os orçamentos).
 
 1. Crie as variáveis compartilhadas do ambiente: `AI_SERVICE_TOKEN`, `ZAPI_INSTANCE_ID`, `ZAPI_INSTANCE_TOKEN`, `ZAPI_CLIENT_TOKEN`, `ZAPI_WEBHOOK_SECRET`; e os segredos por serviço `JWT_SECRET` (api) e `OPENAI_API_KEY` (ai).
 2. Confirme `BUCKET_REGION` no arquivo.
@@ -256,7 +268,8 @@ apps/
   api/        NestJS — REST, webhooks, auth/RBAC, idempotência, auditoria
   worker/     NestJS — BullMQ: mensagens recebidas, outbox, reconciliação, conexão
   ai/         FastAPI — transcrição, extração estruturada, interpretação de comandos
-  web/        React + Vite + Tailwind v4 (tokens do design system)
+  web/        React + Vite + Tailwind v4 (tokens do design system) — painel da equipe
+  site/       Next.js (exportação estática) — site público casakaju.com e formulário de orçamento
 packages/
   config/     validação de variáveis de ambiente (zod)
   contracts/  schemas compartilhados (InboundMessage, contratos API↔IA, filas) + JSON Schema

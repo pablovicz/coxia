@@ -1,4 +1,4 @@
-import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, LogOut, MessageCircle, ReceiptText, Settings, Users } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, Inbox, LogOut, MessageCircle, ReceiptText, Settings, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { ThemeSwitch } from '@/components/theme-switch';
 import { UserAvatar } from '@/components/user-avatar';
@@ -21,6 +21,8 @@ export const NAV_ITEMS = [
   { to: '/contatos', label: 'Contatos', short: 'Contatos', icon: Users, mobile: true, team: true },
   // Residentes: no celular, pelo botão no topo de Contatos.
   { to: '/residentes', label: 'Residentes', short: 'Residentes', icon: UserCheck, mobile: false, team: true },
+  // Orçamentos pedidos no site casakaju.com (dado pessoal, como Contatos). No celular, pelo topo de Contatos.
+  { to: '/orcamentos', label: 'Orçamentos', short: 'Orçamentos', icon: Inbox, mobile: false, team: true },
   // Conexão e operação do WhatsApp: só administração; no celular, pelo atalho em Configurações.
   { to: '/whatsapp', label: 'WhatsApp', short: 'WhatsApp', icon: MessageCircle, mobile: false, admin: true },
   { to: '/configuracoes', label: 'Configurações', short: 'Ajustes', icon: Settings, mobile: false },

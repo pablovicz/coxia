@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, FileAudio, ListChecks, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, FileAudio, ListChecks, MessageCircle, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -23,7 +23,8 @@ import {
   type ProjectSuggestion,
   type ProjectTask,
 } from '@/lib/api';
-import { formatBRL, local, todayIn } from '@/lib/format';
+import { formatBRL, formatPhone, local, todayIn } from '@/lib/format';
+import { quoteServices, whatsappLink } from '@/features/quotes/quote-requests-page';
 import { useAuth } from '@/providers/auth-provider';
 import { CreateWhatsappGroupCard, EditProjectDialog } from './new-project-dialog';
 import { ProjectDocumentsCard } from './project-documents';
@@ -150,6 +151,7 @@ export function ProjectDetailPage() {
           <ProjectIncomesCard projectId={p.id} tz={tz} canEdit={admin} />
         </div>
         <div className="grid min-w-0 content-start gap-4 [&>*]:min-w-0">
+          {p.quoteRequest ? <QuoteOriginCard quote={p.quoteRequest} tz={tz} /> : null}
           <BriefingCard project={p} />
           <ProjectDocumentsCard projectId={p.id} canUpload={staff} canDelete={admin} />
           <Card>
@@ -457,6 +459,46 @@ function FinanceCard({ project: p, tz, canEdit }: { project: ProjectDetail; tz: 
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Projeto que nasceu de um orçamento do site: quem é o cliente e como falar com ele. */
+function QuoteOriginCard({ quote: q, tz }: { quote: NonNullable<ProjectDetail['quoteRequest']>; tz: string }) {
+  return (
+    <section aria-label="Cliente">
+      <Card>
+        <CardHeader>
+          <CardTitle>Cliente</CardTitle>
+          <CardDescription>
+            Orçamento pedido pelo site em {local(q.createdAt, tz).toFormat('dd/LL/yyyy')} ·{' '}
+            <Link className="text-primary underline-offset-4 hover:underline" to="/orcamentos?situacao=approved">
+              ver orçamento
+            </Link>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-end justify-between gap-4">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            <dt className="text-muted-foreground">Nome</dt>
+            <dd className="font-medium">{q.name}</dd>
+            <dt className="text-muted-foreground">WhatsApp</dt>
+            <dd>{formatPhone(q.phone)}</dd>
+            <dt className="text-muted-foreground">E-mail</dt>
+            <dd className="break-all">{q.email}</dd>
+            <dt className="text-muted-foreground">Serviços</dt>
+            <dd>{quoteServices(q)}</dd>
+            {q.neededBy ? (
+              <>
+                <dt className="text-muted-foreground">Para quando</dt>
+                <dd>{q.neededBy.split('-').reverse().join('/')}</dd>
+              </>
+            ) : null}
+          </dl>
+          <Button variant="outline" onClick={() => window.open(whatsappLink(q), '_blank', 'noopener')}>
+            <MessageCircle aria-hidden /> WhatsApp
+          </Button>
+        </CardContent>
+      </Card>
+    </section>
   );
 }
 

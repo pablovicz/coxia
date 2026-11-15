@@ -17,3 +17,4 @@ export * from './commands';
 export * from './projects';
 export * from './workspace';
 export * from './ai-tracking';
+export * from './quote-requests';

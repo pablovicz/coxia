@@ -24,12 +24,20 @@ function bareTitle(title: string, prefix: string) {
  * "PROJETO - Nome" com todas as administradoras; WhatsApp indisponível → projeto criado e o grupo
  * fica para "Criar no WhatsApp".
  */
-export function NewProjectDialog({ onClose }: { onClose: () => void }) {
+/** Orçamento do site que vira projeto ("Promover a projeto"): o formulário já vem preenchido. */
+export interface ProjectFromQuote {
+  quoteRequestId: string;
+  clientName: string;
+  title: string;
+  objective: string;
+}
+
+export function NewProjectDialog({ onClose, fromQuote }: { onClose: () => void; fromQuote?: ProjectFromQuote }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const info = useQuery({ queryKey: ['projects', 'group-info'], queryFn: () => api<ProjectGroupInfo>('/projects/new/group-info') });
-  const [title, setTitle] = useState('');
-  const [objective, setObjective] = useState('');
+  const [title, setTitle] = useState(fromQuote?.title ?? '');
+  const [objective, setObjective] = useState(fromQuote?.objective ?? '');
   const [budget, setBudget] = useState('');
   const [checkIns, setCheckIns] = useState(false);
   const [startsOn, setStartsOn] = useState('');
@@ -50,6 +58,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
     },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['projects'] });
+      if (fromQuote) qc.invalidateQueries({ queryKey: ['quote-requests'] });
       if (r.group.status === 'created') toast.success(`Projeto criado e grupo “${r.group.groupName}” criado no WhatsApp.`);
       else toast.warning(`Projeto criado. O grupo ficou para depois: ${r.group.reason}.`);
       if (r.docs.errors.length) toast.error(`Alguns documentos não subiram: ${r.docs.errors.join(' ')}`);
@@ -65,7 +74,14 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
     if (!name) return setError('Informe o nome do projeto.');
     const cents = budget.trim() ? parseBRL(budget) : null;
     if (budget.trim() && cents === null) return setError('Orçamento inválido. Use, por exemplo, 8.000,00.');
-    save.mutate({ title: name, objective: objective.trim() || null, estimatedBudgetCents: cents, groupCheckIns: checkIns, startsOn: startsOn || null });
+    save.mutate({
+      title: name,
+      objective: objective.trim() || null,
+      estimatedBudgetCents: cents,
+      groupCheckIns: checkIns,
+      startsOn: startsOn || null,
+      ...(fromQuote ? { quoteRequestId: fromQuote.quoteRequestId } : {}),
+    });
   }
 
   return (
@@ -73,8 +89,12 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
       open
       size="wide"
       onOpenChange={(v) => !v && onClose()}
-      title="Novo projeto"
-      description="O projeto ganha um grupo no WhatsApp com a Coxia e todas as administradoras."
+      title={fromQuote ? 'Promover a projeto' : 'Novo projeto'}
+      description={
+        fromQuote
+          ? `Orçamento de ${fromQuote.clientName}: os dados do pedido já vêm preenchidos. O projeto ganha um grupo no WhatsApp com a Coxia e todas as administradoras.`
+          : 'O projeto ganha um grupo no WhatsApp com a Coxia e todas as administradoras.'
+      }
       footer={
         <>
           <Button variant="outline" onClick={onClose}>

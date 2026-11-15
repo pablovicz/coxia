@@ -548,6 +548,7 @@ export interface ProjectDetail {
   expenses: ProjectExpense[];
   decisions: Array<{ id: string; summary: string; decidedAt: string }>;
   suggestions: ProjectSuggestion[];
+  quoteRequest: { id: string; name: string; phone: string; email: string; segment: string; services: string[]; neededBy: string | null; createdAt: string } | null;
   summaries: Array<{ id: string; kind: string; content: string; generatedAt: string }>;
 }
 
@@ -859,3 +860,59 @@ export interface TeamMember {
   createdAt: string;
   user: { id: string; name: string; email: string | null; phone: string | null; avatarUpdatedAt?: string | null };
 }
+
+// ───────────── Pedidos de orçamento (site casakaju.com) ─────────────
+
+export type QuoteRequestStatus = 'new' | 'contacted' | 'approved' | 'archived';
+
+export interface QuoteRequest {
+  id: string;
+  contactId: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  segment: string;
+  services: string[];
+  description: string;
+  neededBy: string | null;
+  status: QuoteRequestStatus;
+  notes: string | null;
+  source: string;
+  projectId: string | null;
+  project: { id: string; title: string } | null;
+  /** Rascunho para "Promover a projeto" (nome e objetivo com os dados do pedido). */
+  projectDraft: { title: string; objective: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuoteRequestList {
+  items: QuoteRequest[];
+  counts: Record<QuoteRequestStatus, number>;
+}
+
+export const QUOTE_SEGMENTS: Record<string, string> = {
+  theater: 'Teatro',
+  audiovisual: 'Audiovisual',
+  large_event: 'Shows / eventos de grande porte',
+  private_event: 'Evento particular',
+  other: 'Outro',
+};
+
+export const QUOTE_SERVICES: Record<string, string> = {
+  costume: 'Figurino',
+  set_design: 'Cenografia',
+  lighting: 'Iluminação',
+  props: 'Adereços',
+  puppets: 'Bonecos',
+  space_rental: 'Aluguel de espaço',
+  course: 'Cursos',
+  other: 'Outro',
+};
+
+export const QUOTE_STATUS: Record<QuoteRequestStatus, { label: string; tab: string; variant: 'info' | 'pending' | 'active' | 'archived' }> = {
+  new: { label: 'Novo', tab: 'Novos', variant: 'info' },
+  contacted: { label: 'Em conversa', tab: 'Em conversa', variant: 'pending' },
+  approved: { label: 'Aprovado', tab: 'Aprovados', variant: 'active' },
+  archived: { label: 'Arquivado', tab: 'Arquivados', variant: 'archived' },
+};
