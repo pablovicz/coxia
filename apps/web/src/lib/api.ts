@@ -52,7 +52,7 @@ export async function api<T>(path: string, init: RequestInit & { idempotencyKey?
 }
 
 export interface SessionInfo {
-  user: { id: string; memberId?: string; name: string; email: string | null; phone?: string | null; role: string };
+  user: { id: string; memberId?: string; name: string; email: string | null; phone?: string | null; role: string; avatarUpdatedAt?: string | null };
   organization: { id: string; name: string; timezone: string };
 }
 
@@ -302,6 +302,7 @@ export interface Member {
   /** Sem WhatsApp cadastrado: participa, mas não recebe aviso. */
   phone: string | null;
   role: Role;
+  avatarUpdatedAt?: string | null;
 }
 
 // ───────────── Calendário da equipe (separado da agenda das salas) ─────────────
@@ -314,7 +315,7 @@ export interface AppointmentParticipant {
   contactId: string | null;
   name: string | null;
   phone: string | null;
-  member: { id: string; user: { id: string; name: string; phone: string | null } } | null;
+  member: { id: string; user: { id: string; name: string; phone: string | null; avatarUpdatedAt?: string | null } } | null;
   contact: { id: string; name: string | null; whatsappName: string | null; phone: string } | null;
 }
 
@@ -330,6 +331,7 @@ export interface Appointment {
   notifyMinutesBefore: number | null;
   status: 'scheduled' | 'cancelled';
   participants: AppointmentParticipant[];
+  project: { id: string; title: string } | null;
 }
 
 export interface CalendarReminder {
@@ -343,6 +345,7 @@ export interface CalendarReminder {
   recipientPhones: string[];
   done: boolean;
   active: boolean;
+  project: { id: string; title: string } | null;
 }
 
 export interface CalendarBill {
@@ -568,6 +571,35 @@ export async function uploadSpacePhoto(spaceId: string, file: File): Promise<{ i
 }
 
 /** Foto privada: busca com o token e devolve um blob (o <img> não manda Authorization). */
+/** Avatar: foto JPG, PNG ou WebP, até 5 MB. */
+export const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+
+export async function uploadAvatar(file: File): Promise<{ avatarUpdatedAt: string }> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/organization/me/avatar`, {
+    method: 'POST',
+    headers: { 'content-type': file.type, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  if (res.status === 401) {
+    tokenStore.set(null);
+    window.dispatchEvent(new Event('coxia:unauthorized'));
+  }
+  const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
+  if (!res.ok) throw new ApiBodyError(res.status, json);
+  return json as unknown as { avatarUpdatedAt: string };
+}
+
+export async function fetchAvatar(userId: string, version: string): Promise<Blob> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/organization/users/${userId}/avatar?v=${encodeURIComponent(version)}`, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
+  return res.blob();
+}
+
 /** Comprovante: foto (JPG, PNG, WebP) ou PDF, até 10 MB. */
 export const PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
 export const MAX_PROOF_BYTES = 10 * 1024 * 1024;
@@ -628,7 +660,7 @@ export interface Contact {
   notes: string | null;
   lastMessageAt: string | null;
   createdAt: string;
-  member: { name: string; role: Role } | null;
+  member: { userId?: string; name: string; role: Role; avatarUpdatedAt?: string | null } | null;
   groups: Array<{ isAdmin: boolean; joinedAt: string; leftAt?: string | null; group: { id: string; name: string | null } }>;
 }
 
@@ -660,6 +692,82 @@ export interface Income {
   competence: string | null;
   project: { id: string; title: string } | null;
   space: { id: string; name: string; color: string; icon: string } | null;
+  contactId?: string | null;
+  contact?: { id: string; name: string | null; whatsappName: string | null; resident: { id: string; name: string } | null } | null;
+}
+
+// ───────────── Residentes ─────────────
+
+export type ResidentStatus = 'active' | 'disabled';
+export type ResidentSituation = 'pending' | 'regular' | 'attention' | 'overdue';
+
+export interface Resident {
+  id: string;
+  contactId: string;
+  name: string;
+  description: string | null;
+  instagram: string | null;
+  email: string | null;
+  status: ResidentStatus;
+  paymentDay: number | null;
+  photoUpdatedAt: string | null;
+  contractFileName: string | null;
+  contractUploadedAt: string | null;
+  contact: { id: string; phone: string; name: string | null; whatsappName: string | null; photoUrl: string | null };
+}
+
+export interface ResidentListItem extends Resident {
+  situation: ResidentSituation;
+  rooms: Array<{ id: string; name: string; color: string; icon: string }>;
+}
+
+export interface ResidentDetails {
+  resident: Resident;
+  situation: ResidentSituation;
+  rentals: Array<{
+    space: { id: string; name: string; color: string; icon: string };
+    schedule: Array<{ bookingId: string; title: string | null; weekdays: string[]; start: string; end: string; since: string | null; until: string | null; hourlyRateCents: number | null }>;
+  }>;
+  payments: Array<{
+    id: string;
+    month: string;
+    description: string;
+    status: 'expected' | 'received' | 'cancelled';
+    expectedOn: string;
+    receivedOn: string | null;
+    amountCents: number;
+    overdue: boolean;
+    space: { id: string; name: string } | null;
+  }>;
+  totals: { receivedCents: number; openCents: number };
+  firstPaymentMonth: string | null;
+  paymentDays: { agreed: number | null; observed: number[] };
+}
+
+export const RESIDENT_FILE_TYPES = { photo: ['image/jpeg', 'image/png', 'image/webp'], contract: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] } as const;
+export const MAX_RESIDENT_FILE_BYTES = 10 * 1024 * 1024;
+
+export async function uploadResidentFile(residentId: string, kind: 'photo' | 'contract', file: File): Promise<Resident> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/residents/${residentId}/${kind}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  if (res.status === 401) {
+    tokenStore.set(null);
+    window.dispatchEvent(new Event('coxia:unauthorized'));
+  }
+  const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
+  if (!res.ok) throw new ApiBodyError(res.status, json);
+  return json as unknown as Resident;
+}
+
+export async function fetchResidentFile(residentId: string, kind: 'photo' | 'contract', version: string): Promise<Blob> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/residents/${residentId}/${kind}?v=${encodeURIComponent(version)}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
+  return res.blob();
 }
 
 export interface IncomesSummary {
@@ -679,5 +787,5 @@ export interface TeamMember {
   canManageProjects: boolean;
   receivesMorningBriefing: boolean;
   createdAt: string;
-  user: { id: string; name: string; email: string | null; phone: string | null };
+  user: { id: string; name: string; email: string | null; phone: string | null; avatarUpdatedAt?: string | null };
 }

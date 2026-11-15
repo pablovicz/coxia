@@ -12,6 +12,8 @@ export interface IncomeInput {
   notes?: string | null;
   projectId?: string | null;
   spaceId?: string | null;
+  /** Quem paga (contato/residente): os pagamentos do residente são estas entradas. */
+  contactId?: string | null;
 }
 
 const COMPETENCE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -20,6 +22,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const incomeInclude = {
   project: { select: { id: true, title: true } },
   space: { select: { id: true, name: true, color: true, icon: true } },
+  contact: { select: { id: true, name: true, whatsappName: true, resident: { select: { id: true, name: true } } } },
 } satisfies Prisma.IncomeInclude;
 
 /**
@@ -97,6 +100,7 @@ export class IncomeService {
       notes: patch.notes !== undefined ? patch.notes : before.notes,
       projectId: patch.projectId !== undefined ? patch.projectId : before.projectId,
       spaceId: patch.spaceId !== undefined ? patch.spaceId : before.spaceId,
+      contactId: patch.contactId !== undefined ? patch.contactId : before.contactId,
     };
     const data = await this.validate(organizationId, merged);
     return this.db.$transaction(async (tx) => {
@@ -226,6 +230,10 @@ export class IncomeService {
       const s = await this.db.space.findFirst({ where: { id: input.spaceId, organizationId }, select: { id: true } });
       if (!s) throw new DomainError('not_found', 'Sala não encontrada');
     }
+    if (input.contactId) {
+      const c = await this.db.contact.findFirst({ where: { id: input.contactId, organizationId }, select: { id: true } });
+      if (!c) throw new DomainError('not_found', 'Contato não encontrado');
+    }
     return {
       source: input.source,
       description,
@@ -235,6 +243,7 @@ export class IncomeService {
       notes: input.notes?.trim() || null,
       projectId: input.source === 'project' ? input.projectId! : null,
       spaceId: input.source === 'room_rental' ? (input.spaceId ?? null) : null,
+      contactId: input.contactId ?? null,
     };
   }
 }

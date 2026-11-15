@@ -165,3 +165,30 @@ describe('calendário da equipe', () => {
     await expectDomainError(calendar.range(orgId, at('2026-11-16T00:00'), at('2028-01-01T00:00')), 'validation');
   });
 });
+
+describe('projeto nos compromissos e lembretes', () => {
+  it('liga ao projeto da casa (aparece no calendário); projeto de outra casa é recusado', async () => {
+    const project = await db.project.create({ data: { organizationId: orgId, title: 'XPO', status: 'active' } });
+    const a = await appointments.create(
+      orgId,
+      { title: 'Reunião da XPO', memberIds: [kaoMember], projectId: project.id, startAt: at('2026-11-24T10:00'), endAt: at('2026-11-24T11:00') },
+      actor,
+    );
+    expect(a.project).toEqual({ id: project.id, title: 'XPO' });
+    const r = await new ReminderService(db).create(orgId, { title: 'Enviar rider da XPO', projectId: project.id, dueAt: at('2026-11-24T09:00'), recipientPhones: [KAO] }, actor);
+    expect(r.project).toEqual({ id: project.id, title: 'XPO' });
+    const cal = await calendar.range(orgId, at('2026-11-24T00:00'), at('2026-11-25T00:00'));
+    expect(cal.reminders.find((x) => x.reminderId === r.id)?.project).toEqual({ id: project.id, title: 'XPO' });
+
+    const other = (await db.organization.create({ data: { name: 'Outra', slug: `outra-${randomUUID()}` } })).id;
+    try {
+      const foreign = await db.project.create({ data: { organizationId: other, title: 'Alheio', status: 'active' } });
+      await expectDomainError(
+        appointments.create(orgId, { title: 'x', allTeam: true, projectId: foreign.id, startAt: at('2026-11-24T10:00'), endAt: at('2026-11-24T11:00') }, actor),
+        'not_found',
+      );
+    } finally {
+      await db.organization.delete({ where: { id: other } });
+    }
+  });
+});

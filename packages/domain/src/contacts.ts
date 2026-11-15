@@ -1,5 +1,5 @@
 import type { Prisma } from '@coxia/database';
-import { normalizePhone, normalizeText } from '@coxia/shared';
+import { normalizeBrPhone, normalizePhone, normalizeText } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError } from './common';
 
 /** Pessoa vista na lista de participantes de um grupo ou num aviso de entrada. */
@@ -171,6 +171,27 @@ export class ContactService {
     return out;
   }
 
+  /** Cadastro manual de um contato (nome e WhatsApp). Número já cadastrado: conflito com o id dele. */
+  async create(organizationId: string, input: { name: string; phone: string; notes?: string | null }, actor: Actor) {
+    const name = input.name?.trim();
+    if (!name) throw new DomainError('validation', 'Informe o nome do contato');
+    const phone = normalizeBrPhone(input.phone);
+    if (!phone || phone.length < 12 || phone.length > 15) throw new DomainError('validation', 'WhatsApp inválido');
+    const existing = await this.db.contact.findUnique({ where: { organizationId_phone: { organizationId, phone } } });
+    if (existing) throw new DomainError('conflict', 'Este número já está nos contatos', { code: 'contact_exists', contactId: existing.id });
+    try {
+      const created = await this.db.$transaction(async (tx) => {
+        const c = await tx.contact.create({ data: { organizationId, phone, name, notes: input.notes?.trim() || null, searchName: searchOf(name, null) } });
+        await audit(tx, organizationId, actor, 'contact.create', 'contact', c.id, { after: { phone, name } });
+        return c;
+      });
+      return this.get(organizationId, created.id);
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002') throw new DomainError('conflict', 'Este número já está nos contatos', { code: 'contact_exists' });
+      throw err;
+    }
+  }
+
   /** A equipe corrige o nome (o do WhatsApp pode ser apelido) e anota observações. */
   async update(organizationId: string, contactId: string, patch: { name?: string | null; notes?: string | null }, actor: Actor) {
     const before = await this.get(organizationId, contactId);
@@ -250,9 +271,9 @@ export class ContactService {
     if (!rows.length) return [];
     const members = await this.db.organizationMember.findMany({
       where: { organizationId, user: { phone: { in: rows.map((r) => r.phone) } } },
-      select: { role: true, user: { select: { name: true, phone: true } } },
+      select: { role: true, user: { select: { id: true, name: true, phone: true, avatarUpdatedAt: true } } },
     });
-    const byPhone = new Map(members.map((m) => [m.user.phone!, { name: m.user.name, role: m.role }]));
+    const byPhone = new Map(members.map((m) => [m.user.phone!, { userId: m.user.id, name: m.user.name, role: m.role, avatarUpdatedAt: m.user.avatarUpdatedAt }]));
     return rows.map((r) => ({ ...r, member: byPhone.get(r.phone) ?? null }));
   }
 }

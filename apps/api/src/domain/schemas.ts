@@ -131,6 +131,7 @@ export const reminderSchema = z.object({
   contactId: z.string().nullish(),
   personName: z.string().max(120).nullish(),
   personPhone: phone.nullish(),
+  projectId: z.string().nullish(),
 });
 
 // ───────────── Compromissos ─────────────
@@ -148,6 +149,7 @@ export const appointmentSchema = z
     contactIds: z.array(z.string()).max(50).optional(),
     guests: z.array(z.object({ name: z.string().min(1).max(120), phone: z.string().max(30).nullish() })).max(30).optional(),
     notifyMinutesBefore: z.number().int().min(0).max(10080).nullable().optional(),
+    projectId: z.string().nullish(),
   })
   .refine((a) => a.endAt > a.startAt, { message: 'O fim precisa ser depois do início', path: ['endAt'] });
 
@@ -187,6 +189,22 @@ export const contactsQuery = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 
+export const contactCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  phone: z.string().min(8).max(30),
+  notes: z.string().max(2000).nullish(),
+});
+
+export const residentSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  phone: z.string().min(8).max(30),
+  description: z.string().max(4000).nullish(),
+  instagram: z.string().max(200).nullish(),
+  email: z.string().max(200).nullish(),
+  status: z.enum(['active', 'disabled']).optional(),
+  paymentDay: z.number().int().min(1).max(31).nullish(),
+});
+
 export const contactPatchSchema = z.object({
   name: z.string().max(120).nullish(),
   notes: z.string().max(2000).nullish(),
@@ -201,6 +219,7 @@ export const incomeSchema = z.object({
   notes: z.string().max(1000).nullish(),
   projectId: z.string().nullish(),
   spaceId: z.string().nullish(),
+  contactId: z.string().nullish(),
 });
 
 export const receiveIncomeSchema = z.object({

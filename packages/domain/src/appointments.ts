@@ -25,12 +25,15 @@ export interface AppointmentInput {
   guests?: Array<{ name: string; phone?: string | null }>;
   /** Aviso pelo WhatsApp para a equipe participante; null = sem aviso. */
   notifyMinutesBefore?: number | null;
+  /** Projeto relacionado (opcional). */
+  projectId?: string | null;
 }
 
 export const appointmentInclude = {
+  project: { select: { id: true, title: true } },
   participants: {
     include: {
-      member: { select: { id: true, user: { select: { id: true, name: true, phone: true } } } },
+      member: { select: { id: true, user: { select: { id: true, name: true, phone: true, avatarUpdatedAt: true } } } },
       contact: { select: { id: true, name: true, whatsappName: true, phone: true } },
     },
   },
@@ -71,6 +74,7 @@ export class AppointmentService {
           endAt: input.endAt,
           allTeam: data.allTeam,
           notifyMinutesBefore: data.notifyMinutesBefore,
+          projectId: data.projectId,
           createdByUserId: actor.userId ?? null,
           participants: { create: data.participants },
         },
@@ -99,6 +103,7 @@ export class AppointmentService {
           endAt: input.endAt,
           allTeam: data.allTeam,
           notifyMinutesBefore: data.notifyMinutesBefore,
+          projectId: data.projectId,
           participants: { create: data.participants },
         },
         include: appointmentInclude,
@@ -162,6 +167,10 @@ export class AppointmentService {
       const found = await this.db.contact.count({ where: { organizationId, id: { in: contactIds } } });
       if (found !== contactIds.length) throw new DomainError('not_found', 'Contato não encontrado');
     }
+    const projectId = input.projectId || null;
+    if (projectId && !(await this.db.project.count({ where: { organizationId, id: projectId } }))) {
+      throw new DomainError('not_found', 'Projeto não encontrado');
+    }
     const guests = (input.guests ?? []).map((g) => {
       const name = g.name?.trim();
       if (!name) throw new DomainError('validation', 'Informe o nome de cada pessoa de fora');
@@ -177,6 +186,7 @@ export class AppointmentService {
       notes: input.notes?.trim() || null,
       allTeam,
       notifyMinutesBefore: notify,
+      projectId,
       participants: [
         ...memberIds.map((memberId) => ({ memberId })),
         ...contactIds.map((contactId) => ({ contactId })),

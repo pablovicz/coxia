@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { canManage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { OpsPanel } from './ops-panel';
-import { AccountPhone, ROLE_LABEL, TeamPanel } from './team-panel';
+import { AccountAvatar, AccountPhone, ROLE_LABEL, TeamPanel } from './team-panel';
 
 
 export function SettingsPage() {
@@ -31,6 +31,9 @@ export function SettingsPage() {
             <CardDescription>{session?.organization.name}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap items-end justify-between gap-4">
+            <div className="w-full">
+              <AccountAvatar />
+            </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="text-muted-foreground">Nome</dt>
               <dd>{session?.user.name}</dd>

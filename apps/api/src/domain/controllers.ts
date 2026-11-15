@@ -5,6 +5,7 @@ import {
   BookingService,
   CalendarService,
   FinanceService,
+  ResidentService,
   competenceOf,
   ContactService,
   ExpenseCategoryService,
@@ -30,6 +31,7 @@ import {
   blockSchema,
   cancelSeriesSchema,
   competence,
+  contactCreateSchema,
   contactPatchSchema,
   contactsQuery,
   createBookingSchema,
@@ -44,6 +46,7 @@ import {
   rangeQuery,
   receiveIncomeSchema,
   reminderSchema,
+  residentSchema,
   spaceSchema,
   taskPatchSchema,
   taskSchema,
@@ -195,6 +198,12 @@ export class ContactsController {
   @Get('groups')
   groups(@CurrentUser() user: AuthUser) {
     return this.contacts.listGroups(user.organizationId);
+  }
+
+  /** Cadastro manual (nome e WhatsApp); número já cadastrado → 409 com o id do contato. */
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body(v(contactCreateSchema)) body: z.infer<typeof contactCreateSchema>) {
+    return this.contacts.create(user.organizationId, body, webActor(user));
   }
 
   @Get(':id')
@@ -490,6 +499,115 @@ export class RemindersController {
   @HttpCode(200)
   deactivate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.reminders.deactivate(user.organizationId, id, webActor(user));
+  }
+}
+
+// ───────────────────────── Residentes ─────────────────────────
+
+/** Arquivos do residente: foto (imagem) ou contrato (PDF ou foto), até 10 MB. */
+const RESIDENT_FILE_MAX = 10 * 1024 * 1024;
+
+/** Dados pessoais (telefone, e-mail, contrato): perfil leitura não vê residentes. */
+@Roles('owner', 'admin', 'staff')
+@Controller('residents')
+export class ResidentsController {
+  constructor(
+    private readonly residents: ResidentService,
+    private readonly storage: StorageService,
+  ) {}
+
+  @Get()
+  list(@CurrentUser() user: AuthUser) {
+    return this.residents.list(user.organizationId);
+  }
+
+  @Get(':id')
+  details(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.residents.details(user.organizationId, id);
+  }
+
+  @Roles('owner', 'admin')
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body(v(residentSchema)) body: z.infer<typeof residentSchema>) {
+    return this.residents.create(user.organizationId, body, webActor(user));
+  }
+
+  @Roles('owner', 'admin')
+  @Patch(':id')
+  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body(v(residentSchema.partial())) body: Partial<z.infer<typeof residentSchema>>) {
+    return this.residents.update(user.organizationId, id, body, webActor(user));
+  }
+
+  /** Foto (corpo bruto: JPG, PNG ou WebP) ou contrato (PDF ou foto). Troca o arquivo anterior. */
+  @Roles('owner', 'admin')
+  @Post(':id/photo')
+  uploadPhoto(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown, @Headers('content-type') contentType?: string) {
+    return this.upload(user, id, 'photo', body, contentType);
+  }
+
+  @Roles('owner', 'admin')
+  @Post(':id/contract')
+  uploadContract(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() body: unknown, @Headers('content-type') contentType?: string, @Headers('x-file-name') fileName?: string) {
+    return this.upload(user, id, 'contract', body, contentType, fileName);
+  }
+
+  @Roles('owner', 'admin')
+  @Delete(':id/photo')
+  removePhoto(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.removeFile(user, id, 'photo');
+  }
+
+  @Roles('owner', 'admin')
+  @Delete(':id/contract')
+  removeContract(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.removeFile(user, id, 'contract');
+  }
+
+  @Get(':id/photo')
+  photo(@CurrentUser() user: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    return this.file(user, id, 'photo', res);
+  }
+
+  @Get(':id/contract')
+  contract(@CurrentUser() user: AuthUser, @Param('id') id: string, @Res() res: Response) {
+    return this.file(user, id, 'contract', res);
+  }
+
+  private async upload(user: AuthUser, id: string, kind: 'photo' | 'contract', body: unknown, contentType?: string, fileName?: string) {
+    const what = kind === 'photo' ? 'a foto em JPG, PNG ou WebP' : 'o contrato em PDF ou foto';
+    if (!Buffer.isBuffer(body) || body.length === 0) throw new DomainError('validation', `Envie ${what}`, { code: 'invalid_file' });
+    if (body.length > RESIDENT_FILE_MAX) throw new DomainError('validation', 'O arquivo deve ter até 10 MB', { code: 'file_too_large' });
+    const sniffed = kind === 'photo' ? sniffImage(body) : sniffProof(body);
+    if (!sniffed || (contentType && contentType.split(';')[0]!.trim() !== sniffed)) throw new DomainError('validation', `Envie ${what}`, { code: 'invalid_file' });
+    await this.residents.get(user.organizationId, id);
+    const key = `${user.organizationId}/residents/${id}/${kind}-${randomUUID()}.${PROOF_EXT[sniffed]}`;
+    await this.storage.put(key, body, sniffed);
+    try {
+      const name = fileName ? decodeURIComponent(fileName).slice(0, 200) : null;
+      const { previousKey } = await this.residents.setFile(user.organizationId, id, kind, { key, contentType: sniffed, fileName: name }, webActor(user));
+      if (previousKey) await this.storage.delete(previousKey).catch(() => undefined);
+      return this.residents.get(user.organizationId, id);
+    } catch (err) {
+      await this.storage.delete(key).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  private async removeFile(user: AuthUser, id: string, kind: 'photo' | 'contract') {
+    const { previousKey } = await this.residents.setFile(user.organizationId, id, kind, null, webActor(user));
+    if (previousKey) await this.storage.delete(previousKey).catch(() => undefined);
+    return this.residents.get(user.organizationId, id);
+  }
+
+  private async file(user: AuthUser, id: string, kind: 'photo' | 'contract', res: Response) {
+    const r = await this.residents.get(user.organizationId, id);
+    const key = kind === 'photo' ? r.photoKey : r.contractKey;
+    if (!key) throw new DomainError('not_found', kind === 'photo' ? 'Sem foto' : 'Sem contrato');
+    const stream = await this.storage.get(key);
+    res.setHeader('content-type', (kind === 'photo' ? r.photoContentType : r.contractContentType) ?? 'application/octet-stream');
+    res.setHeader('cache-control', 'private, max-age=86400, immutable');
+    res.setHeader('x-content-type-options', 'nosniff');
+    stream.pipe(res);
   }
 }
 

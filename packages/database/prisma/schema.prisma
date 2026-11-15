@@ -236,6 +236,7 @@ model Organization {
   bookingOccurrences     BookingOccurrence[]
   reminders              Reminder[]
   appointments           Appointment[]
+  residents              Resident[]
   recurringBills         RecurringBill[]
   billOccurrences        BillOccurrence[]
   paymentAttachments     PaymentAttachment[]
@@ -249,14 +250,18 @@ model Organization {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String?  @unique
+  id                String    @id @default(cuid())
+  name              String
+  email             String?   @unique
   /// Telefone só com dígitos (E.164 sem '+'); identifica o usuário no WhatsApp.
-  phone        String?  @unique
-  passwordHash String?  @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  phone             String?   @unique
+  passwordHash      String?   @map("password_hash")
+  /// Foto de avatar no bucket (privado); a versão (data) evita cache velho no navegador.
+  avatarKey         String?   @map("avatar_key")
+  avatarContentType String?   @map("avatar_content_type")
+  avatarUpdatedAt   DateTime? @map("avatar_updated_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   memberships OrganizationMember[]
 
@@ -353,6 +358,8 @@ model Contact {
   reminders    Reminder[]
   bookings     Booking[]
   appointments AppointmentParticipant[]
+  incomes      Income[]
+  resident     Resident?
 
   @@unique([organizationId, phone])
   @@index([organizationId, lastMessageAt])
@@ -484,6 +491,9 @@ model Project {
   incomes      Income[]
   summaries    ProjectSummary[]
 
+  appointments Appointment[]
+  reminders    Reminder[]
+
   @@index([organizationId, status])
   @@map("projects")
 }
@@ -594,6 +604,8 @@ model Income {
   notes               String?
   projectId           String?      @map("project_id")
   spaceId             String?      @map("space_id")
+  /// Quem paga (contato): os pagamentos de um residente são as entradas ligadas a ele.
+  contactId           String?      @map("contact_id")
   /// Aluguel mensal gerado (YYYY-MM): um por sala e mês, mesmo com o job rodando várias vezes.
   competence          String?
   createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -602,10 +614,12 @@ model Income {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   space        Space?       @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@unique([spaceId, competence])
   @@index([organizationId, expectedOn])
   @@index([projectId])
+  @@index([contactId])
   @@map("incomes")
 }
 
@@ -821,6 +835,8 @@ model Reminder {
   message         String?
   /// Para ligar/mandar mensagem: contato cadastrado ou, se não houver, nome e telefone digitados.
   contactId       String?      @map("contact_id")
+  /// Projeto relacionado (opcional): filtra o calendário.
+  projectId       String?      @map("project_id")
   personName      String?      @map("person_name")
   personPhone     String?      @map("person_phone")
   createdByUserId String?      @map("created_by_user_id")
@@ -837,8 +853,10 @@ model Reminder {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([active, nextRunAt])
+  @@index([projectId])
   @@map("reminders")
 }
 
@@ -1118,6 +1136,8 @@ model Appointment {
   startAt             DateTime          @map("start_at") @db.Timestamptz(6)
   endAt               DateTime          @map("end_at") @db.Timestamptz(6)
   allTeam             Boolean           @default(false) @map("all_team")
+  /// Projeto relacionado (opcional): filtra o calendário.
+  projectId           String?           @map("project_id")
   /// Aviso pelo WhatsApp para a equipe participante; null = sem aviso.
   notifyMinutesBefore Int?              @default(60) @map("notify_minutes_before")
   status              AppointmentStatus @default(scheduled)
@@ -1127,8 +1147,10 @@ model Appointment {
 
   organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   participants AppointmentParticipant[]
+  project      Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, startAt])
+  @@index([projectId])
   @@map("appointments")
 }
 
@@ -1148,4 +1170,42 @@ model AppointmentParticipant {
   @@index([appointmentId])
   @@index([memberId])
   @@map("appointment_participants")
+}
+
+// ───────────── Residentes (quem ocupa as salas com frequência) ─────────────
+
+enum ResidentStatus {
+  active
+  disabled
+}
+
+/// Residente da casa: ligado a um contato (WhatsApp, reservas e pagamentos).
+/// A situação (regular, atenção, atrasado, pendente) é calculada pelas entradas ligadas ao contato.
+model Resident {
+  id                  String         @id @default(cuid())
+  organizationId      String         @map("organization_id")
+  contactId           String         @unique @map("contact_id")
+  name                String
+  /// Texto para a futura landing page dos residentes.
+  description         String?
+  instagram           String?
+  email               String?
+  status              ResidentStatus @default(active)
+  /// Dia do mês combinado para o pagamento (1–31).
+  paymentDay          Int?           @map("payment_day")
+  photoKey            String?        @map("photo_key")
+  photoContentType    String?        @map("photo_content_type")
+  photoUpdatedAt      DateTime?      @map("photo_updated_at") @db.Timestamptz(6)
+  contractKey         String?        @map("contract_key")
+  contractContentType String?        @map("contract_content_type")
+  contractFileName    String?        @map("contract_file_name")
+  contractUploadedAt  DateTime?      @map("contract_uploaded_at") @db.Timestamptz(6)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("residents")
 }

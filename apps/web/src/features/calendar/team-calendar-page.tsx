@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, CalendarClock, ChevronLeft, ChevronRight, MapPin, Plus, ReceiptText, Repeat } from 'lucide-react';
+import { Bell, CalendarClock, ChevronLeft, ChevronRight, MapPin, Plus, ReceiptText, Repeat, Users } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { EmptyState, PageHeader } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
+import { UserAvatar } from '@/components/user-avatar';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/input';
@@ -17,6 +18,7 @@ import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, fo
 import { roomStyle } from '@/lib/rooms';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
+import { ProjectPicker } from '@/features/projects/project-picker';
 import { APPOINTMENT_KINDS, AppointmentForm } from './appointment-form';
 
 /** Cada tipo tem cor própria (paleta das salas) e aparece separado no calendário. */
@@ -26,7 +28,18 @@ export const ITEM_KINDS = {
   bill: { label: 'Contas', color: 'terracota', Icon: ReceiptText },
 } as const;
 type ItemKind = keyof typeof ITEM_KINDS;
-type Filter = 'all' | ItemKind;
+/** 'meeting' = só as reuniões (compromissos do tipo reunião). */
+type Filter = 'all' | ItemKind | 'meeting';
+
+/** Filtros de tipo por tela: Lembretes mostra também as contas; Calendário separa as reuniões. */
+const FILTERS: Record<'lembretes' | 'calendario', Array<{ id: Exclude<Filter, 'all'>; label: string; color: string; Icon: typeof Bell }>> = {
+  lembretes: (Object.keys(ITEM_KINDS) as ItemKind[]).map((k) => ({ id: k, ...ITEM_KINDS[k] })),
+  calendario: [
+    { id: 'appointment', ...ITEM_KINDS.appointment },
+    { id: 'meeting', label: 'Reuniões', color: 'azul', Icon: Users },
+    { id: 'reminder', ...ITEM_KINDS.reminder },
+  ],
+};
 
 type Item =
   | { key: string; kind: 'appointment'; date: string; sort: string; time: string; title: string; done: boolean; appointment: Appointment }
@@ -49,22 +62,26 @@ function useIsDesktop() {
 }
 
 /**
- * Calendário da equipe, separado da agenda das salas:
- * compromissos (reuniões, visitas…), lembretes gerais e as contas, que entram sozinhas.
+ * Calendário da equipe, separado da agenda das salas.
+ * - `lembretes`: compromissos, lembretes e as contas (que entram sozinhas), da semana ao ano.
+ * - `calendario`: só compromissos e lembretes, semana ou mês, com filtro de reuniões e de projeto.
  */
-export function TeamCalendarPage() {
+export function TeamCalendarPage({ mode = 'lembretes' }: { mode?: 'lembretes' | 'calendario' }) {
+  const calendarMode = mode === 'calendario';
+  const views = calendarMode ? AGENDA_VIEWS.filter((v) => v.id === 'semana' || v.id === 'mes') : AGENDA_VIEWS;
   const { session } = useAuth();
   const tz = session?.organization.timezone ?? 'America/Sao_Paulo';
   const mayEdit = canBook(session?.user.role);
   const desktop = useIsDesktop();
   const [params, setParams] = useSearchParams();
   const visao = params.get('visao');
-  const view: AgendaView = isAgendaView(visao) ? visao : 'semana';
+  const view: AgendaView = isAgendaView(visao) && views.some((v) => v.id === visao) ? visao : 'semana';
   const today = todayIn(tz);
   const [date, setDate] = useState(today);
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [onlyMine, setOnlyMine] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [creating, setCreating] = useState<'appointment' | 'reminder' | null>(null);
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [open, setOpen] = useState<Item | null>(null);
@@ -118,7 +135,14 @@ export function TeamCalendarPage() {
       })),
     ];
     return out
-      .filter((i) => filter === 'all' || i.kind === filter)
+      .filter((i) => !calendarMode || i.kind !== 'bill')
+      .filter((i) => filter === 'all' || (filter === 'meeting' ? i.kind === 'appointment' && i.appointment.kind === 'meeting' : i.kind === filter))
+      .filter((i) => {
+        if (!projectFilter) return true;
+        if (i.kind === 'appointment') return i.appointment.project?.id === projectFilter;
+        if (i.kind === 'reminder') return i.reminder.project?.id === projectFilter;
+        return false;
+      })
       .filter((i) => {
         if (!onlyMine || !me) return true;
         if (i.kind === 'appointment') return i.appointment.allTeam || i.appointment.participants.some((p) => p.member?.user.id === me.id);
@@ -126,7 +150,7 @@ export function TeamCalendarPage() {
         return true;
       })
       .sort((a, b) => a.sort.localeCompare(b.sort));
-  }, [calendar.data, filter, onlyMine, session?.user, tz]);
+  }, [calendar.data, filter, onlyMine, projectFilter, calendarMode, session?.user, tz]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Item[]>();
@@ -145,8 +169,12 @@ export function TeamCalendarPage() {
     <>
       <PageHeader
         eyebrow="Agenda da equipe"
-        title="Lembretes."
-        description="Compromissos, lembretes e contas da casa, separados da agenda das salas."
+        title={calendarMode ? 'Calendário.' : 'Lembretes.'}
+        description={
+          calendarMode
+            ? 'Compromissos e lembretes da equipe. Filtre pelas reuniões, pelo que é seu ou por projeto.'
+            : 'Compromissos, lembretes e contas da casa, separados da agenda das salas.'
+        }
         action={
           mayEdit ? (
             <div className="flex flex-wrap gap-2">
@@ -183,8 +211,8 @@ export function TeamCalendarPage() {
               {period.title}
             </h2>
           </div>
-          <div role="radiogroup" aria-label="Visão do calendário" className="grid grid-cols-5 gap-1 rounded-md border bg-card p-1 md:flex">
-            {AGENDA_VIEWS.map((v) => (
+          <div role="radiogroup" aria-label="Visão do calendário" className={cn('grid gap-1 rounded-md border bg-card p-1 md:flex', calendarMode ? 'grid-cols-2' : 'grid-cols-5')}>
+            {views.map((v) => (
               <button
                 key={v.id}
                 type="button"
@@ -212,8 +240,7 @@ export function TeamCalendarPage() {
             >
               Tudo
             </button>
-            {(Object.keys(ITEM_KINDS) as ItemKind[]).map((k) => {
-              const { label, color, Icon } = ITEM_KINDS[k];
+            {FILTERS[mode].map(({ id: k, label, color, Icon }) => {
               return (
                 <button
                   key={k}
@@ -245,6 +272,9 @@ export function TeamCalendarPage() {
           >
             Só os meus
           </button>
+          {calendarMode ? (
+            <ProjectPicker label="Projeto" emptyLabel="Todos os projetos" value={projectFilter} onChange={setProjectFilter} className="w-full sm:w-72 [&>label]:sr-only" />
+          ) : null}
         </div>
       </div>
 
@@ -308,9 +338,12 @@ function itemSubtitle(item: Item): string | null {
   if (item.kind === 'appointment') {
     const a = item.appointment;
     const who = a.allTeam ? 'Toda a equipe' : `${a.participants.length} ${a.participants.length === 1 ? 'pessoa' : 'pessoas'}`;
-    return [APPOINTMENT_KINDS[a.kind].label, a.location, who].filter(Boolean).join(' · ');
+    return [APPOINTMENT_KINDS[a.kind].label, a.project?.title, a.location, who].filter(Boolean).join(' · ');
   }
-  if (item.kind === 'reminder') return item.reminder.person.name ?? (item.reminder.recurrenceRule ? repeatLabel(item.reminder.recurrenceRule) : null);
+  if (item.kind === 'reminder') {
+    const r = item.reminder;
+    return [r.project?.title, r.person.name ?? (r.recurrenceRule ? repeatLabel(r.recurrenceRule) : null)].filter(Boolean).join(' · ') || null;
+  }
   const b = item.bill;
   if (b.expectedAmountCents === null) return 'valor a confirmar';
   if (b.status === 'paid') return formatBRL(b.paidAmountCents);
@@ -648,6 +681,13 @@ function ItemDialog({ item, tz, mayEdit, onClose, onEdit }: { item: Item; tz: st
       >
         {confirmCancel ? <p className="mb-3 text-sm font-medium">Cancelar este compromisso? Ele sai do calendário e ninguém recebe o aviso.</p> : null}
         <dl className="divide-y">
+          {a.project ? (
+            <Row label="Projeto">
+              <Link to={`/projetos/${a.project.id}`} className="font-medium text-primary underline-offset-4 hover:underline">
+                {a.project.title}
+              </Link>
+            </Row>
+          ) : null}
           {a.location ? (
             <Row label="Local">
               <span className="inline-flex items-center gap-1.5">
@@ -655,7 +695,22 @@ function ItemDialog({ item, tz, mayEdit, onClose, onEdit }: { item: Item; tz: st
               </span>
             </Row>
           ) : null}
-          <Row label="Equipe">{a.allTeam ? 'Toda a equipe' : team.map((p) => p.member!.user.name).join(', ') || '—'}</Row>
+          <Row label="Equipe">
+            {a.allTeam ? (
+              'Toda a equipe'
+            ) : team.length ? (
+              <ul className="flex flex-col gap-1.5">
+                {team.map((p) => (
+                  <li key={p.id} className="flex items-center gap-2">
+                    <UserAvatar userId={p.member!.user.id} name={p.member!.user.name} version={p.member!.user.avatarUpdatedAt} className="size-7 text-[11px]" />
+                    {p.member!.user.name}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              '—'
+            )}
+          </Row>
           {contacts.length ? (
             <Row label="Contatos">
               <ul>
@@ -708,6 +763,13 @@ function ItemDialog({ item, tz, mayEdit, onClose, onEdit }: { item: Item; tz: st
         }
       >
         <dl className="divide-y">
+          {r.project ? (
+            <Row label="Projeto">
+              <Link to={`/projetos/${r.project.id}`} className="font-medium text-primary underline-offset-4 hover:underline">
+                {r.project.title}
+              </Link>
+            </Row>
+          ) : null}
           {repeat ? (
             <Row label="Repete">
               <span className="inline-flex items-center gap-1.5">

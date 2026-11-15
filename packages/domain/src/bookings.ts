@@ -23,6 +23,7 @@ import {
   withinOperatingHours,
 } from './availability';
 import { type Actor, audit, type Db, DomainError, fromIsoDate, getOrganization, toIsoDate, type Tx } from './common';
+import { ensureResident } from './residents';
 import { assertBookable } from './spaces';
 
 /** Quanto à frente as ocorrências de séries sem fim ficam materializadas. */
@@ -248,6 +249,7 @@ export class BookingService {
         // Reserva recorrente faz do contato um residente da casa.
         if (person.contactId && plans.some((p) => p.series)) {
           await tx.contact.update({ where: { id: person.contactId }, data: { kind: 'resident' } });
+          await ensureResident(tx, organizationId, person.contactId);
         }
         const occurrences = await tx.bookingOccurrence.findMany({
           where: { bookingId: { in: bookings.map((b) => b.id) } },

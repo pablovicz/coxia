@@ -74,6 +74,24 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 | **Meio de pagamento** na conta (Boleto, PIX ou Cartão de crédito), junto de "Como pagar"; aparece na lista, no pagamento, no detalhe, no calendário e no aviso ("Como pagar: PIX · chave…") | `howToPay`, `PaymentMethod` |
 | O antigo campo "categoria" (aluguel, energia…) virou interno: é deduzido do nome e só serve para o WhatsApp entender "paguei a luz" | `inferUtility` |
 
+### Residentes, contatos e equipe (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| Tela **Residentes** (`/residentes`): nome, descrição (para a futura landing page), foto (enviada ou a do WhatsApp), WhatsApp, Instagram, e-mail, contrato (PDF ou foto), status ativo/desabilitado e dia de pagamento; filtro por status | `packages/domain/src/residents.ts`, `apps/web/src/features/residents`, `/residents` |
+| **Situação** calculada pelos pagamentos: atrasado (entrada vencida), atenção (vence em até 5 dias), regular (pagou e nada vencido), pendente (nenhum pagamento) | `residentSituation` |
+| **Detalhe do residente**: locações (cada sala) com a programação (dias, horários, desde/até, valor da hora) das reservas semanais; pagamentos mês a mês; entrada (primeiro mês pago); dias de pagamento (combinado e os de fato); contrato; "Registrar pagamento" | `ResidentService.details` |
+| Pagamentos do residente são as **entradas** ligadas a ele (campo "Residente" no formulário de entrada). Reserva semanal para um contato cria o cadastro de residente; quem já era residente foi migrado | `incomes.contact_id`, `ensureResident` |
+| **Novo contato** à mão (nome, WhatsApp, observações); número já cadastrado avisa | `POST /contacts` |
+| **Foto de avatar** de cada pessoa da equipe (Configurações → Sua conta), no menu e na lista da equipe | `POST/DELETE /organization/me/avatar`, `components/user-avatar.tsx` |
+
+### Calendário (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| Tela **Calendário** (`/calendario`): só compromissos e lembretes, visão **semana** ou **mês**; filtros Tudo, Compromissos, **Reuniões**, Lembretes, **Só os meus** (compromissos de que a pessoa participa e lembretes que ela recebe) e **Projeto**. No celular ocupa o lugar de Lembretes na barra inferior | `TeamCalendarPage` com `mode="calendario"` |
+| **Projeto** (busca por nome) em compromissos e lembretes: aparece no calendário e no detalhe, com link para o projeto; projeto de outra organização é recusado | `appointments.project_id`, `reminders.project_id`, `features/projects/project-picker.tsx` |
+
 ### Calendário da equipe: compromissos, lembretes e contas (pós-Etapa 4)
 
 | Entregue | Onde |

@@ -10,6 +10,7 @@ export * from './reminders';
 export * from './appointments';
 export * from './calendar';
 export * from './finance';
+export * from './residents';
 export * from './briefing';
 export * from './notifications';
 export * from './commands';

@@ -20,6 +20,7 @@ export interface CalendarReminder {
   done: boolean;
   /** Ainda pode ser concluído/encerrado. */
   active: boolean;
+  project: { id: string; title: string } | null;
 }
 
 export interface CalendarBill {
@@ -72,7 +73,7 @@ export class CalendarService {
           dueAt: { lt: to },
           OR: [{ recurrenceRule: { not: null } }, { dueAt: { gte: from } }],
         },
-        include: { contact: { select: { id: true, name: true, whatsappName: true, phone: true } } },
+        include: { contact: { select: { id: true, name: true, whatsappName: true, phone: true } }, project: { select: { id: true, title: true } } },
       }),
       this.db.billOccurrence.findMany({
         where: { organizationId, status: { not: 'cancelled' }, dueDate: { gte: fromIsoDate(fromDate), lte: fromIsoDate(lastDate) } },
@@ -93,6 +94,7 @@ export class CalendarService {
         person: reminderPerson(r),
         recipientPhones: r.recipientPhones,
         active: r.active,
+        project: r.project,
       };
       if (!r.recurrenceRule) {
         if (r.dueAt >= from && r.dueAt < to) reminderRuns.push({ ...base, at: r.dueAt.toISOString(), done: !r.active });

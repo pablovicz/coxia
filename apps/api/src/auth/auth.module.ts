@@ -58,7 +58,15 @@ export class AuthService {
       include: { user: true, organization: true },
     });
     return {
-      user: { id: member.user.id, memberId: member.id, name: member.user.name, email: member.user.email, phone: member.user.phone, role: member.role },
+      user: {
+        id: member.user.id,
+        memberId: member.id,
+        name: member.user.name,
+        email: member.user.email,
+        phone: member.user.phone,
+        role: member.role,
+        avatarUpdatedAt: member.user.avatarUpdatedAt,
+      },
       organization: { id: member.organization.id, name: member.organization.name, timezone: member.organization.timezone },
     };
   }

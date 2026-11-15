@@ -2,22 +2,34 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
+  Headers,
+  HttpCode,
   Module,
   NotFoundException,
   Param,
   Patch,
   Post,
+  Res,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { randomUUID } from 'node:crypto';
 import { normalizeBrPhone } from '@coxia/shared';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service';
 import { type AuthUser, CurrentUser, Roles } from '../auth/decorators';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { sniffImage } from '../domain/controllers';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
+
+/** Avatar: foto JPG, PNG ou WebP, até 5 MB. */
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+const AVATAR_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
 const role = z.enum(['owner', 'admin', 'staff', 'viewer']);
 const phoneField = z
@@ -58,7 +70,7 @@ const memberSelect = {
   canManageProjects: true,
   receivesMorningBriefing: true,
   createdAt: true,
-  user: { select: { id: true, name: true, email: true, phone: true } },
+  user: { select: { id: true, name: true, email: true, phone: true, avatarUpdatedAt: true } },
 } as const;
 
 const isUniqueViolation = (err: unknown) => (err as { code?: string }).code === 'P2002';
@@ -68,7 +80,58 @@ export class OrganizationController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
+
+  // ───────────── Avatar (cada pessoa cuida da própria foto) ─────────────
+
+  /** Foto enviada como corpo bruto (image/jpeg, image/png ou image/webp), até 5 MB. Troca a anterior. */
+  @Post('organization/me/avatar')
+  async uploadAvatar(@CurrentUser() user: AuthUser, @Body() body: unknown, @Headers('content-type') contentType?: string) {
+    if (!Buffer.isBuffer(body) || body.length === 0) throw new UnprocessableEntityException({ code: 'invalid_photo', message: 'Envie a foto em JPG, PNG ou WebP' });
+    if (body.length > MAX_AVATAR_BYTES) throw new UnprocessableEntityException({ code: 'photo_too_large', message: 'A foto deve ter até 5 MB' });
+    const sniffed = sniffImage(body);
+    if (!sniffed || (contentType && contentType.split(';')[0]!.trim() !== sniffed)) {
+      throw new UnprocessableEntityException({ code: 'invalid_photo', message: 'Envie a foto em JPG, PNG ou WebP' });
+    }
+    const before = await this.prisma.user.findUniqueOrThrow({ where: { id: user.userId }, select: { avatarKey: true } });
+    const key = `${user.organizationId}/avatars/${user.userId}/${randomUUID()}.${AVATAR_EXT[sniffed]}`;
+    await this.storage.put(key, body, sniffed);
+    const updated = await this.prisma.user.update({
+      where: { id: user.userId },
+      data: { avatarKey: key, avatarContentType: sniffed, avatarUpdatedAt: new Date() },
+      select: { avatarUpdatedAt: true },
+    });
+    if (before.avatarKey) await this.storage.delete(before.avatarKey).catch(() => undefined);
+    await this.record(user, 'user.avatar_updated', user.memberId, {});
+    return { avatarUpdatedAt: updated.avatarUpdatedAt };
+  }
+
+  @Delete('organization/me/avatar')
+  @HttpCode(200)
+  async deleteAvatar(@CurrentUser() user: AuthUser) {
+    const before = await this.prisma.user.findUniqueOrThrow({ where: { id: user.userId }, select: { avatarKey: true } });
+    await this.prisma.user.update({ where: { id: user.userId }, data: { avatarKey: null, avatarContentType: null, avatarUpdatedAt: null } });
+    if (before.avatarKey) await this.storage.delete(before.avatarKey).catch(() => undefined);
+    await this.record(user, 'user.avatar_removed', user.memberId, {});
+    return { avatarUpdatedAt: null };
+  }
+
+  /** Foto de quem é da mesma organização (bucket privado: passa pela api). */
+  @Get('organization/users/:userId/avatar')
+  async avatar(@CurrentUser() user: AuthUser, @Param('userId') userId: string, @Res() res: Response) {
+    const member = await this.prisma.organizationMember.findFirst({
+      where: { organizationId: user.organizationId, userId },
+      select: { user: { select: { avatarKey: true, avatarContentType: true } } },
+    });
+    if (!member?.user.avatarKey) throw new NotFoundException('Sem foto');
+    const stream = await this.storage.get(member.user.avatarKey);
+    res.setHeader('content-type', member.user.avatarContentType ?? 'application/octet-stream');
+    // A URL leva a versão (?v=): pode ficar em cache; trocar a foto muda a versão.
+    res.setHeader('cache-control', 'private, max-age=86400, immutable');
+    res.setHeader('x-content-type-options', 'nosniff');
+    stream.pipe(res);
+  }
 
   @Get('organization')
   organization(@CurrentUser() user: AuthUser) {
@@ -85,10 +148,10 @@ export class OrganizationController {
     // Todos da equipe (quem não tem WhatsApp vem com phone null: participa, mas não recebe aviso).
     const rows = await this.prisma.organizationMember.findMany({
       where: { organizationId: user.organizationId },
-      select: { id: true, role: true, user: { select: { id: true, name: true, phone: true } } },
+      select: { id: true, role: true, user: { select: { id: true, name: true, phone: true, avatarUpdatedAt: true } } },
       orderBy: { user: { name: 'asc' } },
     });
-    return rows.map((m) => ({ memberId: m.id, userId: m.user.id, name: m.user.name, phone: m.user.phone, role: m.role }));
+    return rows.map((m) => ({ memberId: m.id, userId: m.user.id, name: m.user.name, phone: m.user.phone, role: m.role, avatarUpdatedAt: m.user.avatarUpdatedAt }));
   }
 
   // ───────────── Equipe (quem entra no painel e é reconhecido no WhatsApp) ─────────────

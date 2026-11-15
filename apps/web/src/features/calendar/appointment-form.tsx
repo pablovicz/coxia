@@ -3,11 +3,13 @@ import { CalendarDays, MapPin, Plus, Users, X } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
+import { MemberCheckbox } from '@/components/member-checkbox';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { Checkbox, Field, Select } from '@/components/ui/field';
+import { Field, Select } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
 import { ContactPicker } from '@/features/contacts/contact-picker';
+import { ProjectPicker } from '@/features/projects/project-picker';
 import { api, apiSend, type Appointment, type AppointmentKind, type Contact, type Member } from '@/lib/api';
 import { formatPhone, local, toZonedIso } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -74,6 +76,7 @@ export function AppointmentForm({
   const [end, setEnd] = useState(initial.end);
   const [location, setLocation] = useState(appointment?.location ?? '');
   const [notes, setNotes] = useState(appointment?.notes ?? '');
+  const [projectId, setProjectId] = useState<string | null>(appointment?.project?.id ?? null);
   const [allTeam, setAllTeam] = useState(appointment?.allTeam ?? false);
   const [memberIds, setMemberIds] = useState<string[] | null>(
     appointment ? appointment.participants.flatMap((p) => (p.memberId ? [p.memberId] : [])) : null,
@@ -142,6 +145,7 @@ export function AppointmentForm({
       contactIds: contacts.map((c) => c.id),
       guests: guests.map((g) => ({ name: g.name, phone: g.phone || null })),
       notifyMinutesBefore: notice === 'none' ? null : Number(notice),
+      projectId,
     });
   }
 
@@ -197,6 +201,7 @@ export function AppointmentForm({
           <Field label="Local (opcional)">
             {(id) => <Input id={id} value={location} maxLength={200} placeholder="Ex.: Sala Pequena, ou o endereço" onChange={(e) => setLocation(e.target.value)} />}
           </Field>
+          <ProjectPicker label="Projeto (opcional)" value={projectId} onChange={setProjectId} />
           <Field label="Observações (opcional)">
             {(id) => <Textarea id={id} rows={3} value={notes} maxLength={2000} placeholder="Pauta, o que levar…" onChange={(e) => setNotes(e.target.value)} />}
           </Field>
@@ -227,8 +232,11 @@ export function AppointmentForm({
             ) : (
               <div>
                 {(members.data ?? []).map((m) => (
-                  <Checkbox
+                  <MemberCheckbox
                     key={m.memberId}
+                    userId={m.userId}
+                    name={m.name}
+                    avatarUpdatedAt={m.avatarUpdatedAt}
                     label={m.phone ? m.name : `${m.name} (sem WhatsApp: não recebe aviso)`}
                     checked={selected.includes(m.memberId)}
                     onChange={(on) => setMemberIds(on ? [...selected, m.memberId] : selected.filter((x) => x !== m.memberId))}

@@ -18,9 +18,14 @@ export interface ReminderInput {
   contactId?: string | null;
   personName?: string | null;
   personPhone?: string | null;
+  /** Projeto relacionado (opcional). */
+  projectId?: string | null;
 }
 
-const reminderInclude = { contact: { select: { id: true, name: true, whatsappName: true, phone: true } } } as const;
+const reminderInclude = {
+  contact: { select: { id: true, name: true, whatsappName: true, phone: true } },
+  project: { select: { id: true, title: true } },
+} as const;
 
 /** Pessoa do lembrete: o contato (nome dado pela equipe, senão o do WhatsApp) ou o que foi digitado. */
 export function reminderPerson(r: {
@@ -100,6 +105,10 @@ export class ReminderService {
     }
     const title = input.title?.trim() || (type === 'call' ? `Ligar para ${who}` : type === 'message' ? `Mandar mensagem para ${who}` : '');
     if (!title) throw new DomainError('validation', 'Informe o título do lembrete');
+    const projectId = input.projectId || null;
+    if (projectId && !(await this.db.project.count({ where: { organizationId, id: projectId } }))) {
+      throw new DomainError('not_found', 'Projeto não encontrado');
+    }
     if (input.recurrenceRule) {
       try {
         parseRRule(input.recurrenceRule);
@@ -122,6 +131,7 @@ export class ReminderService {
           contactId: contact?.id ?? null,
           personName,
           personPhone: contact ? null : personPhone,
+          projectId,
           createdByUserId: actor.userId ?? null,
         },
         include: reminderInclude,

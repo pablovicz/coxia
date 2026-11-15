@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Phone, UserPlus } from 'lucide-react';
-import { type FormEvent, useState } from 'react';
+import { Camera, Pencil, Phone, UserPlus } from 'lucide-react';
+import { type FormEvent, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { UserAvatar } from '@/components/user-avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox, Field, Select } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { api, apiSend, type Role, type TeamMember } from '@/lib/api';
+import { api, apiSend, AVATAR_TYPES, MAX_AVATAR_BYTES, type Role, type TeamMember, uploadAvatar } from '@/lib/api';
 import { formatPhone } from '@/lib/format';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -22,6 +23,54 @@ function generatePassword(): string {
 }
 
 /** Telefone da própria conta: é por ele que a Coxia reconhece a pessoa no WhatsApp. */
+/** A própria foto: enviar, trocar ou remover (JPG, PNG ou WebP, até 5 MB). */
+export function AccountAvatar() {
+  const { session } = useAuth();
+  const qc = useQueryClient();
+  const input = useRef<HTMLInputElement>(null);
+  const done = (msg: string) => {
+    qc.invalidateQueries({ queryKey: ['auth'] });
+    qc.invalidateQueries({ queryKey: ['organization'] });
+    toast.success(msg);
+  };
+  const upload = useMutation({ mutationFn: (file: File) => uploadAvatar(file), onSuccess: () => done('Foto atualizada.'), onError: (e) => toast.error(e.message) });
+  const remove = useMutation({ mutationFn: () => apiSend('/organization/me/avatar', 'DELETE'), onSuccess: () => done('Foto removida.'), onError: (e) => toast.error(e.message) });
+  function choose(file: File | undefined) {
+    if (!file) return;
+    if (!AVATAR_TYPES.includes(file.type)) return toast.error('Envie a foto em JPG, PNG ou WebP.');
+    if (file.size > MAX_AVATAR_BYTES) return toast.error('A foto deve ter até 5 MB.');
+    upload.mutate(file);
+  }
+  if (!session) return null;
+  const hasPhoto = !!session.user.avatarUpdatedAt;
+  return (
+    <div className="flex items-center gap-4">
+      <UserAvatar userId={session.user.id} name={session.user.name} version={session.user.avatarUpdatedAt} className="size-16 text-lg" />
+      <div className="flex flex-wrap gap-2">
+        <input
+          ref={input}
+          type="file"
+          accept={AVATAR_TYPES.join(',')}
+          className="sr-only"
+          aria-label="Escolher foto"
+          onChange={(e) => {
+            choose(e.target.files?.[0]);
+            e.target.value = '';
+          }}
+        />
+        <Button type="button" variant="outline" size="sm" loading={upload.isPending} onClick={() => input.current?.click()}>
+          <Camera aria-hidden /> {hasPhoto ? 'Trocar foto' : 'Colocar foto'}
+        </Button>
+        {hasPhoto ? (
+          <Button type="button" variant="ghost" size="sm" loading={remove.isPending} onClick={() => remove.mutate()}>
+            Remover
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function AccountPhone() {
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -93,6 +142,7 @@ export function TeamPanel() {
             <ul className="divide-y">
               {(team.data ?? []).map((m) => (
                 <li key={m.id} className="flex flex-wrap items-center gap-3 py-3">
+                  <UserAvatar userId={m.user.id} name={m.user.name} version={m.user.avatarUpdatedAt} />
                   <div className="min-w-0 flex-1 basis-48">
                     <p className="flex items-center gap-2 font-medium">
                       <span className="truncate">{m.user.name}</span>

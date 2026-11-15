@@ -305,7 +305,7 @@ const TEAM = [
 ];
 
 const MEMBERS = [
-  { memberId: 'mb1', userId: 'u1', name: 'Ana Admin', phone: '5511900001111', role: 'owner' },
+  { memberId: 'mb1', userId: 'u1', name: 'Ana Admin', phone: '5511900001111', role: 'owner', avatarUpdatedAt: '2026-11-01T12:00:00Z' },
   { memberId: 'mb2', userId: 'u2', name: 'Bruno Lima', phone: '5511900002222', role: 'staff' },
   { memberId: 'mb3', userId: 'u3', name: 'Julia Rocha', phone: null, role: 'admin' },
 ];
@@ -434,7 +434,7 @@ const membership = (group: { id: string; name: string }, extra: Record<string, u
 const CONTACTS = [
   { id: 'k1', kind: 'resident', photoUrl: AVATAR, phone: '5511987650001', name: null, whatsappName: 'João Paulo', notes: null, lastMessageAt: '2026-11-06T11:40:00Z', createdAt: '2026-09-02T12:00:00Z', member: null, groups: [membership(XPO), membership(LUME)] },
   { id: 'k2', kind: 'contact', photoUrl: null, phone: '5511987650002', name: 'Carla (iluminação)', whatsappName: 'Carla Mendes', notes: 'Freela de luz', lastMessageAt: '2026-11-05T20:10:00Z', createdAt: '2026-09-10T12:00:00Z', member: null, groups: [membership(XPO, { isAdmin: true })] },
-  { id: 'k3', kind: 'contact', photoUrl: null, phone: '5511900001111', name: null, whatsappName: 'Ana Admin', notes: null, lastMessageAt: '2026-11-04T09:00:00Z', createdAt: '2026-08-20T12:00:00Z', member: { name: 'Ana Admin', role: 'owner' }, groups: [membership(XPO), membership(LUME), membership({ id: 'g3', name: 'Produção geral' })] },
+  { id: 'k3', kind: 'contact', photoUrl: null, phone: '5511900001111', name: null, whatsappName: 'Ana Admin', notes: null, lastMessageAt: '2026-11-04T09:00:00Z', createdAt: '2026-08-20T12:00:00Z', member: { userId: 'u1', name: 'Ana Admin', role: 'owner', avatarUpdatedAt: '2026-11-01T12:00:00Z' }, groups: [membership(XPO), membership(LUME), membership({ id: 'g3', name: 'Produção geral' })] },
   { id: 'k4', kind: 'contact', photoUrl: null, phone: '5511987650004', name: null, whatsappName: null, notes: null, lastMessageAt: null, createdAt: '2026-11-01T12:00:00Z', member: null, groups: [membership(LUME)] },
 ];
 const CONTACT_GROUPS = [
@@ -493,8 +493,90 @@ const PROJECT_CLOSED = {
   summaries: [{ id: 'sum1', kind: 'closing', content: CLOSING_REPORT, generatedAt: '2026-10-20T21:00:00Z' }],
 };
 
+// ───────────── residentes ─────────────
+const resident = (r: Record<string, unknown>) => ({
+  description: null,
+  instagram: null,
+  email: null,
+  status: 'active',
+  paymentDay: null,
+  photoUpdatedAt: null,
+  contractFileName: null,
+  contractUploadedAt: null,
+  ...r,
+});
+const RESIDENTS = [
+  resident({
+    id: 'rs1',
+    contactId: 'k1',
+    name: 'Coletivo Lume',
+    instagram: 'coletivolume',
+    email: 'contato@lume.art',
+    paymentDay: 5,
+    contractFileName: 'contrato-lume-2026.pdf',
+    contractUploadedAt: '2026-08-01T12:00:00Z',
+    description: 'Coletivo de teatro que ensaia na casa desde agosto.',
+    contact: { id: 'k1', phone: '5511987650001', name: null, whatsappName: 'João Paulo', photoUrl: AVATAR },
+    situation: 'attention',
+    rooms: [
+      { id: 's2', name: 'Sala Média', color: 'terracota', icon: 'musica' },
+      { id: 's1', name: 'Sala Grande', color: 'floresta', icon: 'palco' },
+    ],
+  }),
+  resident({
+    id: 'rs2',
+    contactId: 'k5',
+    name: 'Bruna Dança',
+    instagram: 'brunadanca',
+    paymentDay: 10,
+    contact: { id: 'k5', phone: '5511987650005', name: 'Bruna Dança', whatsappName: 'Bruna', photoUrl: null },
+    situation: 'overdue',
+    rooms: [{ id: 's3', name: 'Sala Pequena', color: 'azul', icon: 'poltrona' }],
+  }),
+  resident({
+    id: 'rs3',
+    contactId: 'k6',
+    name: 'Ateliê Barro',
+    paymentDay: 1,
+    contact: { id: 'k6', phone: '5511987650006', name: 'Ateliê Barro', whatsappName: null, photoUrl: null },
+    situation: 'regular',
+    rooms: [],
+  }),
+  resident({
+    id: 'rs4',
+    contactId: 'k7',
+    name: 'Grupo Vozes',
+    status: 'disabled',
+    contact: { id: 'k7', phone: '5511987650007', name: 'Grupo Vozes', whatsappName: null, photoUrl: null },
+    situation: 'pending',
+    rooms: [],
+  }),
+];
+const RESIDENT_DETAILS = {
+  resident: RESIDENTS[0],
+  situation: 'attention',
+  rentals: [
+    {
+      space: { id: 's2', name: 'Sala Média', color: 'terracota', icon: 'musica' },
+      schedule: [
+        { bookingId: 'b1', title: 'Ensaio', weekdays: ['MO', 'WE', 'FR'], start: '19:00', end: '21:00', since: '2026-08-03', until: null, hourlyRateCents: 8000 },
+        { bookingId: 'b2', title: 'Ensaio de sábado', weekdays: ['SA'], start: '10:00', end: '13:00', since: '2026-09-05', until: '2026-12-19', hourlyRateCents: 7000 },
+      ],
+    },
+    { space: { id: 's1', name: 'Sala Grande', color: 'floresta', icon: 'palco' }, schedule: [{ bookingId: 'b3', title: 'Corrido geral', weekdays: ['TH'], start: '14:00', end: '17:00', since: '2026-10-01', until: null, hourlyRateCents: 12000 }] },
+  ],
+  payments: [
+    { id: 'i3', month: '2026-11', description: 'Mensalidade', status: 'expected', expectedOn: '2026-11-08', receivedOn: null, amountCents: 260000, overdue: false, space: { id: 's2', name: 'Sala Média' } },
+    { id: 'i2', month: '2026-10', description: 'Mensalidade', status: 'received', expectedOn: '2026-10-05', receivedOn: '2026-10-06', amountCents: 260000, overdue: false, space: { id: 's2', name: 'Sala Média' } },
+    { id: 'i1', month: '2026-09', description: 'Mensalidade', status: 'received', expectedOn: '2026-09-05', receivedOn: '2026-09-05', amountCents: 240000, overdue: false, space: { id: 's2', name: 'Sala Média' } },
+  ],
+  totals: { receivedCents: 500000, openCents: 260000 },
+  firstPaymentMonth: '2026-09',
+  paymentDays: { agreed: 5, observed: [5, 6] },
+};
+
 // ───────────── calendário da equipe (semana de 02 a 08/11/2026) ─────────────
-const teamMember = (id: string, userId: string, name: string, phone: string | null) => ({ id: `p-${id}`, memberId: id, contactId: null, name: null, phone: null, member: { id, user: { id: userId, name, phone } }, contact: null });
+const teamMember = (id: string, userId: string, name: string, phone: string | null) => ({ id: `p-${id}`, memberId: id, contactId: null, name: null, phone: null, member: { id, user: { id: userId, name, phone, avatarUpdatedAt: userId === 'u1' ? '2026-11-01T12:00:00Z' : null } }, contact: null });
 const guest = (id: string, name: string, phone: string | null) => ({ id: `p-${id}`, memberId: null, contactId: null, name, phone, member: null, contact: null });
 const APPOINTMENTS = [
   {
@@ -503,6 +585,7 @@ const APPOINTMENTS = [
     title: 'Reunião com a Secretaria de Cultura',
     location: 'Secretaria de Cultura',
     notes: 'Levar o projeto da mostra e o orçamento.',
+    project: { id: 'p1', title: 'XPO' },
     startAt: '2026-11-06T17:00:00Z',
     endAt: '2026-11-06T18:30:00Z',
     allTeam: false,
@@ -520,6 +603,7 @@ const APPOINTMENTS = [
     title: 'Visita técnica do som',
     location: 'Sala Grande',
     notes: null,
+    project: null,
     startAt: '2026-11-04T13:00:00Z',
     endAt: '2026-11-04T14:00:00Z',
     allTeam: false,
@@ -533,6 +617,7 @@ const APPOINTMENTS = [
     title: 'Ensaio aberto para apoiadores',
     location: 'Sala Grande',
     notes: null,
+    project: null,
     startAt: '2026-11-07T22:00:00Z',
     endAt: '2026-11-08T00:00:00Z',
     allTeam: true,
@@ -541,12 +626,12 @@ const APPOINTMENTS = [
     participants: [],
   },
 ];
-const calReminder = (r: Record<string, unknown>) => ({ type: 'general', message: null, recurrenceRule: null, person: { name: null, phone: null }, recipientPhones: ['5511900001111'], done: false, active: true, ...r });
+const calReminder = (r: Record<string, unknown>) => ({ type: 'general', message: null, recurrenceRule: null, person: { name: null, phone: null }, recipientPhones: ['5511900001111'], done: false, active: true, project: null, ...r });
 const TEAM_CALENDAR = {
   appointments: APPOINTMENTS,
   reminders: [
     calReminder({ reminderId: 'r7', at: '2026-11-02T21:00:00Z', title: 'Deixar a chave com o Seu João', recurrenceRule: 'FREQ=WEEKLY;BYDAY=MO,FR', done: true }),
-    calReminder({ reminderId: 'r6', at: '2026-11-05T12:00:00Z', title: 'Enviar o dossiê para a XPO', done: true }),
+    calReminder({ reminderId: 'r6', at: '2026-11-05T12:00:00Z', title: 'Enviar o dossiê para a XPO', done: true, project: { id: 'p1', title: 'XPO' } }),
     calReminder({
       reminderId: 'r3',
       at: '2026-11-06T14:00:00Z',
@@ -594,6 +679,18 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     }
     if (path === '/whatsapp/phone-code') return route.fulfill({ json: { kind: 'code', code: 'A1B2C3D4' } });
     if (path === '/contacts/groups') return respond(empty ? [] : CONTACT_GROUPS);
+    if (path === '/contacts' && method === 'POST') {
+      const body = route.request().postDataJSON() as { name: string; phone: string };
+      if (body.phone.replace(/\D/g, '').endsWith('987650002')) return route.fulfill({ status: 409, json: { code: 'conflict', message: 'Este número já está nos contatos' } });
+      return route.fulfill({ status: 201, json: { ...CONTACTS[1], id: 'k9', name: body.name, phone: `55${body.phone.replace(/\D/g, '')}`, groups: [] } });
+    }
+    if (path === '/organization/me/avatar') return route.fulfill({ json: { avatarUpdatedAt: method === 'POST' ? '2026-11-06T12:00:00Z' : null } });
+    if (/^\/organization\/users\/[\w-]+\/avatar$/.test(path)) return route.fulfill({ status: 200, contentType: 'image/png', body: PNG });
+    if (path === '/residents' && method === 'GET') return respond(empty ? [] : RESIDENTS);
+    if (path === '/residents' && method === 'POST') return route.fulfill({ status: 201, json: { ...RESIDENTS[2], id: 'rs9', ...(route.request().postDataJSON() as object) } });
+    if (/^\/residents\/rs\d+$/.test(path) && method === 'GET') return respond(RESIDENT_DETAILS);
+    if (/^\/residents\/rs\d+$/.test(path) && method === 'PATCH') return route.fulfill({ json: RESIDENTS[0] });
+    if (/^\/residents\/rs\d+\/(photo|contract)$/.test(path)) return method === 'GET' ? route.fulfill({ status: 200, contentType: 'image/png', body: PNG }) : route.fulfill({ json: { ...RESIDENTS[2], id: 'rs9' } });
     if (path === '/contacts' && method === 'GET') {
       const q = (url.searchParams.get('q') ?? '').toLowerCase();
       const g = url.searchParams.get('groupId');
@@ -885,6 +982,14 @@ test.describe('golden visual', () => {
     await snap(page, 'reminders.png', { fullPage: true });
   });
 
+  test('calendário', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/calendario');
+    await expect(page.getByRole('heading', { name: 'Calendário.' })).toBeVisible();
+    await expect(page.getByText('Reunião com a Secretaria de Cultura').first()).toBeVisible();
+    await snap(page, 'calendar.png', { fullPage: true });
+  });
+
   test('lembretes: calendário do mês', async ({ page }) => {
     await mockApi(page);
     await page.goto('/lembretes?visao=mes');
@@ -989,6 +1094,28 @@ test.describe('golden visual', () => {
     await page.getByRole('button', { name: 'Categorias' }).click();
     await expect(page.getByRole('dialog', { name: 'Categorias de gasto' }).getByText('Manutenção', { exact: true })).toBeVisible();
     await snap(page, 'expense-categories.png');
+  });
+
+  test('residentes', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/residentes');
+    await expect(page.getByText('Coletivo Lume')).toBeVisible();
+    await snap(page, 'residents.png', { fullPage: true });
+  });
+
+  test('residente: detalhe', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/residentes/rs1');
+    await expect(page.getByRole('heading', { name: 'Coletivo Lume.' })).toBeVisible();
+    await snap(page, 'resident-detail.png', { fullPage: true });
+  });
+
+  test('residente: cadastro', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/residentes');
+    await page.getByRole('button', { name: 'Novo residente' }).click();
+    await page.getByRole('dialog', { name: 'Novo residente' }).getByLabel('Nome').fill('Cia. Sopro');
+    await snap(page, 'resident-form.png');
   });
 
   test('contatos', async ({ page }) => {
@@ -1110,7 +1237,7 @@ test.describe('interação acessível', () => {
 
   test('sem rolagem horizontal', async ({ page }) => {
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/projetos/p3', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -1146,7 +1273,7 @@ test.describe('interação acessível', () => {
   test('alvos de toque têm pelo menos 44px no celular', async ({ page }) => {
     test.skip((page.viewportSize()?.width ?? 0) >= 1024, 'só no celular');
     await mockApi(page);
-    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/configuracoes']) {
+    for (const path of ['/', '/projetos', '/projetos/p1', '/agenda', '/agenda?visao=mes', '/agenda?visao=ano', '/salas', '/contatos', '/contas', '/contas/2026-11', '/lembretes', '/calendario', '/residentes', '/residentes/rs1', '/configuracoes']) {
       await page.goto(path);
       await expect(page.getByRole('main')).toBeVisible();
       await page.evaluate(() => document.fonts.ready);
@@ -1295,6 +1422,7 @@ test.describe('interação acessível', () => {
       contactId: 'k2',
       personName: null,
       personPhone: null,
+      projectId: null,
     });
   });
 
@@ -1336,6 +1464,7 @@ test.describe('interação acessível', () => {
       contactIds: ['k2'],
       guests: [{ name: 'Marina (patrocínio)', phone: '11 98888-0000' }],
       notifyMinutesBefore: 30,
+      projectId: null,
     });
   });
 
@@ -1370,6 +1499,166 @@ test.describe('interação acessível', () => {
       detail.getByRole('button', { name: 'Cancelar compromisso' }).click(),
     ]);
     expect(cancel).toBeTruthy();
+  });
+
+  test('avatar: cada pessoa envia a própria foto em Configurações', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/configuracoes');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/organization/me/avatar') && r.method() === 'POST'),
+      page.getByLabel('Escolher foto').setInputFiles({ name: 'eu.png', mimeType: 'image/png', buffer: PNG }),
+    ]);
+    expect(req.headers()['content-type']).toBe('image/png');
+    await expect(page.getByText('Foto atualizada.')).toBeVisible();
+  });
+
+  test('foto da equipe: no compromisso, em "Quem da equipe vai", em "Quem recebe o aviso" e em Contatos', async ({ page }) => {
+    await mockApi(page);
+    const photos: string[] = [];
+    page.on('request', (r) => {
+      const m = /\/organization\/users\/(\w+)\/avatar/.exec(r.url());
+      if (m) photos.push(m[1]!);
+    });
+    await page.goto('/lembretes');
+    await page.getByRole('button', { name: /Reunião com a Secretaria de Cultura/ }).first().click();
+    const detail = page.getByRole('dialog', { name: 'Reunião com a Secretaria de Cultura' });
+    await expect(detail.locator('img')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Novo compromisso' }).click();
+    await expect(page.getByRole('dialog', { name: 'Novo compromisso' }).getByRole('checkbox', { name: 'Ana Admin' })).toBeChecked();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Novo lembrete' }).click();
+    await expect(page.getByRole('dialog', { name: 'Novo lembrete' }).getByRole('checkbox', { name: 'Ana Admin · +55 11 90000-1111' })).toBeChecked();
+    await page.keyboard.press('Escape');
+    await page.goto('/contatos');
+    await expect(page.getByRole('main').getByText('Ana Admin').first()).toBeVisible();
+    expect(new Set(photos)).toEqual(new Set(['u1']));
+  });
+
+  test('novo contato: cadastra; número já existente avisa', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contatos');
+    await page.getByRole('button', { name: 'Novo contato' }).click();
+    let dialog = page.getByRole('dialog', { name: 'Novo contato' });
+    await dialog.getByLabel('Nome').fill('Carla de novo');
+    await dialog.getByLabel('WhatsApp').fill('11 98765-0002');
+    await dialog.getByRole('button', { name: 'Cadastrar' }).click();
+    await expect(dialog.getByRole('alert')).toHaveText('Este número já está nos contatos');
+    await dialog.getByLabel('WhatsApp').fill('11 98888-0000');
+    await dialog.getByLabel('Nome').fill('Marina (patrocínio)');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/contacts') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Cadastrar' }).click(),
+    ]);
+    expect(req.postDataJSON()).toEqual({ name: 'Marina (patrocínio)', phone: '11 98888-0000', notes: null });
+    await expect(page.getByText('Contato cadastrado.')).toBeVisible();
+  });
+
+  test('residentes: lista com situação e filtro de status; cadastro com foto e contrato', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/residentes');
+    await expect(page.getByText('Pagamento atrasado')).toBeVisible();
+    await expect(page.getByText('Grupo Vozes')).toHaveCount(0);
+    await page.getByRole('radio', { name: /Desabilitados/ }).click();
+    await expect(page.getByText('Grupo Vozes')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Novo residente' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Novo residente' });
+    await dialog.getByLabel('Nome').fill('Cia. Sopro');
+    await dialog.getByLabel('WhatsApp').fill('11 97777-1234');
+    await dialog.getByLabel('Instagram (opcional)').fill('@ciasopro');
+    await dialog.getByLabel('E-mail (opcional)').fill('oi@sopro.art');
+    await dialog.getByLabel('Descrição (opcional)').fill('Companhia de circo.');
+    await dialog.getByLabel('Dia de pagamento (opcional)').fill('10');
+    await dialog.getByLabel('Foto (opcional)').setInputFiles({ name: 'sopro.png', mimeType: 'image/png', buffer: PNG });
+    await dialog.getByLabel('Contrato (opcional)').setInputFiles({ name: 'contrato-sopro.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 contrato') });
+    const created = page.waitForRequest((r) => r.url().endsWith('/residents') && r.method() === 'POST');
+    const photo = page.waitForRequest((r) => r.url().endsWith('/residents/rs9/photo') && r.method() === 'POST');
+    const contract = page.waitForRequest((r) => r.url().endsWith('/residents/rs9/contract') && r.method() === 'POST');
+    await dialog.getByRole('button', { name: 'Cadastrar' }).click();
+    expect((await created).postDataJSON()).toEqual({
+      name: 'Cia. Sopro',
+      phone: '11 97777-1234',
+      instagram: '@ciasopro',
+      email: 'oi@sopro.art',
+      description: 'Companhia de circo.',
+      status: 'active',
+      paymentDay: 10,
+    });
+    expect((await photo).headers()['content-type']).toBe('image/png');
+    const c = await contract;
+    expect(c.headers()['content-type']).toBe('application/pdf');
+    expect(c.headers()['x-file-name']).toBe('contrato-sopro.pdf');
+  });
+
+  test('residente: detalhe com locações, programação, pagamentos, entrada e dias; registrar pagamento', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/residentes/rs1');
+    await expect(page.getByText('seg, qua, sex · 19h–21h')).toBeVisible();
+    await expect(page.getByText('Sala Grande', { exact: true })).toBeVisible();
+    await expect(page.getByText('Setembro de 2026').first()).toBeVisible();
+    await expect(page.getByText('Pagou nos dias 5, 6')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'coletivolume' })).toHaveAttribute('href', 'https://instagram.com/coletivolume');
+    await page.getByRole('button', { name: 'Registrar pagamento' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Nova entrada' });
+    await expect(dialog.getByLabel('Descrição')).toHaveValue('Mensalidade');
+    await dialog.getByLabel('Valor (R$)').fill('2.600,00');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/incomes') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: /Salvar|Cadastrar|Lançar/ }).click(),
+    ]);
+    expect(req.postDataJSON()).toMatchObject({ source: 'room_rental', contactId: 'k1', payerName: 'Coletivo Lume', amountCents: 260000 });
+  });
+
+  test('calendário: só semana e mês, sem contas; filtros de reuniões e de projeto', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/calendario');
+    await expect(page.getByRole('radio', { name: 'Mês' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Trimestre' })).toHaveCount(0);
+    await expect(page.getByText('Pagar Água')).toHaveCount(0);
+    await expect(page.getByText('Visita técnica do som').first()).toBeVisible();
+
+    await page.getByRole('radio', { name: 'Reuniões' }).click();
+    await expect(page.getByText('Reunião com a Secretaria de Cultura').first()).toBeVisible();
+    await expect(page.getByText('Visita técnica do som')).toHaveCount(0);
+    await expect(page.getByText('Ligar para Carla (iluminação)')).toHaveCount(0);
+
+    await page.getByRole('radio', { name: 'Tudo' }).click();
+    await page.getByRole('combobox', { name: 'Projeto' }).fill('xpo');
+    await page.getByRole('option', { name: 'XPO' }).click();
+    await expect(page.getByText('Reunião com a Secretaria de Cultura').first()).toBeVisible();
+    await expect(page.getByText('Enviar o dossiê para a XPO').first()).toBeVisible();
+    await expect(page.getByText('Visita técnica do som')).toHaveCount(0);
+    await expect(page.getByText('Deixar a chave com o Seu João')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Tirar o projeto XPO' }).click();
+    await expect(page.getByText('Visita técnica do som').first()).toBeVisible();
+  });
+
+  test('compromisso e lembrete com projeto', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/calendario');
+    await page.getByRole('button', { name: 'Novo compromisso' }).click();
+    let dialog = page.getByRole('dialog', { name: 'Novo compromisso' });
+    await dialog.getByLabel('Título').fill('Reunião de produção da XPO');
+    await dialog.getByRole('combobox', { name: 'Projeto (opcional)' }).fill('xp');
+    await dialog.getByRole('option', { name: 'XPO' }).click();
+    await expect(dialog.getByRole('button', { name: 'Tirar o projeto XPO' })).toBeVisible();
+    let [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/appointments') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Marcar compromisso' }).click(),
+    ]);
+    expect(req.postDataJSON()).toMatchObject({ title: 'Reunião de produção da XPO', projectId: 'p1' });
+
+    await page.getByRole('button', { name: 'Novo lembrete' }).click();
+    dialog = page.getByRole('dialog', { name: 'Novo lembrete' });
+    await dialog.getByLabel('O que lembrar').fill('Enviar o rider técnico');
+    await dialog.getByRole('combobox', { name: 'Projeto (opcional)' }).fill('mostra');
+    await dialog.getByRole('option', { name: 'Mostra de Dança' }).click();
+    [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/reminders') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Criar lembrete' }).click(),
+    ]);
+    expect(req.postDataJSON()).toMatchObject({ title: 'Enviar o rider técnico', projectId: 'p2' });
   });
 
   test('calendário da equipe: filtro por tipo e "só os meus"', async ({ page }) => {
@@ -1437,6 +1726,7 @@ test.describe('interação acessível', () => {
       notes: null,
       projectId: 'p1',
       spaceId: null,
+      contactId: null,
     });
 
     await page.getByRole('listitem').filter({ hasText: 'Ensaio fotográfico' }).getByRole('button', { name: 'Recebi' }).click();

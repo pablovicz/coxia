@@ -3,12 +3,14 @@ import { Bell, MessageCircle, Phone, X } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { MemberCheckbox } from '@/components/member-checkbox';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { Checkbox, Field, Select } from '@/components/ui/field';
+import { Field, Select } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
 import { api, apiSend, type Contact, type Member, type ReminderType } from '@/lib/api';
 import { ContactPicker } from '@/features/contacts/contact-picker';
+import { ProjectPicker } from '@/features/projects/project-picker';
 import { formatPhone, toZonedIso } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
@@ -82,6 +84,7 @@ export function ReminderForm({ tz, onClose, defaultDate }: { tz: string; onClose
   const [time, setTime] = useState(slot.time);
   const [repeat, setRepeat] = useState<Repeat>('none');
   const [message, setMessage] = useState('');
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [recipients, setRecipients] = useState<string[]>([]);
   const [extra, setExtra] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +133,7 @@ export function ReminderForm({ tz, onClose, defaultDate }: { tz: string; onClose
       contactId: contact?.id ?? null,
       personName: contact ? null : personName.trim() || null,
       personPhone: contact ? null : personPhone.trim() || null,
+      projectId,
     });
   }
 
@@ -235,6 +239,8 @@ export function ReminderForm({ tz, onClose, defaultDate }: { tz: string; onClose
           )}
         </Field>
 
+        <ProjectPicker label="Projeto (opcional)" value={projectId} onChange={setProjectId} />
+
         <Field label="Observação (opcional)">
           {(id) => <Textarea id={id} rows={2} value={message} maxLength={1000} placeholder="Ex.: confirmar a mesa de som para sexta" onChange={(e) => setMessage(e.target.value)} />}
         </Field>
@@ -245,8 +251,11 @@ export function ReminderForm({ tz, onClose, defaultDate }: { tz: string; onClose
             const phone = m.phone;
             if (!phone) return [];
             return [
-              <Checkbox
+              <MemberCheckbox
                 key={m.userId}
+                userId={m.userId}
+                name={m.name}
+                avatarUpdatedAt={m.avatarUpdatedAt}
                 label={`${m.name} · ${formatPhone(phone)}`}
                 checked={recipients.includes(phone)}
                 onChange={(on) => setRecipients((r) => (on ? [...r, phone] : r.filter((x) => x !== phone)))}

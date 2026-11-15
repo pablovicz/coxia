@@ -1,6 +1,7 @@
-import { Bell, CalendarDays, DoorOpen, FolderKanban, House, LogOut, ReceiptText, Settings, Users } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, LogOut, ReceiptText, Settings, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { ThemeSwitch } from '@/components/theme-switch';
+import { UserAvatar } from '@/components/user-avatar';
 import { Button } from '@/components/ui/button';
 import { canSeeContacts } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -13,9 +14,13 @@ export const NAV_ITEMS = [
   // No celular, Salas abre pelo botão no topo da Agenda (a barra inferior tem 4 itens).
   { to: '/salas', label: 'Salas', short: 'Salas', icon: DoorOpen, mobile: false },
   { to: '/contas', label: 'Financeiro', short: 'Finanças', icon: ReceiptText, mobile: true },
-  { to: '/lembretes', label: 'Lembretes', short: 'Lembretes', icon: Bell, mobile: true },
+  { to: '/calendario', label: 'Calendário', short: 'Calendário', icon: CalendarClock, mobile: true },
+  // No celular, Lembretes (com as contas) fica pelo menu do computador; o Calendário ocupa o lugar.
+  { to: '/lembretes', label: 'Lembretes', short: 'Lembretes', icon: Bell, mobile: false },
   // Telefones são dado pessoal: perfil leitura não vê Contatos.
   { to: '/contatos', label: 'Contatos', short: 'Contatos', icon: Users, mobile: true, team: true },
+  // Residentes: no celular, pelo botão no topo de Contatos.
+  { to: '/residentes', label: 'Residentes', short: 'Residentes', icon: UserCheck, mobile: false, team: true },
   { to: '/configuracoes', label: 'Configurações', short: 'Ajustes', icon: Settings, mobile: false },
 ] as const;
 
@@ -40,12 +45,6 @@ export function AppShell() {
   const { session, logout } = useAuth();
   const items = NAV_ITEMS.filter((i) => !('team' in i) || canSeeContacts(session?.user.role));
   const mobileItems = items.filter((i) => i.mobile);
-  const initials = (session?.user.name ?? '?')
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[252px_1fr]">
@@ -75,9 +74,7 @@ export function AppShell() {
         <div className="mt-auto flex flex-col gap-4">
           <ThemeSwitch className="self-start" />
           <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground">
-              {initials}
-            </div>
+            <UserAvatar userId={session?.user.id} name={session?.user.name} version={session?.user.avatarUpdatedAt} />
             <div className="min-w-0 flex-1 text-sm leading-tight">
               <div className="truncate font-semibold">{session?.user.name}</div>
               <div className="truncate text-xs text-muted-foreground">{session?.organization.name}</div>

@@ -8,17 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Select } from '@/components/ui/field';
 import { Input, Textarea } from '@/components/ui/input';
-import {
-  api,
-  apiSend,
-  type Income,
-  type IncomeSource,
-  type ProjectListItem,
-  type Space,
-} from '@/lib/api';
+import { api, apiSend, type Income, type IncomeSource, type ProjectListItem, type Space, canSeeContacts, type ResidentListItem } from '@/lib/api';
 import { centsToInput, formatBRL, formatDueDate, parseBRL, todayIn } from '@/lib/format';
 import { RoomIcon, roomStyle } from '@/lib/rooms';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/providers/auth-provider';
 
 export const SOURCE_LABEL: Record<IncomeSource, string> = {
   project: 'Projeto',
@@ -210,22 +204,28 @@ export function IncomeDialog({
   tz,
   income,
   projectId,
+  resident,
   onClose,
 }: {
   tz: string;
   income?: Income | null;
   projectId?: string;
+  /** Pagamento de um residente: já vem com ele escolhido. */
+  resident?: { contactId: string; name: string } | null;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { session } = useAuth();
   const fixedProject = !!projectId;
-  const [source, setSource] = useState<IncomeSource>(income?.source ?? 'project');
+  const [source, setSource] = useState<IncomeSource>(income?.source ?? (resident ? 'room_rental' : 'project'));
   const [project, setProject] = useState(income?.projectId ?? projectId ?? '');
   const [space, setSpace] = useState(income?.spaceId ?? '');
-  const [description, setDescription] = useState(income?.description ?? '');
+  const [description, setDescription] = useState(income?.description ?? (resident ? 'Mensalidade' : ''));
   const [amount, setAmount] = useState(income ? centsToInput(income.amountCents) : '');
   const [expectedOn, setExpectedOn] = useState(income?.expectedOn.slice(0, 10) ?? todayIn(tz));
-  const [payer, setPayer] = useState(income?.payerName ?? '');
+  const [payer, setPayer] = useState(income?.payerName ?? resident?.name ?? '');
+  const [payerContact, setPayerContact] = useState(income?.contactId ?? resident?.contactId ?? '');
+  const residents = useQuery({ queryKey: ['residents'], queryFn: () => api<ResidentListItem[]>('/residents'), enabled: canSeeContacts(session?.user.role) });
   const [notes, setNotes] = useState(income?.notes ?? '');
   const [error, setError] = useState<string | null>(null);
 
@@ -237,6 +237,8 @@ export function IncomeDialog({
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api<Space[]>('/spaces') });
 
   const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['resident'] });
+    qc.invalidateQueries({ queryKey: ['residents'] });
     qc.invalidateQueries({ queryKey: ['incomes'] });
     qc.invalidateQueries({ queryKey: ['projects'] });
   };
@@ -278,6 +280,7 @@ export function IncomeDialog({
       notes: notes.trim() || null,
       projectId: source === 'project' ? project : null,
       spaceId: source === 'room_rental' ? space || null : null,
+      contactId: payerContact || null,
     });
   }
 
@@ -408,6 +411,30 @@ export function IncomeDialog({
             />
           )}
         </Field>
+        {residents.data?.length ? (
+          <Field label="Residente (opcional)" hint="Vira um pagamento do residente" className="sm:col-span-2">
+            {(id, describedBy) => (
+              <Select
+                id={id}
+                aria-describedby={describedBy}
+                value={payerContact}
+                onChange={(e) => {
+                  setPayerContact(e.target.value);
+                  const r = residents.data?.find((x) => x.contactId === e.target.value);
+                  if (r && !payer.trim()) setPayer(r.name);
+                }}
+              >
+                <option value="">Nenhum</option>
+                {residents.data.map((r) => (
+                  <option key={r.id} value={r.contactId}>
+                    {r.name}
+                    {r.status === 'disabled' ? ' (desabilitado)' : ''}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        ) : null}
         <Field label="Quem paga (opcional)" className="sm:col-span-2">
           {(id) => (
             <Input

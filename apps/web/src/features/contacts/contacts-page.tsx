@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Search, Users } from 'lucide-react';
+import { ExternalLink, Plus, Search, UserCheck, Users } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, PageHeader } from '@/components/empty-state';
@@ -9,8 +9,10 @@ import { Card } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { Field, Select } from '@/components/ui/field';
 import { Input, Skeleton, Textarea } from '@/components/ui/input';
+import { Link } from 'react-router';
 import { api, apiSend, type Contact, type ContactGroupOption } from '@/lib/api';
 import { formatPhone, local } from '@/lib/format';
+import { UserAvatar } from '@/components/user-avatar';
 import { ContactAvatar } from './contact-avatar';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
@@ -41,6 +43,7 @@ export function ContactsPage() {
   const [kind, setKind] = useState<'' | 'contact' | 'resident'>('');
   const [limit, setLimit] = useState(PAGE);
   const [open, setOpen] = useState<Contact | null>(null);
+  const [creating, setCreating] = useState(false);
   const query = useDebounced(q.trim(), 250);
 
   const groups = useQuery({ queryKey: ['contacts', 'groups'], queryFn: () => api<ContactGroupOption[]>('/contacts/groups') });
@@ -61,7 +64,19 @@ export function ContactsPage() {
       <PageHeader
         eyebrow="Pessoas"
         title="Contatos."
-        description="Quem está nos grupos do WhatsApp da casa. Entram sozinhos quando alguém é adicionado ou escreve."
+        description="Quem está nos grupos do WhatsApp da casa. Entram sozinhos quando alguém é adicionado ou escreve; também dá para cadastrar."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/residentes">
+                <UserCheck aria-hidden /> Residentes
+              </Link>
+            </Button>
+            <Button onClick={() => setCreating(true)}>
+              <Plus aria-hidden /> Novo contato
+            </Button>
+          </div>
+        }
       />
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -151,6 +166,7 @@ export function ContactsPage() {
       )}
 
       {open ? <ContactDialog id={open.id} preview={open} tz={tz} onClose={() => setOpen(null)} /> : null}
+      {creating ? <NewContactDialog onClose={() => setCreating(false)} /> : null}
     </>
   );
 }
@@ -161,7 +177,11 @@ function ContactRow({ contact: c, tz, onOpen }: { contact: Contact; tz: string; 
   return (
     <button type="button" onClick={onOpen} className="block w-full text-left" aria-label={`${title}, ${formatPhone(c.phone)}`}>
       <Card className="flex items-center gap-3 p-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:p-4">
-        <ContactAvatar contact={c} />
+        {c.member?.userId && c.member.avatarUpdatedAt ? (
+          <UserAvatar userId={c.member.userId} name={c.member.name} version={c.member.avatarUpdatedAt} className="size-11" />
+        ) : (
+          <ContactAvatar contact={c} />
+        )}
         <span className="min-w-0 flex-1">
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate font-medium">{title}</span>
@@ -302,6 +322,60 @@ function ContactDialog({ id, preview, tz, onClose }: { id: string; preview: Cont
           </Field>
         </form>
       </div>
+    </Dialog>
+  );
+}
+
+/** Cadastro manual: nome e WhatsApp (o nome e a foto do WhatsApp chegam depois, sozinhos). */
+function NewContactDialog({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () => apiSend<Contact>('/contacts', 'POST', { name: name.trim(), phone: phone.trim(), notes: notes.trim() || null }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['contacts'] });
+      toast.success('Contato cadastrado.');
+      onClose();
+    },
+    onError: (e) => setError(e.message),
+  });
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) return setError('Informe o nome.');
+    if (phone.replace(/\D/g, '').length < 10) return setError('Informe o WhatsApp com DDD.');
+    save.mutate();
+  }
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => !v && onClose()}
+      title="Novo contato"
+      description="Quem não está nos grupos (ou ainda não escreveu) também pode ser cadastrado."
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" form="new-contact" loading={save.isPending}>
+            Cadastrar
+          </Button>
+        </>
+      }
+    >
+      <form id="new-contact" onSubmit={submit} className="flex flex-col gap-4" noValidate>
+        <Field label="Nome">{(id) => <Input id={id} value={name} maxLength={120} placeholder="Ex.: Marina (patrocínio)" onChange={(e) => setName(e.target.value)} />}</Field>
+        <Field label="WhatsApp">{(id) => <Input id={id} inputMode="tel" value={phone} placeholder="11 98765-4321" onChange={(e) => setPhone(e.target.value)} />}</Field>
+        <Field label="Observações (opcional)">{(id) => <Textarea id={id} rows={2} value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} />}</Field>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+      </form>
     </Dialog>
   );
 }
