@@ -287,6 +287,34 @@ export class BillingService {
     });
   }
 
+  /**
+   * Exclui a conta com as parcelas, os pagamentos e os comprovantes (para guardar o histórico,
+   * suspender). Cancela os avisos agendados das parcelas e devolve as chaves dos comprovantes
+   * enviados pelo painel; os que vieram do WhatsApp continuam com a mensagem de origem.
+   */
+  async deleteBill(organizationId: string, billId: string, actor: Actor) {
+    const bill = await this.getBill(organizationId, billId);
+    const occurrences = await this.db.billOccurrence.findMany({
+      where: { recurringBillId: billId },
+      select: { id: true, paidAmountCents: true, payments: { select: { storageKey: true, messageAttachmentId: true } } },
+    });
+    const ids = occurrences.map((o) => o.id);
+    const payments = occurrences.flatMap((o) => o.payments);
+    await this.db.$transaction(async (tx) => {
+      if (ids.length) {
+        await tx.notificationSchedule.updateMany({
+          where: { organizationId, targetType: 'bill_occurrence', targetId: { in: ids }, status: 'scheduled' },
+          data: { status: 'cancelled' },
+        });
+      }
+      await tx.recurringBill.delete({ where: { id: billId } });
+      await audit(tx, organizationId, actor, 'bill.delete', 'recurring_bill', billId, {
+        before: { name: bill.name, occurrences: ids.length, payments: payments.length, paidCents: occurrences.reduce((s, o) => s + o.paidAmountCents, 0) },
+      });
+    });
+    return { storageKeys: payments.filter((p) => p.storageKey && !p.messageAttachmentId).map((p) => p.storageKey as string) };
+  }
+
   async reactivateBill(organizationId: string, billId: string, actor: Actor, now = new Date()) {
     const org = await getOrganization(this.db, organizationId);
     await this.getBill(organizationId, billId);

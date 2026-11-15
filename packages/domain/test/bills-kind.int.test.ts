@@ -212,3 +212,21 @@ describe('próximas contas, detalhe da conta e visão do ano', () => {
     }
   });
 });
+
+describe('excluir conta', () => {
+  it('apaga parcelas e pagamentos, cancela os avisos agendados e devolve só os comprovantes do painel', async () => {
+    const b = await billing.createBill(orgId, { name: 'Internet', dueDay: 15, estimatedAmountCents: 12000, startsOn: '2026-11-01' }, actor, NOW);
+    const occ = await db.billOccurrence.findFirstOrThrow({ where: { recurringBillId: b.id } });
+    await billing.registerPayment(orgId, occ.id, { amountCents: 12000, proof: { sha256: randomUUID(), storageKey: 'k/proof-web.png' } }, actor, NOW);
+    const schedule = await db.notificationSchedule.create({
+      data: { organizationId: orgId, kind: 'bill_due_today', targetType: 'bill_occurrence', targetId: occ.id, scheduledFor: at('2026-11-14T09:00'), dedupeKey: `del-${randomUUID()}` },
+    });
+
+    expect(await billing.deleteBill(orgId, b.id, actor)).toEqual({ storageKeys: ['k/proof-web.png'] });
+    await expectDomainError(billing.getBill(orgId, b.id), 'not_found');
+    expect(await db.billOccurrence.count({ where: { recurringBillId: b.id } })).toBe(0);
+    expect(await db.paymentAttachment.count({ where: { billOccurrenceId: occ.id } })).toBe(0);
+    expect((await db.notificationSchedule.findUniqueOrThrow({ where: { id: schedule.id } })).status).toBe('cancelled');
+    expect(await db.auditEvent.count({ where: { organizationId: orgId, action: 'bill.delete', entityId: b.id } })).toBe(1);
+  });
+});

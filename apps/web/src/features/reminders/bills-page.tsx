@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownLeft, ChevronLeft, ChevronRight, Paperclip, Pencil, Plus, ReceiptText, Tags } from 'lucide-react';
+import { ArrowDownLeft, ChevronLeft, ChevronRight, Paperclip, Pencil, Plus, ReceiptText, Tags, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ import { Input, Skeleton, Textarea } from '@/components/ui/input';
 import {
   api,
   apiSend,
+  type BillDetails,
   type BillOccurrence,
   type BillsSummary,
   canManage,
@@ -458,6 +459,7 @@ export function BillsList({
   onOpen: (b: RecurringBill) => void;
 }) {
   const qc = useQueryClient();
+  const [deleting, setDeleting] = useState<RecurringBill | null>(null);
   const toggle = useMutation({
     mutationFn: (b: RecurringBill) =>
       apiSend(`/bills/${b.id}/${b.active ? 'suspend' : 'reactivate'}`, 'POST'),
@@ -507,12 +509,72 @@ export function BillsList({
                 >
                   {b.active ? 'Suspender' : 'Reativar'}
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleting(b)}
+                  aria-label={`Excluir ${b.name}`}
+                >
+                  <Trash2 aria-hidden />
+                </Button>
               </>
             ) : null}
           </div>
         </li>
       ))}
+      {deleting ? <DeleteBillDialog bill={deleting} onClose={() => setDeleting(null)} /> : null}
     </ul>
+  );
+}
+
+/** Exclusão definitiva: diferente de suspender, apaga parcelas, pagamentos e comprovantes. */
+function DeleteBillDialog({ bill: b, onClose }: { bill: RecurringBill; onClose: () => void }) {
+  const qc = useQueryClient();
+  const details = useQuery({ queryKey: ['bills', 'details', b.id], queryFn: () => api<BillDetails>(`/bills/${b.id}/details`) });
+  const remove = useMutation({
+    mutationFn: () => apiSend(`/bills/${b.id}`, 'DELETE'),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ['bills', 'details', b.id] });
+      qc.invalidateQueries({ queryKey: ['bills'] });
+      qc.invalidateQueries({ queryKey: ['overview'] });
+      toast.success(`${b.name} excluída.`);
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const payments = details.data?.occurrences.reduce((n, o) => n + o.payments.length, 0) ?? 0;
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => !v && onClose()}
+      title={`Excluir ${b.name}?`}
+      description="Não dá para desfazer. Para parar os avisos e guardar o histórico, use “Suspender”."
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="destructive" loading={remove.isPending} onClick={() => remove.mutate()}>
+            Excluir conta
+          </Button>
+        </>
+      }
+    >
+      <div className="rounded-md bg-muted p-4 text-sm">
+        <p className="font-medium">Saem junto com a conta:</p>
+        <ul className="mt-1 list-inside list-disc text-muted-foreground">
+          <li>as parcelas de todos os meses e os avisos que ainda iam sair</li>
+          {payments ? (
+            <li>
+              {payments} pagamento{payments > 1 ? 's' : ''} registrado{payments > 1 ? 's' : ''} (
+              <span className="tabular">{formatBRL(details.data?.paidCents ?? 0)}</span>) e os comprovantes: os totais
+              pagos dos meses passados mudam
+            </li>
+          ) : null}
+        </ul>
+      </div>
+    </Dialog>
   );
 }
 

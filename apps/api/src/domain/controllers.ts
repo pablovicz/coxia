@@ -316,6 +316,15 @@ export class BillsController {
     return this.billing.suspendBill(user.organizationId, id, webActor(user));
   }
 
+  /** Exclui a conta e o que é dela; os comprovantes enviados pelo painel saem do bucket. */
+  @Roles('owner', 'admin')
+  @Delete(':id')
+  async remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const { storageKeys } = await this.billing.deleteBill(user.organizationId, id, webActor(user));
+    await Promise.all(storageKeys.map((k) => this.storage.delete(k).catch(() => undefined)));
+    return { ok: true };
+  }
+
   @Roles('owner', 'admin')
   @Post(':id/reactivate')
   @HttpCode(200)

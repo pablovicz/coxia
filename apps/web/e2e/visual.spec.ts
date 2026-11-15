@@ -152,7 +152,24 @@ const BILLS = [
 ];
 /** Detalhe (GET /bills/:id/details) montado a partir das ocorrências simuladas. */
 function billDetails(billId: string) {
-  const occ = [...BILLS, ONE_OFF, PARCELADA].find((o) => o.recurringBill.id === billId)!;
+  const occ = [...BILLS, ONE_OFF, PARCELADA].find((o) => o.recurringBill.id === billId);
+  if (!occ) {
+    // Conta cadastrada sem ocorrência simulada: detalhe com um pagamento registrado.
+    const rb = RECURRING.find((b) => b.id === billId)!;
+    return {
+      bill: { ...rb, overdueReminderEveryDays: 3, endsOn: null, createdAt: '2026-09-01T13:00:00.000Z' },
+      createdAt: '2026-09-01T13:00:00.000Z',
+      createdBy: { name: 'Ana Admin', channel: 'web' },
+      paidCents: rb.estimatedAmountCents ?? 0,
+      outstandingCents: 0,
+      installments: null,
+      overdue: [],
+      overdueCents: 0,
+      occurrences: [
+        { id: `${billId}-10`, competence: '2026-10', dueDate: '2026-10-05', status: 'paid', expectedAmountCents: rb.estimatedAmountCents, paidAmountCents: rb.estimatedAmountCents ?? 0, paidAt: '2026-10-05T15:00:00.000Z', installment: null, proofs: 1, payments: [{ id: `pay-${billId}`, amountCents: rb.estimatedAmountCents, paidOn: '2026-10-05', hasProof: true }] },
+      ],
+    };
+  }
   const rb = occ.recurringBill as Record<string, unknown>;
   const parcelada = billId === 'rb-c7';
   const row = (id: string, competence: string, status: string, paid: number, n: number | null) => ({
@@ -753,6 +770,7 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
       return respond(empty ? [] : [...BILLS, ONE_OFF, PARCELADA].filter((o) => o.status !== 'paid' && o.dueDate.slice(0, 10) <= '2026-11-16').sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
     if (/^\/bills\/[\w-]+\/details$/.test(path)) return respond(billDetails(path.split('/')[2]!));
     if (path === '/bills/summary') return respond(empty ? { ...SUMMARY, expectedCents: 0, paidCents: 0, total: 0, paid: 0, pending: 0, overdue: 0, variableWithoutAmount: 0 } : SUMMARY);
+    if (/^\/bills\/rb\d$/.test(path) && method === 'DELETE') return route.fulfill({ json: { ok: true } });
     if (path === '/bills') return respond(empty ? [] : RECURRING);
     if (path === '/reminders' && method === 'POST') return route.fulfill({ status: 201, json: reminder({ id: 'r9', ...route.request().postDataJSON() }) });
     if (path === '/calendar') return respond(empty ? { appointments: [], reminders: [], bills: [] } : TEAM_CALENDAR);
@@ -1738,6 +1756,32 @@ test.describe('interação acessível', () => {
     expect(req).toBeTruthy();
     await expect(page.getByText('XPO excluído.')).toBeVisible();
     await expect(page).toHaveURL(/\/projetos$/);
+  });
+
+  test('excluir conta: pede confirmação (suspender guarda o histórico) e apaga', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/contas');
+    await page.getByRole('button', { name: 'Excluir Aluguel' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Excluir Aluguel?' });
+    await expect(dialog.getByText('Saem junto com a conta:')).toBeVisible();
+    await expect(dialog.getByText('1 pagamento registrado', { exact: false })).toBeVisible();
+    await expect(dialog.getByText('use “Suspender”', { exact: false })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(dialog).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Excluir Aluguel' }).click();
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/bills/rb1') && r.method() === 'DELETE'),
+      page.getByRole('dialog', { name: 'Excluir Aluguel?' }).getByRole('button', { name: 'Excluir conta' }).click(),
+    ]);
+    expect(req).toBeTruthy();
+    await expect(page.getByText('Aluguel excluída.')).toBeVisible();
+  });
+
+  test('excluir conta: só administração vê o botão', async ({ page }) => {
+    await mockApi(page, { role: 'staff' });
+    await page.goto('/contas');
+    await expect(page.getByRole('button', { name: /^Excluir / })).toHaveCount(0);
   });
 
   test('novo contato: cadastra; número já existente avisa', async ({ page }) => {
