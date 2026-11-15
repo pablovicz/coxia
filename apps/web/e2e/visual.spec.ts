@@ -772,6 +772,30 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/projects/p1/incomes') return respond(INCOMES.filter((i) => i.projectId === 'p1'));
     if (path === '/whatsapp/disconnect') return route.fulfill({ json: { connected: false } });
     if (/^\/bills(\/rb\d)?$/.test(path) && (method === 'POST' || method === 'PATCH')) return route.fulfill({ status: method === 'POST' ? 201 : 200, json: {} });
+    if (path === '/projects/new/group-info')
+      return respond({
+        prefix: 'PROJETO',
+        whatsappConnected: !opsDown,
+        admins: [
+          { userId: 'u1', name: 'Ana Admin', hasPhone: true, avatarUpdatedAt: '2026-11-01T12:00:00Z' },
+          { userId: 'u3', name: 'Julia Rocha', hasPhone: false, avatarUpdatedAt: null },
+        ],
+      });
+    if (path === '/projects' && method === 'POST') {
+      const body = route.request().postDataJSON() as { title: string };
+      return route.fulfill({
+        status: 201,
+        json: {
+          project: { id: 'p9', title: body.title },
+          groupName: `PROJETO - ${body.title}`,
+          group: opsDown
+            ? { status: 'unavailable', reason: 'O WhatsApp da Coxia está desconectado' }
+            : { status: 'created', groupName: `PROJETO - ${body.title}`, invitationLink: null, added: 1, notAdded: [], adminsWithoutPhone: ['Julia Rocha'] },
+        },
+      });
+    }
+    if (path === '/projects/p9' && method === 'GET') return respond({ ...PROJECT_XPO, id: 'p9', title: 'Mostra de Inverno', groupName: null });
+    if (path === '/projects/p9/whatsapp-group') return route.fulfill({ status: 200, json: { status: 'created', groupName: 'PROJETO - Mostra de Inverno' } });
     if (path === '/projects') return respond(empty ? [] : PROJECTS);
     if (path === '/projects/p1' && method === 'GET') return respond(PROJECT_XPO);
     if (path === '/projects/p3' && method === 'GET') return respond(PROJECT_CLOSED);
@@ -1094,6 +1118,14 @@ test.describe('golden visual', () => {
     await page.getByRole('button', { name: 'Categorias' }).click();
     await expect(page.getByRole('dialog', { name: 'Categorias de gasto' }).getByText('Manutenção', { exact: true })).toBeVisible();
     await snap(page, 'expense-categories.png');
+  });
+
+  test('projetos: novo projeto', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos');
+    await page.getByRole('button', { name: 'Novo projeto' }).click();
+    await page.getByRole('dialog', { name: 'Novo projeto' }).getByLabel('Nome do projeto').fill('Mostra de Inverno');
+    await snap(page, 'project-new.png');
   });
 
   test('residentes', async ({ page }) => {
@@ -1533,6 +1565,43 @@ test.describe('interação acessível', () => {
     await page.goto('/contatos');
     await expect(page.getByRole('main').getByText('Ana Admin').first()).toBeVisible();
     expect(new Set(photos)).toEqual(new Set(['u1']));
+  });
+
+  test('novo projeto: nome no padrão do grupo, todas as administradoras; cria projeto e grupo', async ({ page }) => {
+    await mockApi(page);
+    await page.goto('/projetos');
+    await page.getByRole('button', { name: 'Novo projeto' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Novo projeto' });
+    await dialog.getByLabel('Nome do projeto').fill('projeto - Mostra de Inverno');
+    // O prefixo digitado não se repete: o grupo fica "PROJETO - Mostra de Inverno".
+    await expect(dialog.getByText('PROJETO - Mostra de Inverno')).toBeVisible();
+    await expect(dialog.getByText('sem telefone: não entra')).toBeVisible();
+    await dialog.getByLabel('Orçamento estimado (R$, opcional)').fill('12.000,00');
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/projects') && r.method() === 'POST'),
+      dialog.getByRole('button', { name: 'Criar projeto e grupo' }).click(),
+    ]);
+    expect(req.postDataJSON()).toEqual({ title: 'Mostra de Inverno', objective: null, estimatedBudgetCents: 1200000, groupCheckIns: false });
+    await expect(page.getByText('Projeto criado e grupo “PROJETO - Mostra de Inverno” criado no WhatsApp.')).toBeVisible();
+    await expect(page).toHaveURL(/\/projetos\/p9$/);
+  });
+
+  test('novo projeto com WhatsApp desconectado: cria o projeto e oferece "Criar no WhatsApp"', async ({ page }) => {
+    await mockApi(page, { opsDown: true });
+    await page.goto('/projetos');
+    await page.getByRole('button', { name: 'Novo projeto' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Novo projeto' });
+    await expect(dialog.getByText(/O WhatsApp da Coxia está desconectado/)).toBeVisible();
+    await dialog.getByLabel('Nome do projeto').fill('Mostra de Inverno');
+    await dialog.getByRole('button', { name: 'Criar projeto' }).click();
+    await expect(page.getByText(/O grupo ficou para depois/)).toBeVisible();
+    await expect(page).toHaveURL(/\/projetos\/p9$/);
+    const [req] = await Promise.all([
+      page.waitForRequest((r) => r.url().endsWith('/projects/p9/whatsapp-group') && r.method() === 'POST'),
+      page.getByRole('button', { name: 'Criar no WhatsApp' }).click(),
+    ]);
+    expect(req).toBeTruthy();
+    await expect(page.getByText('Grupo “PROJETO - Mostra de Inverno” criado no WhatsApp.')).toBeVisible();
   });
 
   test('novo contato: cadastra; número já existente avisa', async ({ page }) => {

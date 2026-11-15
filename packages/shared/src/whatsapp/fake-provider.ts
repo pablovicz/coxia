@@ -3,6 +3,7 @@ import type {
   ConnectCode,
   ConnectionStatus,
   ContactProfile,
+  CreatedGroup,
   GroupInfo,
   MediaDownload,
   SendMediaInput,
@@ -67,6 +68,17 @@ export class FakeWhatsappProvider implements WhatsappProvider {
 
   async disconnect(): Promise<void> {
     this.connected = false;
+  }
+
+  /** Grupos criados (para os testes conferirem nome e participantes). */
+  readonly createdGroups: Array<{ name: string; phones: string[] }> = [];
+
+  async createGroup(name: string, phones: string[]): Promise<CreatedGroup> {
+    if (!this.connected) throw new Error('WhatsApp desconectado');
+    const id = `fake${Date.now()}${++this.seq}-group`;
+    this.createdGroups.push({ name, phones });
+    this.groups.set(id, { id, name, participants: phones.map((phone) => ({ phone, isAdmin: false, name: null })), raw: {} });
+    return { id, invitationLink: `https://chat.whatsapp.com/${id}`, notAdded: [], raw: {} };
   }
 
   async getPhoneCode(): Promise<ConnectCode> {

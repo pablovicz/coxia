@@ -24,6 +24,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { PrismaService } from '../prisma/prisma.service';
 import { API_ENV, type ApiEnv } from '../config/env';
 import { WhatsappIngestionService } from './ingestion.service';
+import { ProjectGroupsController } from './project-groups.controller';
 import { createWhatsappProvider, WHATSAPP_PROVIDER } from './whatsapp.provider';
 
 export function secretMatches(given: string, expected: string): boolean {
@@ -147,7 +148,7 @@ export class WhatsappAdminController {
 
 @Module({
   imports: [BullModule.registerQueue({ name: QUEUES.inbound })],
-  controllers: [WhatsappWebhookController, WhatsappAdminController],
+  controllers: [WhatsappWebhookController, WhatsappAdminController, ProjectGroupsController],
   providers: [
     WhatsappIngestionService,
     { provide: WHATSAPP_PROVIDER, inject: [API_ENV], useFactory: (env: ApiEnv) => createWhatsappProvider(env) },

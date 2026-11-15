@@ -74,6 +74,14 @@ O que falta é o piloto com a equipe e a instância real da Z-API: roteiro em [d
 | **Meio de pagamento** na conta (Boleto, PIX ou Cartão de crédito), junto de "Como pagar"; aparece na lista, no pagamento, no detalhe, no calendário e no aviso ("Como pagar: PIX · chave…") | `howToPay`, `PaymentMethod` |
 | O antigo campo "categoria" (aluguel, energia…) virou interno: é deduzido do nome e só serve para o WhatsApp entender "paguei a luz" | `inferUtility` |
 
+### Projeto criado pelo painel (pós-Etapa 4)
+
+| Entregue | Onde |
+|---|---|
+| **Novo projeto** (nome obrigatório; objetivo, orçamento e check-in opcionais). O título fica sem o prefixo, mesmo que digitem "PROJETO - XPO"; nome repetido em andamento é recusado | `ProjectService.createFromWeb`, `features/projects/new-project-dialog.tsx` |
+| A Coxia cria o grupo **"PROJETO - Nome"** (prefixo da organização) com ela e **todas as administradoras** com telefone (dona e admins), liga ao projeto e manda as boas-vindas; quem está sem telefone aparece no formulário | `POST /projects`, Z-API `create-group`, `ProjectService.adminPhones`, `linkCreatedGroup` |
+| WhatsApp desconectado (ou falha na Z-API): o projeto é criado e a página dele mostra **"Criar no WhatsApp"** para tentar de novo | `POST /projects/:id/whatsapp-group` |
+
 ### Residentes, contatos e equipe (pós-Etapa 4)
 
 | Entregue | Onde |

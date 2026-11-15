@@ -26,6 +26,20 @@ export interface WhatsappProvider {
   getContactProfile(phone: string): Promise<ContactProfile | null>;
   /** Encerra a sessão do número na instância (para conectar outro número ou cortar o acesso). */
   disconnect(): Promise<void>;
+  /**
+   * Cria um grupo com o número da Coxia e os participantes (só telefones, sem o da Coxia).
+   * Quem não puder ser adicionado direto recebe convite (e volta em `notAdded`).
+   */
+  createGroup(name: string, phones: string[]): Promise<CreatedGroup>;
+}
+
+export interface CreatedGroup {
+  /** ID do grupo ("…-group"). */
+  id: string;
+  invitationLink: string | null;
+  /** Participantes que não entraram direto (receberam convite). */
+  notAdded: string[];
+  raw: unknown;
 }
 
 /**

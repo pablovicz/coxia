@@ -41,6 +41,15 @@ describe('Z-API: conexão por QR code e por código', () => {
     await expect(providerReturning({ value: false }).p.disconnect()).rejects.toBeInstanceOf(WhatsappProviderError);
   });
 
+  it('cria grupo (create-group) com nome e telefones; devolve o ID, o convite e quem não entrou', async () => {
+    const ok = providerReturning({ phone: '120363019502650977-group', invitationLink: 'https://chat.whatsapp.com/abc', phonesNotAdded: ['5544777777777'] });
+    const g = await ok.p.createGroup('PROJETO - XPO', ['5511900001111']);
+    expect(ok.calls[0]).toBe('https://api.z-api.io/instances/INST/token/TOK/create-group');
+    expect(g).toMatchObject({ id: '120363019502650977-group', invitationLink: 'https://chat.whatsapp.com/abc', notAdded: ['5544777777777'] });
+    await expect(providerReturning({}).p.createGroup('X', ['5511900001111'])).rejects.toBeInstanceOf(WhatsappProviderError);
+    await expect(ok.p.createGroup('X', [])).rejects.toBeInstanceOf(WhatsappProviderError);
+  });
+
   it('perfil do contato: nome do WhatsApp (notify) e foto https', async () => {
     const { p, calls } = providerReturning({ name: 'Carla agenda', notify: 'Carla Mendes', short: 'Carla', imgUrl: 'https://pps.whatsapp.net/v/t61/abc.jpg' });
     expect(await p.getContactProfile('+55 11 98765-0002')).toEqual({ name: 'Carla Mendes', photoUrl: 'https://pps.whatsapp.net/v/t61/abc.jpg' });

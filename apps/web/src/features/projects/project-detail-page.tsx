@@ -25,6 +25,7 @@ import {
 } from '@/lib/api';
 import { formatBRL, local, todayIn } from '@/lib/format';
 import { useAuth } from '@/providers/auth-provider';
+import { CreateWhatsappGroupCard } from './new-project-dialog';
 import { EXPENSE_STATUS, PROJECT_STATUS, TASK_STATUS } from './status';
 
 const dayMonth = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -98,6 +99,8 @@ export function ProjectDetailPage() {
         )}
         {p.groupCheckIns && !closed ? <Badge variant="neutral">Check-in diário no grupo</Badge> : null}
       </div>
+
+      {admin && !p.groupName ? <CreateWhatsappGroupCard projectId={p.id} /> : null}
 
       {report ? (
         <Card className="mb-6">

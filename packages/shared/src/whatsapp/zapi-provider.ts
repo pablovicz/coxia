@@ -1,17 +1,6 @@
 import type { InboundMessage } from '@coxia/contracts';
 import { normalizePhone } from '../phone';
-import {
-  type ConnectCode,
-  type ConnectionStatus,
-  type ContactProfile,
-  type GroupInfo,
-  type MediaDownload,
-  type SendMediaInput,
-  type SendResult,
-  type SendTextInput,
-  type WhatsappProvider,
-  WhatsappProviderError,
-} from './provider';
+import { type ConnectCode, type ConnectionStatus, type ContactProfile, type GroupInfo, type MediaDownload, type SendMediaInput, type SendResult, type SendTextInput, type WhatsappProvider, WhatsappProviderError, type CreatedGroup } from './provider';
 import { normalizeZapiWebhook } from './zapi-normalizer';
 
 export interface ZapiConfig {
@@ -147,6 +136,22 @@ export class ZapiProvider implements WhatsappProvider {
   async disconnect(): Promise<void> {
     const raw = (await this.request('GET', 'disconnect')) as { value?: boolean };
     if (raw.value === false) throw new WhatsappProviderError('Z-API disconnect: a instância recusou', null, true);
+  }
+
+  async createGroup(name: string, phones: string[]): Promise<CreatedGroup> {
+    if (phones.length === 0) throw new WhatsappProviderError('Z-API create-group: o grupo precisa de pelo menos um participante', null, false);
+    const raw = (await this.request('POST', 'create-group', { autoInvite: true, groupName: name, phones })) as {
+      phone?: string;
+      invitationLink?: string;
+      phonesNotAdded?: unknown[];
+    };
+    if (!raw.phone) throw new WhatsappProviderError('Z-API create-group: resposta sem o ID do grupo', null, true);
+    return {
+      id: raw.phone,
+      invitationLink: raw.invitationLink ?? null,
+      notAdded: (raw.phonesNotAdded ?? []).filter((x): x is string => typeof x === 'string'),
+      raw,
+    };
   }
 
   private async request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<unknown> {

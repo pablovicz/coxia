@@ -207,6 +207,21 @@ export interface RecurringBill {
 export type PaymentMethod = 'boleto' | 'pix' | 'credit_card';
 export const PAYMENT_METHODS: Record<PaymentMethod, string> = { boleto: 'Boleto', pix: 'PIX', credit_card: 'Cartão de crédito' };
 
+/** Formulário de novo projeto: prefixo do grupo, WhatsApp e quem entra. */
+export interface ProjectGroupInfo {
+  prefix: string;
+  whatsappConnected: boolean;
+  admins: Array<{ userId: string; name: string; hasPhone: boolean; avatarUpdatedAt: string | null }>;
+}
+
+export interface CreateProjectResult {
+  project: { id: string; title: string };
+  groupName: string;
+  group:
+    | { status: 'created'; groupName: string; invitationLink: string | null; added: number; notAdded: string[]; adminsWithoutPhone: string[] }
+    | { status: 'unavailable'; reason: string };
+}
+
 /** Um mês na visão unificada do Financeiro. */
 export interface FinanceMonth {
   competence: string;

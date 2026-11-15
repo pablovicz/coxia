@@ -1,15 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, FolderKanban, Users } from 'lucide-react';
+import { ChevronRight, FolderKanban, Plus, Users } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { EmptyState, PageHeader } from '@/components/empty-state';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/input';
-import { api, type ProjectListItem } from '@/lib/api';
+import { api, canManage, type ProjectListItem } from '@/lib/api';
+import { useAuth } from '@/providers/auth-provider';
+import { NewProjectDialog } from './new-project-dialog';
 import { formatBRL } from '@/lib/format';
 import { PROJECT_STATUS } from './status';
 
 export function ProjectsPage() {
+  const { session } = useAuth();
+  const admin = canManage(session?.user.role);
+  const [creating, setCreating] = useState(false);
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => api<ProjectListItem[]>('/projects') });
   const open = (projects.data ?? []).filter((p) => p.status !== 'closed');
   const closed = (projects.data ?? []).filter((p) => p.status === 'closed');
@@ -20,6 +27,13 @@ export function ProjectsPage() {
         eyebrow="Workspaces"
         title="Projetos em movimento."
         description="Grupos do WhatsApp transformados em planejamento organizado."
+        action={
+          admin ? (
+            <Button onClick={() => setCreating(true)}>
+              <Plus aria-hidden /> Novo projeto
+            </Button>
+          ) : null
+        }
       />
 
       {projects.isPending ? (
@@ -34,7 +48,7 @@ export function ProjectsPage() {
         </p>
       ) : projects.data.length === 0 ? (
         <EmptyState icon={FolderKanban} title="Nenhum projeto ativo">
-          Os projetos nascem no WhatsApp: crie um grupo “PROJETO - Nome” e adicione o número da Coxia.
+          Crie aqui em “Novo projeto” (a Coxia monta o grupo no WhatsApp) ou crie no WhatsApp um grupo “PROJETO - Nome” com o número da Coxia.
         </EmptyState>
       ) : (
         <>
@@ -59,6 +73,7 @@ export function ProjectsPage() {
           ) : null}
         </>
       )}
+      {creating ? <NewProjectDialog onClose={() => setCreating(false)} /> : null}
     </>
   );
 }

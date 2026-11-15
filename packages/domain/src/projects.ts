@@ -369,6 +369,83 @@ const TASK_TRANSITIONS: Record<ProjectTaskStatus, ProjectTaskStatus[]> = {
 export class ProjectService {
   constructor(private readonly db: Db) {}
 
+  // ───────────── criação pelo painel ─────────────
+
+  /** Nome do grupo no padrão da casa: "PROJETO - XPO". */
+  groupNameFor(prefix: string, title: string): string {
+    return `${prefix.trim()} - ${title.trim()}`;
+  }
+
+  /**
+   * Projeto criado no painel (sem grupo ainda): o título vem sem o prefixo, mesmo que a pessoa
+   * digite "PROJETO - XPO". O grupo do WhatsApp é criado à parte (pode falhar e ser refeito).
+   */
+  async createFromWeb(
+    organizationId: string,
+    input: { title: string; objective?: string | null; estimatedBudgetCents?: number | null; groupCheckIns?: boolean },
+    actor: Actor,
+    now = new Date(),
+  ) {
+    const org = await getOrganization(this.db, organizationId);
+    const title = projectTitleFromGroupName(input.title ?? '', org.projectGroupPrefix).trim();
+    if (!title || normalizeText(title) === normalizeText(org.projectGroupPrefix)) throw new DomainError('validation', 'Informe o nome do projeto');
+    if (title.length > 80) throw new DomainError('validation', 'Nome do projeto muito longo (até 80 caracteres)');
+    if (input.estimatedBudgetCents != null && (!Number.isInteger(input.estimatedBudgetCents) || input.estimatedBudgetCents < 0)) {
+      throw new DomainError('validation', 'Orçamento inválido');
+    }
+    const open = await this.db.project.findFirst({ where: { organizationId, status: { not: 'closed' }, title: { equals: title, mode: 'insensitive' } }, select: { id: true } });
+    if (open) throw new DomainError('conflict', 'Já existe um projeto em andamento com esse nome', { code: 'project_exists', projectId: open.id });
+    return this.db.$transaction(async (tx) => {
+      const p = await tx.project.create({
+        data: {
+          organizationId,
+          title,
+          status: 'active',
+          objective: input.objective?.trim() || null,
+          estimatedBudgetCents: input.estimatedBudgetCents ?? null,
+          groupCheckIns: input.groupCheckIns ?? false,
+          createdByPhone: actor.phone ?? null,
+          activatedAt: now,
+        },
+      });
+      await audit(tx, organizationId, actor, 'project.create_web', 'project', p.id, { after: { title } });
+      return { project: p, groupName: this.groupNameFor(org.projectGroupPrefix, title) };
+    });
+  }
+
+  /** Telefones das administradoras (dona e admins): entram sempre no grupo do projeto. Ignora o número da Coxia. */
+  async adminPhones(organizationId: string, ownPhone: string | null) {
+    const members = await this.db.organizationMember.findMany({
+      where: { organizationId, role: { in: ['owner', 'admin'] } },
+      select: { user: { select: { name: true, phone: true } } },
+      orderBy: { user: { name: 'asc' } },
+    });
+    const withPhone = members.filter((m) => m.user.phone && m.user.phone !== ownPhone);
+    return { phones: withPhone.map((m) => m.user.phone!), withoutPhone: members.filter((m) => !m.user.phone).map((m) => m.user.name) };
+  }
+
+  /** Grupo criado pela Coxia: registra o grupo e liga ao projeto (um grupo por projeto). */
+  async linkCreatedGroup(
+    organizationId: string,
+    projectId: string,
+    group: { instanceId: string; externalGroupId: string; name: string },
+    actor: Actor,
+    now = new Date(),
+  ) {
+    return this.db.$transaction(async (tx) => {
+      const existing = await tx.projectChannel.findFirst({ where: { projectId } });
+      if (existing) throw new DomainError('conflict', 'O projeto já tem grupo no WhatsApp', { code: 'project_has_group' });
+      const g = await tx.whatsappGroup.upsert({
+        where: { instanceId_externalGroupId: { instanceId: group.instanceId, externalGroupId: group.externalGroupId } },
+        create: { organizationId, instanceId: group.instanceId, externalGroupId: group.externalGroupId, name: group.name, lastSeenAt: now },
+        update: { name: group.name, lastSeenAt: now },
+      });
+      const channel = await tx.projectChannel.create({ data: { organizationId, projectId, whatsappGroupId: g.id, displayName: group.name, linkedAt: now } });
+      await audit(tx, organizationId, actor, 'project.group_created', 'project', projectId, { after: { groupName: group.name, externalGroupId: group.externalGroupId } });
+      return { group: g, channel };
+    });
+  }
+
   /** Quem pode criar/encerrar workspaces e validar lançamentos pelo WhatsApp. */
   async canManage(organizationId: string, phone: string | null): Promise<boolean> {
     if (!phone) return false;
