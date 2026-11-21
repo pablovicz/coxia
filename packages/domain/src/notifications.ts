@@ -8,6 +8,7 @@ import { APPOINTMENT_KIND_LABEL, AppointmentService, appointmentInclude } from '
 import { composeMorningBriefing, loadBriefingState, participantNames } from './briefing';
 import { type Db, fromIsoDate, getOrganization, toIsoDate } from './common';
 import { ReminderService, reminderPerson, reminderText } from './reminders';
+import { adminEmails, enqueueStaffEmail } from './staff-emails';
 
 /**
  * Planejamento de notificações — função pura: dado o estado e o "agora", decide o que deve sair.
@@ -62,6 +63,8 @@ export interface PlannerInput {
     recipients: string[];
     who: string[];
   }>;
+  /** E-mail das administradoras: lembretes, contas e compromissos vão também por e-mail. */
+  adminEmails?: string[];
   /** Projetos ativos com check-in no grupo ligado. `text` null = nada relevante hoje (silêncio). */
   projectCheckIns?: Array<{ projectId: string; groupChatId: string; text: () => string | null }>;
 }
@@ -73,6 +76,8 @@ export interface PlannedNotification {
   targetId: string;
   recipients: string[];
   text: string;
+  /** Também por e-mail para as administradoras (assunto e tela do painel). */
+  email?: { to: string[]; subject: string; path: string };
 }
 
 const UNPAID = new Set(['pending', 'partially_paid', 'overdue']);
@@ -86,6 +91,8 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
   const briefed = new Set(input.briefingRecipients);
   const notBriefed = (phones: Array<string | null>) => [...new Set(phones.filter((p): p is string => !!p && !briefed.has(p)))];
   const out: PlannedNotification[] = [];
+  const emails = [...new Set(input.adminEmails ?? [])];
+  const email = (subject: string, path: string) => (emails.length ? { email: { to: emails, subject, path } } : {});
 
   if (dailyWindowOpen) {
     if (input.briefingRecipients.length) {
@@ -114,8 +121,10 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
 
     for (const bill of input.bills) {
       if (!UNPAID.has(bill.status)) continue;
+      // O briefing já fala das contas no WhatsApp; o e-mail vai para todas as administradoras.
       const recipients = notBriefed(bill.recipientPhones);
-      if (!recipients.length) continue;
+      if (!recipients.length && !emails.length) continue;
+      const billPath = `/contas/${bill.competence}`;
       const amount =
         bill.expectedCents === null
           ? 'valor a confirmar'
@@ -133,6 +142,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           targetId: bill.occurrenceId,
           recipients,
           text: `A conta de ${label} vence amanhã (${formatShortDate(bill.dueDate)}): ${amount}. Quando pagar, me mande o comprovante.${howTo}`,
+          ...email(`Conta vence amanhã: ${label} · ${amount}`, billPath),
         });
       } else if (bill.dueDate === today) {
         out.push({
@@ -142,6 +152,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           targetId: bill.occurrenceId,
           recipients,
           text: `A conta de ${label} vence hoje: ${amount}. Se já pagou, me mande o comprovante.${howTo}`,
+          ...email(`Conta vence hoje: ${label} · ${amount}`, billPath),
         });
       } else if (bill.dueDate < today) {
         const last = bill.lastOverdueNoticeAt ? localDateOf(bill.lastOverdueNoticeAt, tz) : null;
@@ -153,6 +164,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
           targetId: bill.occurrenceId,
           recipients,
           text: `A conta de ${label} está atrasada desde ${formatShortDate(bill.dueDate)}: ${amount} em aberto${bill.lateFeeCents ? ` (+ multa de ${formatBRL(bill.lateFeeCents)})` : ''}.`,
+          ...email(`Conta atrasada: ${label} · ${amount}`, billPath),
         });
       }
     }
@@ -188,7 +200,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
 
   // Aviso antes do compromisso, na antecedência escolhida. Mudou o horário → novo aviso.
   for (const a of input.appointmentsSoon ?? []) {
-    if (a.notifyMinutesBefore === null || !a.recipients.length) continue;
+    if (a.notifyMinutesBefore === null || (!a.recipients.length && !emails.length)) continue;
     const minutes = (a.startAt.getTime() - input.now.getTime()) / 60_000;
     if (minutes <= 0 || minutes > a.notifyMinutesBefore) continue;
     const day = localDateOf(a.startAt, tz);
@@ -203,11 +215,12 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
       targetId: a.id,
       recipients: [...new Set(a.recipients)],
       text: lines.join('\n'),
+      ...email(`${a.kindLabel} ${when}, ${formatTimeRange(a.startAt, a.endAt, tz)}: ${a.title}`, '/calendario'),
     });
   }
 
   for (const r of input.remindersDue) {
-    if (!r.recipientPhones.length) continue;
+    if (!r.recipientPhones.length && !emails.length) continue;
     out.push({
       kind: 'ad_hoc',
       dedupeKey: `reminder:${r.id}:${r.runAt.toISOString()}`,
@@ -215,6 +228,7 @@ export function planNotifications(input: PlannerInput): PlannedNotification[] {
       targetId: r.id,
       recipients: [...new Set(r.recipientPhones)],
       text: r.text ?? (r.message ? `Lembrete: ${r.title}\n${r.message}` : `Lembrete: ${r.title}`),
+      ...email(`Lembrete: ${r.title}`, '/lembretes'),
     });
   }
   return out;
@@ -238,6 +252,7 @@ export class NotificationService {
 
     await this.billing.markOverdue(organizationId, now);
 
+    const staffEmails = await adminEmails(this.db, organizationId);
     const [members, bookingsTomorrow, bookingsSoon, bills, remindersDue, checkInProjects, appointmentsSoon] = await Promise.all([
       this.db.organizationMember.findMany({
         where: { organizationId, receivesMorningBriefing: true, user: { phone: { not: null } } },
@@ -297,6 +312,7 @@ export class NotificationService {
       briefingTime: org.morningBriefingTime,
       briefingRecipients,
       briefingText: () => (briefingText ??= composeMorningBriefing(state)),
+      adminEmails: staffEmails,
       bookingsTomorrow: bookingsTomorrow.map((o) => ({
         occurrenceId: o.id,
         startAt: o.startAt,
@@ -369,6 +385,9 @@ export class NotificationService {
           });
           for (const recipient of p.recipients) {
             await enqueueDelivery(tx, { organizationId, recipient, text: p.text, idempotencyKey: `${dedupeKey}:${recipient}`, scheduleId: schedule.id });
+          }
+          for (const to of p.email?.to ?? []) {
+            await enqueueStaffEmail(tx, organizationId, to, { template: 'staff_notice', subject: p.email!.subject, text: p.text, path: p.email!.path }, `${dedupeKey}:email:${to}`);
           }
           if (p.kind === 'bill_overdue') {
             await tx.billOccurrence.update({ where: { id: p.targetId }, data: { lastOverdueNoticeAt: now } });

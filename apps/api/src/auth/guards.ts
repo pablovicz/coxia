@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { MemberRole } from '@coxia/contracts';
 import { PrismaService } from '../prisma/prisma.service';
-import { type AuthResident, type AuthUser, IS_PUBLIC, RESIDENT_ROUTE, ROLES } from './decorators';
+import { ALLOW_PENDING_PASSWORD, type AuthResident, type AuthUser, IS_PUBLIC, RESIDENT_ROUTE, ROLES } from './decorators';
 
 interface StaffPayload {
   sub: string;
@@ -25,6 +25,8 @@ export interface ResidentPayload {
   org: string;
   res: string;
   kind: 'resident';
+  /** Emitido em (segundos), preenchido pelo JWT. */
+  iat?: number;
 }
 
 /** Ticket de curta duração para abrir o SSE (EventSource não manda Authorization). Nunca vale em rota HTTP. */
@@ -68,7 +70,8 @@ export class JwtAuthGuard implements CanActivate {
 
     if (payload.kind === 'resident') {
       if (!residentRoute) throw new ForbiddenException();
-      req.resident = await this.loadResident(payload);
+      const allowPending = !!this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_PASSWORD, targets);
+      req.resident = await this.loadResident(payload, allowPending);
       return true;
     }
     if (residentRoute) throw new ForbiddenException();
@@ -81,10 +84,18 @@ export class JwtAuthGuard implements CanActivate {
   }
 
   /** Acesso desativado (ou residente desabilitado) vale na hora, como o papel da equipe. */
-  async loadResident(payload: ResidentPayload): Promise<AuthResident> {
-    const account = await this.prisma.residentAccount.findUnique({ where: { id: payload.sub }, select: { status: true, residentId: true, organizationId: true, resident: { select: { status: true } } } });
+  async loadResident(payload: ResidentPayload, allowPending = false): Promise<AuthResident> {
+    const account = await this.prisma.residentAccount.findUnique({
+      where: { id: payload.sub },
+      select: { status: true, residentId: true, organizationId: true, mustChangePassword: true, sessionsValidFrom: true, resident: { select: { status: true } } },
+    });
     if (!account || account.status !== 'active' || account.resident.status !== 'active' || account.residentId !== payload.res || account.organizationId !== payload.org) {
       throw new UnauthorizedException();
+    }
+    // Senha trocada/redefinida depois que este token foi emitido: precisa entrar de novo.
+    if (account.sessionsValidFrom && (payload.iat ?? 0) < Math.floor(account.sessionsValidFrom.getTime() / 1000)) throw new UnauthorizedException();
+    if (account.mustChangePassword && !allowPending) {
+      throw new ForbiddenException({ statusCode: 403, code: 'forbidden', message: 'Troque a senha provisória para continuar', details: { code: 'password_change_required' } });
     }
     return { accountId: payload.sub, residentId: account.residentId, organizationId: account.organizationId };
   }

@@ -60,6 +60,8 @@ export const emailEnvSchema = z.object({
   EMAIL_FROM: z.string().default('Casa Kaju <reservas@casakaju.com>'),
   /** Endereço do workspace do residente, usado nos links dos e-mails. */
   RESIDENT_APP_URL: z.string().url().default('http://localhost:5174'),
+  /** Painel da equipe (Coxia), usado nos links dos avisos por e-mail às administradoras. */
+  STAFF_APP_URL: z.string().url().default('http://localhost:5173'),
 });
 
 export const workerEnvSchema = baseEnvSchema

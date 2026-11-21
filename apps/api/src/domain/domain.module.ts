@@ -80,7 +80,7 @@ export class DomainErrorFilter implements ExceptionFilter {
     {
       provide: ResidentAccountService,
       inject: [PrismaService, DOMAIN_EVENTS],
-      useFactory: (db: PrismaService, events: DomainEventPublisher) => new ResidentAccountService(db, { hash: (p) => bcrypt.hash(p, 12) }, events),
+      useFactory: (db: PrismaService, events: DomainEventPublisher) => new ResidentAccountService(db, { hash: (p) => bcrypt.hash(p, 12), compare: (p, h) => bcrypt.compare(p, h) }, events),
     },
     { provide: BillingService, inject: [PrismaService], useFactory: (db: PrismaService) => new BillingService(db) },
     { provide: ReminderService, inject: [PrismaService], useFactory: (db: PrismaService) => new ReminderService(db) },

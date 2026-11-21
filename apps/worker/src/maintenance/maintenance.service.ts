@@ -11,8 +11,10 @@ import {
   NotificationService,
   ProjectService,
   renderResidentEmail,
+  renderStaffEmail,
   ResidentContractService,
   type ResidentEmailPayload,
+  type StaffNoticePayload,
   SYSTEM_ACTOR,
 } from '@coxia/domain';
 import { type EmailProvider, EmailProviderError, parseMailbox, type WhatsappProvider, WhatsappProviderError } from '@coxia/shared';
@@ -74,9 +76,12 @@ export class MaintenanceService {
     const from = parseMailbox(this.env.EMAIL_FROM);
     for (const d of deliveries) {
       try {
-        const payload = d.payload as unknown as ResidentEmailPayload | null;
+        const payload = d.payload as unknown as ResidentEmailPayload | StaffNoticePayload | null;
         if (!payload) throw new EmailProviderError('entrega de e-mail sem payload', false);
-        const mail = renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient }, now);
+        const mail =
+          payload.template === 'staff_notice'
+            ? renderStaffEmail(payload, { staffUrl: this.env.STAFF_APP_URL })
+            : renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient }, now);
         const sent = await this.email.send({ from: this.env.EMAIL_FROM, to: d.recipient, ...mail });
         // Desenvolvimento: sem envio real, o e-mail (com o link) aparece no log do worker.
         if (this.email.name === 'fake' && this.env.NODE_ENV !== 'production') this.logger.log({ to: d.recipient, subject: mail.subject, text: mail.text }, 'e-mail (fake)');

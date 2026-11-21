@@ -4,13 +4,14 @@ import { ResidentAccountService } from '@coxia/domain';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { Public } from './decorators';
+import { AllowPendingPassword, type AuthResident, CurrentResident, Public, ResidentRoute } from './decorators';
 import type { ResidentPayload } from './guards';
 import { LoginThrottle } from './login-throttle';
 
 const loginSchema = z.object({ email: z.string().email().transform((e) => e.toLowerCase()), password: z.string().min(1).max(200) });
 const forgotSchema = z.object({ email: z.string().email().transform((e) => e.toLowerCase()) });
 const passwordSchema = z.object({ token: z.string().min(20).max(200), password: z.string().min(1).max(200) });
+const changeSchema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().min(1).max(200) });
 
 // Mesmo custo do hash real: e-mail inexistente responde no mesmo tempo.
 const DUMMY_HASH = bcrypt.hashSync('coxia-resident-dummy', 12);
@@ -47,6 +48,7 @@ export class ResidentAuthController {
     const accessToken = await this.jwt.signAsync(payload, { expiresIn: RESIDENT_SESSION });
     return {
       accessToken,
+      mustChangePassword: account.mustChangePassword,
       resident: { id: account.residentId, name: account.resident.name, email: account.email },
       organization: { id: account.organization.id, name: account.organization.name, timezone: account.organization.timezone },
     };
@@ -61,6 +63,22 @@ export class ResidentAuthController {
     this.forgotThrottle.check(ip, body.email);
     this.forgotThrottle.fail(ip, body.email);
     await this.accounts.requestReset(body.email);
+  }
+
+  /**
+   * O residente troca a própria senha (obrigatório depois da senha provisória). As outras sessões
+   * caem; esta recebe um token novo.
+   */
+  @ResidentRoute()
+  @AllowPendingPassword()
+  @Post('change-password')
+  @HttpCode(200)
+  async changePassword(@CurrentResident() r: AuthResident, @Body(new ZodValidationPipe(changeSchema)) body: z.infer<typeof changeSchema>) {
+    const account = await this.accounts.changePassword(r.accountId, body.currentPassword, body.newPassword);
+    // iat no segundo seguinte: o token novo sempre vale depois de sessions_valid_from.
+    await new Promise((resolve) => setTimeout(resolve, 1000 - (Date.now() % 1000)));
+    const payload: ResidentPayload = { sub: account.id, org: account.organizationId, res: account.residentId, kind: 'resident' };
+    return { accessToken: await this.jwt.signAsync(payload, { expiresIn: RESIDENT_SESSION }) };
   }
 
   /** Define a senha pelo link do e-mail (convite ou redefinição). */

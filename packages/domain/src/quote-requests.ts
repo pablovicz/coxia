@@ -2,6 +2,7 @@ import type { QuoteRequestStatus } from '@coxia/database';
 import { enqueueDelivery } from '@coxia/database';
 import { type IsoDate, normalizeBrPhone, normalizeText } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError, fromIsoDate, toIsoDate } from './common';
+import { adminEmails, enqueueStaffEmail } from './staff-emails';
 
 /** Segmento do projeto (rótulos como no formulário do site). */
 export const QUOTE_SEGMENTS = {
@@ -155,7 +156,7 @@ export class QuoteRequestService {
     return { name, email, phone, segment: input.segment, services, description, neededBy };
   }
 
-  /** Recebe o pedido do site: grava, liga ao contato e avisa as administradoras no WhatsApp. */
+  /** Recebe o pedido do site: grava, liga ao contato e avisa as administradoras no WhatsApp e por e-mail. */
   async submit(organizationId: string, input: QuoteRequestInput, now = new Date()) {
     const r = this.validate(input);
     const duplicate = await this.db.quoteRequest.findFirst({
@@ -170,6 +171,7 @@ export class QuoteRequestService {
       where: { organizationId, role: { in: ['owner', 'admin'] }, user: { phone: { not: null } } },
       select: { user: { select: { phone: true } } },
     });
+    const staffEmails = await adminEmails(this.db, organizationId);
     const created = await this.db.$transaction(async (tx) => {
       // Contato pelo WhatsApp: novo recebe o nome do formulário; o existente mantém o nome dado pela equipe.
       const existing = await tx.contact.findUnique({ where: { organizationId_phone: { organizationId, phone: r.phone } } });
@@ -196,6 +198,17 @@ export class QuoteRequestService {
       const text = composeQuoteRequestNotice({ ...r, spaceName: space?.name ?? null });
       for (const a of admins) {
         await enqueueDelivery(tx, { organizationId, recipient: a.user.phone!, text, idempotencyKey: `quote_request:${q.id}:${a.user.phone}` });
+      }
+      // E por e-mail para todas as administradoras; responder o e-mail vai direto para o cliente.
+      const emailText = text.replace(/\n+Veja e acompanhe em Coxia → Pedidos\.$/, '');
+      for (const to of staffEmails) {
+        await enqueueStaffEmail(
+          tx,
+          organizationId,
+          to,
+          { template: 'staff_notice', subject: `Novo pedido de orçamento: ${r.name}`, text: emailText, path: '/orcamentos', actionLabel: 'Ver no Coxia', replyTo: r.email },
+          `quote_request:${q.id}:email:${to}`,
+        );
       }
       return q;
     });

@@ -136,6 +136,7 @@ services:
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-fake}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESIDENT_APP_URL: http://localhost:5174
+      STAFF_APP_URL: http://localhost:5173
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

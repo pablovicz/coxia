@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { createPrismaClient } from '@coxia/database';
-import { type DomainEvent, enqueueResidentEmail } from '@coxia/domain';
+import { type DomainEvent, enqueueResidentEmail, enqueueStaffEmail } from '@coxia/domain';
 import { FakeEmailProvider, FakeWhatsappProvider } from '@coxia/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadWorkerEnv } from '../src/env';
@@ -27,6 +27,7 @@ const env = loadWorkerEnv({
   S3_SECRET_ACCESS_KEY: 'coxia-dev-secret',
   EMAIL_FROM: 'Casa Kaju <reservas@casakaju.com>',
   RESIDENT_APP_URL: 'https://residente.casakaju.com',
+  STAFF_APP_URL: 'https://coxia.casakaju.com',
 });
 
 const prisma = createPrismaClient(env.DATABASE_URL);
@@ -102,6 +103,23 @@ describe('e-mails do residente', () => {
     expect((await prisma.notificationDelivery.findUniqueOrThrow({ where: { idempotencyKey: `test_reset:${run}` } })).status).toBe('pending');
     await maintenance.dispatchEmailOutbox(50);
     expect((await prisma.notificationDelivery.findUniqueOrThrow({ where: { idempotencyKey: `test_reset:${run}` } })).status).toBe('sent');
+  });
+});
+
+describe('e-mails para as administradoras', () => {
+  it('aviso da equipe: link do painel e responder para o cliente', async () => {
+    await enqueueStaffEmail(
+      prisma,
+      orgId,
+      `admin-${run}@casakaju.test`,
+      { template: 'staff_notice', subject: 'Novo pedido de orçamento: Lume', text: '*Lume*\nE-mail: oi@lume.art', path: '/orcamentos', actionLabel: 'Ver no Coxia', replyTo: 'oi@lume.art' },
+      `test_staff:${run}`,
+    );
+    await maintenance.dispatchEmailOutbox(50);
+    const mail = email.sent.find((m) => m.to === `admin-${run}@casakaju.test`)!;
+    expect(mail.subject).toBe('Novo pedido de orçamento: Lume');
+    expect(mail.html).toContain('https://coxia.casakaju.com/orcamentos');
+    expect(mail.replyTo).toBe('oi@lume.art');
   });
 });
 

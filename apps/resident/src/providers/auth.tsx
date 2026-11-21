@@ -7,6 +7,8 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Troca o token da sessão (a api emite um novo ao trocar a senha). */
+  replaceToken: (token: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -35,6 +37,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(res.accessToken);
   }, []);
 
+  const replaceToken = useCallback((next: string) => {
+    tokenStore.set(next);
+    setToken(next);
+  }, []);
+
   const logout = useCallback(() => {
     tokenStore.set(null);
     setToken(null);
@@ -42,8 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ me: token ? (me.data ?? null) : null, loading: !!token && me.isPending, login, logout }),
-    [token, me.data, me.isPending, login, logout],
+    () => ({ me: token ? (me.data ?? null) : null, loading: !!token && me.isPending, login, logout, replaceToken }),
+    [token, me.data, me.isPending, login, logout, replaceToken],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

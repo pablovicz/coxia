@@ -190,3 +190,34 @@ describe('reservas pelo workspace', () => {
     expect(buffer).toMatch(/"type":"(booking|hours)\.changed"/);
   });
 });
+
+describe('senha provisória', () => {
+  it('admin define; residente entra, só acessa a troca, troca e segue com o token novo', async () => {
+    await http().post(`/residents/${xpoId}/access/password`).set(auth(adminToken)).send({ password: 'curta' }).expect(400);
+    const res = await http().post(`/residents/${xpoId}/access/password`).set(auth(adminToken)).send({ password: 'provisoria-123' }).expect(200);
+    expect(res.body).toMatchObject({ status: 'active', mustChangePassword: true });
+
+    // sessões antigas caem (iat anterior à senha nova)
+    await new Promise((r) => setTimeout(r, 1100));
+    await http().post('/resident-auth/login').send({ email: xpoEmail, password: 'senha-da-xpo' }).expect(401);
+    const login = await http().post('/resident-auth/login').send({ email: xpoEmail, password: 'provisoria-123' }).expect(200);
+    expect(login.body.mustChangePassword).toBe(true);
+    const tmp = login.body.accessToken as string;
+
+    const me = await http().get('/me').set(auth(tmp)).expect(200);
+    expect(me.body).toMatchObject({ mustChangePassword: true, contracts: [] });
+    const blocked = await http().get('/me/payments').set(auth(tmp)).expect(403);
+    expect(blocked.body.details).toMatchObject({ code: 'password_change_required' });
+
+    await http().post('/resident-auth/change-password').set(auth(tmp)).send({ currentPassword: 'errada-000', newPassword: 'nova-senha-xpo' }).expect(422);
+    await http().post('/resident-auth/change-password').set(auth(tmp)).send({ currentPassword: 'provisoria-123', newPassword: 'provisoria-123' }).expect(422);
+    const changed = await http().post('/resident-auth/change-password').set(auth(tmp)).send({ currentPassword: 'provisoria-123', newPassword: 'nova-senha-xpo' }).expect(200);
+    const fresh = changed.body.accessToken as string;
+
+    await http().get('/me/payments').set(auth(tmp)).expect(401);
+    await http().get('/me/payments').set(auth(fresh)).expect(200);
+    expect((await http().get('/me').set(auth(fresh)).expect(200)).body.mustChangePassword).toBe(false);
+    const access = await http().get(`/residents/${xpoId}/access`).set(auth(adminToken)).expect(200);
+    expect(access.body).toMatchObject({ status: 'active', mustChangePassword: false });
+  });
+});

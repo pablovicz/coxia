@@ -34,6 +34,7 @@ export interface RenderedEmail {
   text: string;
   html: string;
   attachments?: Array<{ filename: string; content: string; contentType: string }>;
+  replyTo?: string;
 }
 
 export async function enqueueResidentEmail(tx: Tx, organizationId: string, to: string, payload: ResidentEmailPayload, idempotencyKey: string) {
@@ -98,16 +99,16 @@ export async function enqueueBookingEmails(tx: Tx, occurrenceIds: string[], meth
   return count;
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function layout(title: string, paragraphs: string[], cta?: { label: string; url: string }): string {
+export function layout(title: string, paragraphs: string[], cta?: { label: string; url: string }, footer = 'Casa Kaju · workspace do residente'): string {
   const body = paragraphs.map((p) => `<p style="margin:0 0 16px;line-height:1.5">${p}</p>`).join('');
   const button = cta
     ? `<p style="margin:24px 0"><a href="${escapeHtml(cta.url)}" style="background:#2f5d50;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">${escapeHtml(cta.label)}</a></p><p style="margin:0 0 16px;font-size:13px;color:#666">Ou copie o link: ${escapeHtml(cta.url)}</p>`
     : '';
-  return `<!doctype html><html lang="pt-BR"><body style="margin:0;padding:24px;background:#f6f3ee;font-family:Arial,Helvetica,sans-serif;color:#1f1f1f"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:32px"><h1 style="font-size:20px;margin:0 0 20px">${escapeHtml(title)}</h1>${body}${button}<p style="margin:32px 0 0;font-size:12px;color:#888">Casa Kaju · workspace do residente</p></div></body></html>`;
+  return `<!doctype html><html lang="pt-BR"><body style="margin:0;padding:24px;background:#f6f3ee;font-family:Arial,Helvetica,sans-serif;color:#1f1f1f"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:32px"><h1 style="font-size:20px;margin:0 0 20px">${escapeHtml(title)}</h1>${body}${button}<p style="margin:32px 0 0;font-size:12px;color:#888">${escapeHtml(footer)}</p></div></body></html>`;
 }
 
 /** Monta o e-mail a partir do payload do outbox. */

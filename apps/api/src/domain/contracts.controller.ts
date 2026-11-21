@@ -24,6 +24,7 @@ export const contractSchema = z.object({
   notes: z.string().max(2000).nullish(),
 });
 const endSchema = z.object({ endsOn: isoDate.nullish() });
+const provisionalSchema = z.object({ password: z.string().min(8).max(200) });
 const adjustSchema = z.object({
   minutes: z.number().int().multipleOf(30).refine((m) => m !== 0, 'Ajuste diferente de zero'),
   note: z.string().trim().min(1).max(300),
@@ -133,6 +134,14 @@ export class ContractsController {
   @HttpCode(200)
   invite(@CurrentUser() user: AuthUser, @Param('id') residentId: string) {
     return this.accounts.invite(user.organizationId, residentId, webActor(user));
+  }
+
+  /** Senha provisória: a equipe passa ao residente, que troca no primeiro acesso. */
+  @Roles('owner', 'admin')
+  @Post('residents/:id/access/password')
+  @HttpCode(200)
+  provisional(@CurrentUser() user: AuthUser, @Param('id') residentId: string, @Body(v(provisionalSchema)) body: z.infer<typeof provisionalSchema>) {
+    return this.accounts.setProvisionalPassword(user.organizationId, residentId, body.password, webActor(user));
   }
 
   @Roles('owner', 'admin')

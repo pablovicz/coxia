@@ -1337,17 +1337,21 @@ enum ResidentAccountStatus {
 
 /// Acesso do residente ao workspace (residente.casakaju.com): e-mail + senha.
 model ResidentAccount {
-  id             String                @id @default(cuid())
-  organizationId String                @map("organization_id")
-  residentId     String                @unique @map("resident_id")
+  id                 String                @id @default(cuid())
+  organizationId     String                @map("organization_id")
+  residentId         String                @unique @map("resident_id")
   /// Minúsculo; único no sistema (o login não pede organização).
-  email          String                @unique
-  passwordHash   String?               @map("password_hash")
-  status         ResidentAccountStatus @default(invited)
-  invitedAt      DateTime?             @map("invited_at") @db.Timestamptz(6)
-  lastLoginAt    DateTime?             @map("last_login_at") @db.Timestamptz(6)
-  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  email              String                @unique
+  passwordHash       String?               @map("password_hash")
+  status             ResidentAccountStatus @default(invited)
+  invitedAt          DateTime?             @map("invited_at") @db.Timestamptz(6)
+  lastLoginAt        DateTime?             @map("last_login_at") @db.Timestamptz(6)
+  /// Senha provisória definida pela equipe: o residente troca no primeiro acesso.
+  mustChangePassword Boolean               @default(false) @map("must_change_password")
+  /// Tokens emitidos antes disto não valem mais (senha trocada ou redefinida pela equipe).
+  sessionsValidFrom  DateTime?             @map("sessions_valid_from") @db.Timestamptz(6)
+  createdAt          DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   resident     Resident            @relation(fields: [residentId], references: [id], onDelete: Cascade)

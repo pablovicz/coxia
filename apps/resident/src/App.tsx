@@ -6,7 +6,7 @@ import { BookPage } from './features/book-page';
 import { BookingsPage } from './features/bookings-page';
 import { CheckInPage } from './features/check-in-page';
 import { ContractPage } from './features/contract-page';
-import { ForgotPasswordPage, LoginPage, SetPasswordPage } from './features/auth-pages';
+import { ChangePasswordPage, ForgotPasswordPage, LoginPage, SetPasswordPage } from './features/auth-pages';
 import { HomePage } from './features/home-page';
 import { PaymentsPage } from './features/payments-page';
 import { RoomCheckInPage } from './features/room-check-in-page';
@@ -25,6 +25,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
   if (!me) return <Navigate to={`/entrar?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  // Senha provisória: troca antes de qualquer outra tela (depois segue para onde ia: QR, link...).
+  if (me.mustChangePassword) return <ChangePasswordPage />;
   return <>{children}</>;
 }
 

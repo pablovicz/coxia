@@ -13,6 +13,7 @@ export * from './finance';
 export * from './residents';
 export * from './hour-balance';
 export * from './resident-emails';
+export * from './staff-emails';
 export * from './resident-contracts';
 export * from './resident-bookings';
 export * from './resident-accounts';

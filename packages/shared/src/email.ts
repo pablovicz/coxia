@@ -7,6 +7,7 @@ export interface EmailMessage {
   html: string;
   text: string;
   attachments?: Array<{ filename: string; content: string; contentType: string }>;
+  replyTo?: string;
 }
 
 export interface EmailProvider {
@@ -53,6 +54,7 @@ export class ResendEmailProvider implements EmailProvider {
           subject: message.subject,
           html: message.html,
           text: message.text,
+          ...(message.replyTo ? { reply_to: message.replyTo } : {}),
           attachments: message.attachments?.map((a) => ({
             filename: a.filename,
             content: Buffer.from(a.content, 'utf8').toString('base64'),

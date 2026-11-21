@@ -4,6 +4,7 @@ import type { MemberRole } from '@coxia/contracts';
 export const IS_PUBLIC = 'coxia:isPublic';
 export const ROLES = 'coxia:roles';
 export const RESIDENT_ROUTE = 'coxia:residentRoute';
+export const ALLOW_PENDING_PASSWORD = 'coxia:allowPendingPassword';
 
 /** Rota sem autenticação JWT (health, webhooks com segredo próprio, login). */
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -16,6 +17,9 @@ export const Roles = (...roles: MemberRole[]) => SetMetadata(ROLES, roles);
  * tokens da equipe são recusados. Toda rota sem esta marca recusa residentes (negado por padrão).
  */
 export const ResidentRoute = () => SetMetadata(RESIDENT_ROUTE, true);
+
+/** Com senha provisória, o residente só acessa as rotas marcadas com isto (quem sou eu, trocar a senha). */
+export const AllowPendingPassword = () => SetMetadata(ALLOW_PENDING_PASSWORD, true);
 
 export interface AuthUser {
   userId: string;

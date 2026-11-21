@@ -990,6 +990,8 @@ export interface ResidentAccess {
   invitedAt: string | null;
   lastLoginAt: string | null;
   hasPassword: boolean;
+  /** Senha provisória da equipe: o residente troca no primeiro acesso. */
+  mustChangePassword: boolean;
 }
 
 /** Endereço do workspace do residente (links e QR code das salas). */

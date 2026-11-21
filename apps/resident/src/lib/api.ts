@@ -58,6 +58,8 @@ export interface MeResponse {
   resident: { id: string; name: string; email: string | null };
   organization: { id: string; name: string; timezone: string };
   contracts: Contract[];
+  /** Senha provisória definida pela equipe: precisa trocar antes de usar o workspace. */
+  mustChangePassword: boolean;
 }
 
 export type Attendance = 'upcoming' | 'in_progress' | 'checked_in' | 'no_show';

@@ -2,7 +2,9 @@ import { Button } from '@coxia/ui/components/ui/button';
 import { Card } from '@coxia/ui/components/ui/card';
 import { Field } from '@coxia/ui/components/ui/field';
 import { Input } from '@coxia/ui/components/ui/input';
+import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
+import { toast } from 'sonner';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { ApiBodyError, ApiError, apiSend } from '@/lib/api';
 import { useAuth } from '@/providers/auth';
@@ -126,6 +128,58 @@ export function ForgotPasswordPage() {
           </Link>
         </form>
       )}
+    </AuthLayout>
+  );
+}
+
+/** Primeiro acesso com a senha provisória da equipe: o residente cria a própria senha. */
+export function ChangePasswordPage() {
+  const { me, replaceToken, logout } = useAuth();
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const currentPassword = String(data.get('current'));
+    const newPassword = String(data.get('password'));
+    if (newPassword.length < 8) return setError('A nova senha precisa ter pelo menos 8 caracteres.');
+    if (newPassword !== String(data.get('confirm'))) return setError('As senhas não são iguais.');
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiSend<{ accessToken: string }>('/resident-auth/change-password', 'POST', { currentPassword, newPassword });
+      replaceToken(res.accessToken);
+      await qc.invalidateQueries();
+      toast.success('Senha criada. Bem-vindo ao workspace!');
+    } catch (err) {
+      setError(err instanceof ApiBodyError ? err.message : 'Não foi possível salvar agora.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <AuthLayout title="Crie a sua senha" description={`Olá, ${me?.resident.name.split(' ')[0] ?? ''}! Você entrou com uma senha provisória. Para continuar, crie uma senha só sua.`}>
+      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <Field label="Senha provisória">{(id) => <Input id={id} name="current" type="password" autoComplete="current-password" required />}</Field>
+        <Field label="Nova senha" hint="Pelo menos 8 caracteres.">
+          {(id, describedBy) => <Input id={id} name="password" type="password" autoComplete="new-password" aria-describedby={describedBy} required />}
+        </Field>
+        <Field label="Repita a nova senha">{(id) => <Input id={id} name="confirm" type="password" autoComplete="new-password" required />}</Field>
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <Button type="submit" loading={busy}>
+          Salvar e continuar
+        </Button>
+        <button type="button" onClick={logout} className="text-center text-sm text-muted-foreground underline-offset-4 hover:underline">
+          Sair
+        </button>
+      </form>
     </AuthLayout>
   );
 }

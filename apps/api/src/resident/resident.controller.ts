@@ -3,7 +3,7 @@ import { type Actor, DomainError, ResidentBookingService, ResidentContractServic
 import { localDateOf } from '@coxia/shared';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { type AuthResident, CurrentResident, ResidentRoute } from '../auth/decorators';
+import { AllowPendingPassword, type AuthResident, CurrentResident, ResidentRoute } from '../auth/decorators';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { isoDate, isoDateTime } from '../domain/schemas';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,17 +41,22 @@ export class ResidentController {
     private readonly storage: StorageService,
   ) {}
 
+  @AllowPendingPassword()
   @Get()
   async me(@CurrentResident() r: AuthResident) {
     const resident = await this.prisma.resident.findUniqueOrThrow({
       where: { id: r.residentId },
-      select: { id: true, name: true, email: true, photoUpdatedAt: true, organization: { select: { id: true, name: true, timezone: true } } },
+      select: { id: true, name: true, email: true, photoUpdatedAt: true, organization: { select: { id: true, name: true, timezone: true } }, account: { select: { mustChangePassword: true } } },
     });
+    if (resident.account?.mustChangePassword) {
+      return { resident: { id: resident.id, name: resident.name, email: resident.email }, organization: resident.organization, contracts: [], mustChangePassword: true };
+    }
     const contracts = await this.contracts.list(r.organizationId, r.residentId);
     return {
       resident: { id: resident.id, name: resident.name, email: resident.email },
       organization: resident.organization,
       contracts: contracts.map((c) => this.presentContract(c)),
+      mustChangePassword: false,
     };
   }
 

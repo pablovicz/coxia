@@ -125,6 +125,8 @@ export default defineRailway((ctx) => {
       RESEND_API_KEY: preserve(),
       EMAIL_FROM: 'Casa Kaju <reservas@casakaju.com>',
       RESIDENT_APP_URL: 'https://residente.casakaju.com',
+      // Links dos avisos por e-mail às administradoras (lembretes, contas, compromissos, orçamentos).
+      STAFF_APP_URL: 'https://coxia.casakaju.com',
     },
   });
 
