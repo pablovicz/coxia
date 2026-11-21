@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { fetchAvatar } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 
 export const initialsOf = (name: string | null | undefined) =>
   (name ?? '?')

@@ -167,6 +167,10 @@ enum NotificationKind {
   project_confirmation
   ad_hoc
   appointment_before
+  resident_invite
+  password_reset
+  booking_invite
+  booking_cancelled
 }
 
 enum NotificationScheduleStatus {
@@ -237,6 +241,8 @@ model Organization {
   reminders              Reminder[]
   appointments           Appointment[]
   residents              Resident[]
+  residentContracts      ResidentContract[]
+  residentAccounts       ResidentAccount[]
   projectDocuments       ProjectDocument[]
   quoteRequests          QuoteRequest[]
   recurringBills         RecurringBill[]
@@ -617,15 +623,19 @@ model Income {
   contactId           String?      @map("contact_id")
   /// Aluguel mensal gerado (YYYY-MM): um por sala e mês, mesmo com o job rodando várias vezes.
   competence          String?
+  /// Mensalidade gerada a partir de um contrato de residente: uma por contrato e competência.
+  contractId          String?      @map("contract_id")
   createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  space        Space?       @relation(fields: [spaceId], references: [id], onDelete: SetNull)
-  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  space        Space?            @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  contact      Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contract     ResidentContract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
 
   @@unique([spaceId, competence])
+  @@unique([contractId, competence])
   @@index([organizationId, expectedOn])
   @@index([projectId])
   @@index([contactId])
@@ -719,6 +729,7 @@ model Space {
   incomes           Income[]
   bookings          Booking[]
   occurrences       BookingOccurrence[]
+  contracts         ResidentContract[]
 
   @@unique([organizationId, slug])
   @@map("spaces")
@@ -798,6 +809,10 @@ model Booking {
   hourlyRateCents     Int?          @map("hourly_rate_cents")
   /// Reserva semanal com horários diferentes por dia: uma série por horário, mesmo grupo.
   groupId             String?       @map("group_id")
+  /// Reserva de residente: consome as horas deste contrato (do ciclo em que acontece).
+  contractId          String?       @map("contract_id")
+  /// Quem criou: a equipe (painel/WhatsApp) ou o próprio residente (workspace).
+  source              BookingSource @default(staff)
   createdByPhone      String?       @map("created_by_phone")
   sourceMessageId     String?       @map("source_message_id")
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -806,27 +821,34 @@ model Booking {
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   space        Space               @relation(fields: [spaceId], references: [id])
   contact      Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contract     ResidentContract?   @relation(fields: [contractId], references: [id], onDelete: SetNull)
   occurrences  BookingOccurrence[]
 
   @@index([groupId])
+  @@index([contractId])
   @@map("bookings")
 }
 
 /// Intervalo concreto ocupado. A migration adiciona EXCLUDE USING gist que impede
 /// sobreposição de ocorrências não canceladas na mesma sala, mesmo sob concorrência.
 model BookingOccurrence {
-  id             String        @id @default(cuid())
-  organizationId String        @map("organization_id")
-  bookingId      String        @map("booking_id")
-  spaceId        String        @map("space_id")
-  startAt        DateTime      @map("start_at") @db.Timestamptz(6)
-  endAt          DateTime      @map("end_at") @db.Timestamptz(6)
-  status         BookingStatus @default(confirmed)
+  id             String         @id @default(cuid())
+  organizationId String         @map("organization_id")
+  bookingId      String         @map("booking_id")
+  spaceId        String         @map("space_id")
+  startAt        DateTime       @map("start_at") @db.Timestamptz(6)
+  endAt          DateTime       @map("end_at") @db.Timestamptz(6)
+  status         BookingStatus  @default(confirmed)
   /// Ocorrência alterada individualmente (não segue mais a série).
-  isException    Boolean       @default(false) @map("is_exception")
-  cancelledAt    DateTime?     @map("cancelled_at") @db.Timestamptz(6)
-  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  isException    Boolean        @default(false) @map("is_exception")
+  cancelledAt    DateTime?      @map("cancelled_at") @db.Timestamptz(6)
+  /// Check-in do residente (link do convite, QR da sala ou equipe). Sem check-in até o fim = não compareceu.
+  checkedInAt    DateTime?      @map("checked_in_at") @db.Timestamptz(6)
+  checkInMethod  CheckInMethod? @map("check_in_method")
+  /// SEQUENCE do convite .ics: sobe a cada alteração/cancelamento enviado por e-mail.
+  inviteSequence Int            @default(0) @map("invite_sequence")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   booking      Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -1017,6 +1039,8 @@ model NotificationDelivery {
   /// Telefone ou ID do grupo.
   recipient         String
   text              String
+  /// Canal e-mail: { subject, html, ics? } (o texto puro fica em `text`).
+  payload           Json?
   idempotencyKey    String         @unique @map("idempotency_key")
   status            DeliveryStatus @default(pending)
   attempts          Int            @default(0)
@@ -1215,11 +1239,142 @@ model Resident {
   createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact      Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contracts    ResidentContract[]
+  account      ResidentAccount?
 
   @@index([organizationId])
   @@map("residents")
+}
+
+enum BookingSource {
+  staff
+  resident
+}
+
+enum CheckInMethod {
+  email_link
+  room_qr
+  staff
+}
+
+enum ContractStatus {
+  active
+  ended
+}
+
+/// Contrato de horas: X horas por ciclo mensal numa sala. As horas não acumulam: o que sobra
+/// de um ciclo expira no dia de reset (cycle_day).
+model ResidentContract {
+  id                  String         @id @default(cuid())
+  organizationId      String         @map("organization_id")
+  residentId          String         @map("resident_id")
+  spaceId             String         @map("space_id")
+  /// Horas contratadas por ciclo, em minutos (múltiplo de 30).
+  monthlyMinutes      Int            @map("monthly_minutes")
+  /// Mensalidade do contrato; gera uma entrada prevista por competência.
+  monthlyAmountCents  Int?           @map("monthly_amount_cents")
+  paymentDueDay       Int?           @map("payment_due_day")
+  /// Dia do mês em que o ciclo começa e o saldo renova (29–31 caem no último dia em meses curtos).
+  cycleDay            Int            @map("cycle_day")
+  /// Dia de virada: a partir dele o residente já reserva o ciclo seguinte.
+  bookingOpensDay     Int            @map("booking_opens_day")
+  startsOn            DateTime       @map("starts_on") @db.Date
+  endsOn              DateTime?      @map("ends_on") @db.Date
+  status              ContractStatus @default(active)
+  notes               String?
+  contractKey         String?        @map("contract_key")
+  contractContentType String?        @map("contract_content_type")
+  contractFileName    String?        @map("contract_file_name")
+  contractUploadedAt  DateTime?      @map("contract_uploaded_at") @db.Timestamptz(6)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resident     Resident     @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  space        Space        @relation(fields: [spaceId], references: [id])
+  grants       HourGrant[]
+  bookings     Booking[]
+  incomes      Income[]
+
+  @@index([organizationId, status])
+  @@index([residentId])
+  @@map("resident_contracts")
+}
+
+enum HourGrantKind {
+  monthly
+  adjustment
+}
+
+/// Horas de um ciclo do contrato: a concessão mensal (uma por ciclo) e os ajustes da equipe (+/−).
+model HourGrant {
+  id          String        @id @default(cuid())
+  contractId  String        @map("contract_id")
+  /// Ciclo (YYYY-MM do mês em que o ciclo começa).
+  cycle       String
+  kind        HourGrantKind
+  /// Minutos (ajuste pode ser negativo).
+  minutes     Int
+  note        String?
+  /// Só na concessão mensal: "<contrato>:<ciclo>" — impede duplicar com o job rodando várias vezes.
+  monthlyKey  String?       @unique @map("monthly_key")
+  actorUserId String?       @map("actor_user_id")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  contract ResidentContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, cycle])
+  @@map("hour_grants")
+}
+
+enum ResidentAccountStatus {
+  invited
+  active
+  disabled
+}
+
+/// Acesso do residente ao workspace (residente.casakaju.com): e-mail + senha.
+model ResidentAccount {
+  id             String                @id @default(cuid())
+  organizationId String                @map("organization_id")
+  residentId     String                @unique @map("resident_id")
+  /// Minúsculo; único no sistema (o login não pede organização).
+  email          String                @unique
+  passwordHash   String?               @map("password_hash")
+  status         ResidentAccountStatus @default(invited)
+  invitedAt      DateTime?             @map("invited_at") @db.Timestamptz(6)
+  lastLoginAt    DateTime?             @map("last_login_at") @db.Timestamptz(6)
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resident     Resident            @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  tokens       ResidentAuthToken[]
+
+  @@map("resident_accounts")
+}
+
+enum ResidentTokenPurpose {
+  invite
+  reset
+}
+
+/// Link de convite / redefinição de senha. Só o hash fica no banco; o token vai no e-mail.
+model ResidentAuthToken {
+  id        String               @id @default(cuid())
+  accountId String               @map("account_id")
+  purpose   ResidentTokenPurpose
+  tokenHash String               @unique @map("token_hash")
+  expiresAt DateTime             @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime?            @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account ResidentAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("resident_auth_tokens")
 }
 
 // ───────────── Documentos do projeto (enviados pelo painel) ─────────────

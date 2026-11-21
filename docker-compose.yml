@@ -103,7 +103,7 @@ services:
       <<: *node-dev-env
       PORT: "3000"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-dev-jwt-secret-0000}
-      CORS_ORIGINS: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173,http://localhost:5174
     ports: ["3000:3000"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -132,6 +132,10 @@ services:
       <<: *node-dev-env
       WORKER_CONCURRENCY: "5"
       MORNING_BRIEFING_TIME: "08:00"
+      # E-mails dos residentes: "fake" só registra no log do worker (o link de senha aparece lá).
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-fake}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESIDENT_APP_URL: http://localhost:5174
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -179,6 +183,23 @@ services:
       - ./apps/web/src:/repo/apps/web/src
       - ./apps/web/public:/repo/apps/web/public
       - ./apps/web/index.html:/repo/apps/web/index.html
+      - ./packages/ui/src:/repo/packages/ui/src
+    networks: [coxia]
+
+  # Workspace do residente (residente.casakaju.com em produção).
+  resident:
+    build: { context: ., dockerfile: apps/resident/Dockerfile, target: dev }
+    environment:
+      VITE_API_URL: http://localhost:3000
+      VITE_USE_POLLING: "true"
+    ports: ["5174:5174"]
+    depends_on:
+      api: { condition: service_started }
+    volumes:
+      - ./apps/resident/src:/repo/apps/resident/src
+      - ./apps/resident/public:/repo/apps/resident/public
+      - ./apps/resident/index.html:/repo/apps/resident/index.html
+      - ./packages/ui/src:/repo/packages/ui/src
     networks: [coxia]
 
 networks:

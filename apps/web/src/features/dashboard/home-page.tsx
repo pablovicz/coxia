@@ -1,12 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, FolderKanban, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router';
-import { EmptyState, PageHeader } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/input';
+import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@coxia/ui/components/ui/card';
+import { Skeleton } from '@coxia/ui/components/ui/input';
 import { api, canManage, type Overview, type WhatsappConnection } from '@/lib/api';
-import { formatBRL, formatDueDate, formatRange } from '@/lib/format';
+import { formatBRL, formatDueDate, formatRange } from '@coxia/ui/lib/format';
 import { useAuth } from '@/providers/auth-provider';
 
 function greeting(date: Date, timezone: string): string {

@@ -2,14 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Field } from '@coxia/ui/components/ui/field';
+import { Input } from '@coxia/ui/components/ui/input';
 import { api, apiSend, type ExpenseCategory, type ExpenseCategoryRef } from '@/lib/api';
 import { CategoryIcon, EXPENSE_ICONS } from '@/lib/expense-categories';
-import { ROOM_COLORS, roomStyle } from '@/lib/rooms';
-import { cn } from '@/lib/utils';
+import { ROOM_COLORS, roomStyle } from '@coxia/ui/lib/rooms';
+import { cn } from '@coxia/ui/lib/utils';
 
 export const useExpenseCategories = () => useQuery({ queryKey: ['expense-categories'], queryFn: () => api<ExpenseCategory[]>('/expense-categories') });
 

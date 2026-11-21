@@ -9,6 +9,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { PrismaService } from '../prisma/prisma.service';
 import { type AuthUser, CurrentUser, Public } from './decorators';
 import { JwtAuthGuard, RolesGuard } from './guards';
+import { ResidentAuthController } from './resident-auth.controller';
 
 const loginSchema = z.object({
   email: z.string().email().transform((e) => e.toLowerCase()),
@@ -111,12 +112,12 @@ export class AuthController {
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, ResidentAuthController],
   providers: [
     AuthService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AuthService],
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

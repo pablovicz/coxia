@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { FolderKanban, Search, X } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Input } from '@coxia/ui/components/ui/input';
 import { api, type ProjectListItem } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 
 const normalize = (s: string) =>
   s

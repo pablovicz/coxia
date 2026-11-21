@@ -4,17 +4,19 @@ import { DateTime } from 'luxon';
 import { type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { EmptyState } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/input';
+import { EmptyState } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@coxia/ui/components/ui/card';
+import { Skeleton } from '@coxia/ui/components/ui/input';
 import { IncomeDialog } from '@/features/finance/incomes';
 import { api, canManage, fetchResidentFile, type ResidentDetails } from '@/lib/api';
-import { formatBRL, formatCompetence, formatPhone } from '@/lib/format';
-import { RoomIcon, roomStyle } from '@/lib/rooms';
-import { cn } from '@/lib/utils';
+import { formatBRL, formatCompetence, formatPhone } from '@coxia/ui/lib/format';
+import { RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
+import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
+import { ResidentAccessCard } from './resident-access';
+import { ResidentContracts } from './resident-contracts';
 import { ResidentForm } from './resident-form';
 import { instagramUrl, ResidentPhoto, SITUATION, WEEKDAY_SHORT } from './resident-shared';
 
@@ -116,6 +118,7 @@ export function ResidentDetailPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] [&>*]:min-w-0">
             <div className="flex flex-col gap-6">
+              <ResidentContracts residentId={r.id} admin={admin} tz={tz} />
               <Card>
                 <CardHeader>
                   <CardTitle>Locações e programação</CardTitle>
@@ -190,6 +193,7 @@ export function ResidentDetailPage() {
             </div>
 
             <aside className="flex flex-col gap-6">
+              <ResidentAccessCard residentId={r.id} email={r.email} admin={admin} tz={tz} />
               <Card>
                 <CardHeader>
                   <CardTitle>Contato</CardTitle>
@@ -212,7 +216,7 @@ export function ResidentDetailPage() {
               </Card>
               <Card>
                 <CardHeader>
-                  <CardTitle>Contrato</CardTitle>
+                  <CardTitle>Contrato anexado</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {r.contractUploadedAt ? (

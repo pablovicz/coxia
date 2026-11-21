@@ -1,6 +1,6 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router';
 import { AppShell } from '@/components/layout/app-shell';
-import { Skeleton } from '@/components/ui/input';
+import { Skeleton } from '@coxia/ui/components/ui/input';
 import { LoginPage } from '@/features/auth/login-page';
 import { HomePage } from '@/features/dashboard/home-page';
 import { ProjectDetailPage } from '@/features/projects/project-detail-page';

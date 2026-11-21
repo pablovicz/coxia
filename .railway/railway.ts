@@ -17,6 +17,11 @@
  *  - região do bucket (não pode ser alterada depois de criado);
  *  - geração dos domínios públicos de `api`, `web` e `site` (domínio customizado ou gerado pelo Railway).
  *  - `site` recebe casakaju.com (e www.casakaju.com, que o nginx redireciona para casakaju.com).
+ *  - `resident` recebe residente.casakaju.com (workspace do residente).
+ *
+ * E-mail (Resend): EMAIL_PROVIDER e RESEND_API_KEY ficam com preserve() no worker. Sem eles o worker
+ * sobe com o provedor "fake" (só registra). Depois de verificar casakaju.com no Resend, defina
+ * RESEND_API_KEY e EMAIL_PROVIDER=resend no serviço worker.
  */
 import { bucket, defineRailway, github, group, postgres, preserve, project, redis, ref, service } from 'railway/iac';
 
@@ -95,9 +100,9 @@ export default defineRailway((ctx) => {
       ...storageEnv,
       JWT_SECRET: preserve(),
       JWT_EXPIRES_IN: '12h',
-      // Domínios do painel (web) e do site público (site), próprios e gerados pelo Railway.
+      // Domínios do painel (web), do site público (site) e do workspace do residente (resident).
       CORS_ORIGINS:
-        'https://coxia.casakaju.com,https://coxia.up.railway.app,https://${{web.RAILWAY_PUBLIC_DOMAIN}},https://casakaju.com,https://www.casakaju.com,https://${{site.RAILWAY_PUBLIC_DOMAIN}}',
+        'https://coxia.casakaju.com,https://coxia.up.railway.app,https://${{web.RAILWAY_PUBLIC_DOMAIN}},https://casakaju.com,https://www.casakaju.com,https://${{site.RAILWAY_PUBLIC_DOMAIN}},https://residente.casakaju.com,https://${{resident.RAILWAY_PUBLIC_DOMAIN}}',
     },
   });
 
@@ -115,6 +120,11 @@ export default defineRailway((ctx) => {
       ...storageEnv,
       WORKER_CONCURRENCY: '5',
       MORNING_BRIEFING_TIME: '08:00',
+      // Convites de acesso e de reservas dos residentes.
+      EMAIL_PROVIDER: preserve(),
+      RESEND_API_KEY: preserve(),
+      EMAIL_FROM: 'Casa Kaju <reservas@casakaju.com>',
+      RESIDENT_APP_URL: 'https://residente.casakaju.com',
     },
   });
 
@@ -125,6 +135,19 @@ export default defineRailway((ctx) => {
       RAILWAY_DOCKERFILE_PATH: 'apps/web/Dockerfile',
       PORT: '8080',
       // Usado como build arg (ARG VITE_API_URL no Dockerfile).
+      VITE_API_URL: 'https://${{api.RAILWAY_PUBLIC_DOMAIN}}',
+      // Link do QR code de check-in das salas.
+      VITE_RESIDENT_APP_URL: 'https://residente.casakaju.com',
+    },
+  });
+
+  // Workspace do residente (residente.casakaju.com): reservas, saldo de horas, check-in e pagamentos.
+  const resident = service('resident', {
+    source: source(),
+    healthcheck: '/health',
+    env: {
+      RAILWAY_DOCKERFILE_PATH: 'apps/resident/Dockerfile',
+      PORT: '8080',
       VITE_API_URL: 'https://${{api.RAILWAY_PUBLIC_DOMAIN}}',
     },
   });
@@ -142,6 +165,6 @@ export default defineRailway((ctx) => {
   });
 
   return project('coxia', {
-    resources: [group('Dados', [db, cache, media]), group('Backend', [api, worker, ai]), web, site],
+    resources: [group('Dados', [db, cache, media]), group('Backend', [api, worker, ai]), web, resident, site],
   });
 });

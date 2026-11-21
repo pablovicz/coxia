@@ -7,6 +7,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuditModule } from './audit/audit.service';
 import { AuthModule } from './auth/auth.module';
 import { DomainHttpModule, DomainModule } from './domain/domain.module';
+import { EventsModule } from './events/events.module';
 import { redactUrl, REDACTED_PATHS } from './common/log-redaction';
 import { API_ENV, type ApiEnv } from './config/env';
 import { HealthModule } from './health/health.controller';
@@ -54,6 +55,7 @@ export class AppModule {
         StorageModule,
         AuditModule,
         AuthModule,
+        EventsModule,
         HealthModule,
         WhatsappModule,
         OrganizationModule,

@@ -26,5 +26,12 @@ export const MAINTENANCE_JOBS = {
   syncGroupContacts: 'sync-group-contacts',
   /** Nome e foto dos contatos no WhatsApp (novos primeiro; renova a cada 3 dias). */
   refreshContactProfiles: 'refresh-contact-profiles',
+  /** E-mails do outbox (convites e reservas dos residentes); independe do WhatsApp. */
+  dispatchEmailOutbox: 'dispatch-email-outbox',
+  /** Saldo de horas dos contratos (concessão do ciclo, virada) e mensalidades previstas. */
+  contractHours: 'contract-hours',
 } as const;
 export type MaintenanceJobName = (typeof MAINTENANCE_JOBS)[keyof typeof MAINTENANCE_JOBS];
+
+/** Canal Redis (pub/sub) dos eventos de atualização para as telas abertas (SSE na api). */
+export const EVENTS_CHANNEL = 'coxia:events';

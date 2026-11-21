@@ -2,19 +2,19 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { ExternalLink, Inbox, Plus, Search, UserCheck, Users } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { EmptyState, PageHeader } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
-import { Field, Select } from '@/components/ui/field';
-import { Input, Skeleton, Textarea } from '@/components/ui/input';
+import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card } from '@coxia/ui/components/ui/card';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Field, Select } from '@coxia/ui/components/ui/field';
+import { Input, Skeleton, Textarea } from '@coxia/ui/components/ui/input';
 import { Link } from 'react-router';
 import { api, apiSend, type Contact, type ContactGroupOption } from '@/lib/api';
-import { formatPhone, local } from '@/lib/format';
+import { formatPhone, local } from '@coxia/ui/lib/format';
 import { UserAvatar } from '@/components/user-avatar';
 import { ContactAvatar } from './contact-avatar';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 
 const PAGE = 50;

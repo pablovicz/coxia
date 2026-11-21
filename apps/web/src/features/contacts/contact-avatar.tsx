@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Contact } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 
 function initials(text: string) {
   const parts = text.replace(/[^\p{L}\s]/gu, ' ').trim().split(/\s+/).filter(Boolean);

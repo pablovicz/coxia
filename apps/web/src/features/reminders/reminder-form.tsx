@@ -4,15 +4,15 @@ import { DateTime } from 'luxon';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { MemberCheckbox } from '@/components/member-checkbox';
-import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
-import { Field, Select } from '@/components/ui/field';
-import { Input, Textarea } from '@/components/ui/input';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Field, Select } from '@coxia/ui/components/ui/field';
+import { Input, Textarea } from '@coxia/ui/components/ui/input';
 import { api, apiSend, type Contact, type Member, type ReminderType } from '@/lib/api';
 import { ContactPicker } from '@/features/contacts/contact-picker';
 import { ProjectPicker } from '@/features/projects/project-picker';
-import { formatPhone, toZonedIso } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { formatPhone, toZonedIso } from '@coxia/ui/lib/format';
+import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 
 export const REMINDER_TYPES: Record<ReminderType, { label: string; Icon: typeof Bell }> = {

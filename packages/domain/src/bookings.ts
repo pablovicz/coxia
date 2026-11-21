@@ -22,7 +22,21 @@ import {
   subtractIntervals,
   withinOperatingHours,
 } from './availability';
-import { type Actor, audit, type Db, DomainError, fromIsoDate, getOrganization, toIsoDate, type Tx } from './common';
+import {
+  type Actor,
+  audit,
+  type Db,
+  type DomainEvent,
+  type DomainEventPublisher,
+  DomainError,
+  emit,
+  fromIsoDate,
+  getOrganization,
+  NO_EVENTS,
+  toIsoDate,
+  type Tx,
+} from './common';
+import { enqueueBookingEmails } from './resident-emails';
 import { ensureResident } from './residents';
 import { assertBookable } from './spaces';
 
@@ -73,6 +87,16 @@ export interface CreateBookingInput {
   notifyOneHourBefore?: boolean;
   /** "fail": qualquer conflito rejeita tudo; "skip": cria o que couber e relata o resto. */
   onConflict?: 'fail' | 'skip';
+  /** Reserva de residente: consome as horas do contrato (ResidentBookingService). */
+  contractId?: string | null;
+  source?: 'staff' | 'resident';
+  /**
+   * Chamado dentro da transação, antes de gravar, com os intervalos que serão criados
+   * (ex.: trava o contrato e confere o saldo). Lançar desfaz tudo.
+   */
+  beforeInsert?: (tx: Tx, intervals: Interval[]) => Promise<void>;
+  /** Reserva de contrato: manda o convite .ics por e-mail (padrão). O uso avulso pelo QR não manda. */
+  sendInvites?: boolean;
 }
 
 const hhmm = (instant: Date, timezone: string) => DateTime.fromJSDate(instant, { zone: timezone }).toFormat('HH:mm');
@@ -96,6 +120,8 @@ const occurrenceInclude = {
       notes: true,
       recurrenceRule: true,
       status: true,
+      contractId: true,
+      source: true,
     },
   },
   space: { select: { id: true, name: true, color: true, icon: true } },
@@ -104,7 +130,29 @@ const occurrenceInclude = {
 export type OccurrenceWithBooking = Prisma.BookingOccurrenceGetPayload<{ include: typeof occurrenceInclude }>;
 
 export class BookingService {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly events: DomainEventPublisher = NO_EVENTS,
+  ) {}
+
+  /** Avisa as telas abertas (painel e workspace do residente) que estas reservas mudaram. */
+  async notifyChanged(bookingIds: string[]) {
+    if (!bookingIds.length) return;
+    const bookings = await this.db.booking.findMany({
+      where: { id: { in: bookingIds } },
+      select: { organizationId: true, spaceId: true, contractId: true, contract: { select: { residentId: true } } },
+    });
+    const seen = new Set<string>();
+    const list: DomainEvent[] = [];
+    for (const b of bookings) {
+      const key = `${b.spaceId}:${b.contractId ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push({ organizationId: b.organizationId, type: 'booking.changed', spaceId: b.spaceId, contractId: b.contractId, residentId: b.contract?.residentId ?? null });
+      if (b.contractId) list.push({ organizationId: b.organizationId, type: 'hours.changed', contractId: b.contractId, residentId: b.contract?.residentId ?? null });
+    }
+    emit(this.events, ...list);
+  }
 
   // ───────────── consultas ─────────────
 
@@ -200,7 +248,8 @@ export class BookingService {
     const groupId = plans.length > 1 ? randomUUID() : null;
 
     try {
-      return await this.db.$transaction(async (tx) => {
+      const result = await this.db.$transaction(async (tx) => {
+        if (input.beforeInsert) await input.beforeInsert(tx, creatable);
         const bookings = [];
         for (const plan of plans) {
           const toCreate = plan.intervals.filter((i) => !conflictStarts.has(i.start.getTime()));
@@ -218,6 +267,8 @@ export class BookingService {
               notes: input.notes?.trim() || null,
               status: input.status ?? 'confirmed',
               notifyOneHourBefore: input.notifyOneHourBefore ?? false,
+              contractId: input.contractId ?? null,
+              source: input.source ?? 'staff',
               createdByPhone: actor.phone ?? null,
               sourceMessageId: actor.sourceMessageId ?? null,
               ...(series
@@ -257,10 +308,13 @@ export class BookingService {
           orderBy: { startAt: 'asc' },
         });
         await audit(tx, organizationId, actor, 'booking.create', 'booking', bookings[0]!.id, {
-          after: { bookings: bookings.map((b) => b.id), groupId, occurrences: occurrences.length, skipped: conflicts.length },
+          after: { bookings: bookings.map((b) => b.id), groupId, occurrences: occurrences.length, skipped: conflicts.length, contractId: input.contractId ?? null },
         });
+        if (input.contractId && input.sendInvites !== false) await enqueueBookingEmails(tx, occurrences.map((o) => o.id), 'REQUEST');
         return { booking: bookings[0]!, bookings, occurrences, skipped: conflicts };
       });
+      await this.notifyChanged(result.bookings.map((b) => b.id));
+      return result;
     } catch (err) {
       // Outra reserva entrou entre a checagem e o insert: o banco garante a regra.
       if (isBookingOverlapError(err)) {
@@ -372,12 +426,13 @@ export class BookingService {
   async cancelOccurrence(organizationId: string, occurrenceId: string, actor: Actor) {
     const occ = await this.getOccurrence(organizationId, occurrenceId);
     if (occ.status === 'cancelled') return occ;
-    return this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       const updated = await tx.bookingOccurrence.update({
         where: { id: occurrenceId },
         data: { status: 'cancelled', cancelledAt: new Date() },
         include: occurrenceInclude,
       });
+      await enqueueBookingEmails(tx, [occurrenceId], 'CANCEL');
       const remaining = await tx.bookingOccurrence.count({ where: { bookingId: occ.bookingId, status: { not: 'cancelled' } } });
       if (remaining === 0 && !occ.booking.recurrenceRule) {
         await tx.booking.update({ where: { id: occ.bookingId }, data: { status: 'cancelled' } });
@@ -388,6 +443,8 @@ export class BookingService {
       });
       return updated;
     });
+    await this.notifyChanged([occ.bookingId]);
+    return result;
   }
 
   /** Cancela a série a partir de `fromDate` (local, inclusive) e impede novas ocorrências. */
@@ -404,13 +461,13 @@ export class BookingService {
         ? (await this.db.booking.findMany({ where: { organizationId, groupId: booking.groupId }, select: { id: true } })).map((b) => b.id)
         : [bookingId];
     const from = localDayBoundsUtc(fromDate, org.timezone).start;
-    return this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       let cancelled = 0;
       for (const id of ids) {
-        const { count } = await tx.bookingOccurrence.updateMany({
-          where: { bookingId: id, status: { not: 'cancelled' }, startAt: { gte: from } },
-          data: { status: 'cancelled', cancelledAt: new Date() },
-        });
+        const where = { bookingId: id, status: { not: 'cancelled' as const }, startAt: { gte: from } };
+        const targets = booking.contractId ? (await tx.bookingOccurrence.findMany({ where, select: { id: true } })).map((o) => o.id) : [];
+        const { count } = await tx.bookingOccurrence.updateMany({ where, data: { status: 'cancelled', cancelledAt: new Date() } });
+        await enqueueBookingEmails(tx, targets, 'CANCEL');
         cancelled += count;
         const remaining = await tx.bookingOccurrence.count({ where: { bookingId: id, status: { not: 'cancelled' } } });
         await tx.booking.update({
@@ -424,6 +481,8 @@ export class BookingService {
       await audit(tx, organizationId, actor, 'booking.cancel_series', 'booking', bookingId, { after: { fromDate, cancelled, bookings: ids } });
       return { cancelled };
     });
+    await this.notifyChanged(ids);
+    return result;
   }
 
   // ───────────── alteração ─────────────
@@ -442,18 +501,21 @@ export class BookingService {
     const conflicts = await this.findConflicts(this.db, spaceId, space.availabilityRules, [{ start: input.startAt, end: input.endAt }], org.timezone, [occurrenceId]);
     if (conflicts.length) throw new DomainError('conflict', conflictMessage(conflicts), { conflicts });
     try {
-      return await this.db.$transaction(async (tx) => {
+      const result = await this.db.$transaction(async (tx) => {
         const updated = await tx.bookingOccurrence.update({
           where: { id: occurrenceId },
           data: { startAt: input.startAt, endAt: input.endAt, spaceId, isException: !!occ.booking.recurrenceRule },
           include: occurrenceInclude,
         });
+        await enqueueBookingEmails(tx, [occurrenceId], 'REQUEST', { bump: true });
         await audit(tx, organizationId, actor, 'booking.update_occurrence', 'booking_occurrence', occurrenceId, {
           before: { startAt: occ.startAt, endAt: occ.endAt, spaceId: occ.spaceId },
           after: { startAt: input.startAt, endAt: input.endAt, spaceId },
         });
         return updated;
       });
+      await this.notifyChanged([occ.bookingId]);
+      return result;
     } catch (err) {
       if (isBookingOverlapError(err)) throw new DomainError('conflict', 'O horário acabou de ser reservado por outra pessoa.');
       throw err;
@@ -505,10 +567,11 @@ export class BookingService {
     const apply = moved.filter((m) => !blocked.has(m.start.getTime()));
 
     try {
-      return await this.db.$transaction(async (tx) => {
+      const result = await this.db.$transaction(async (tx) => {
         for (const m of apply) {
           await tx.bookingOccurrence.update({ where: { id: m.id }, data: { startAt: m.start, endAt: m.end } });
         }
+        await enqueueBookingEmails(tx, apply.map((m) => m.id), 'REQUEST', { bump: true });
         await tx.booking.update({
           where: { id: bookingId },
           data: { localStartTime: input.localStartTime, localEndTime: input.localEndTime },
@@ -519,6 +582,8 @@ export class BookingService {
         });
         return { updated: apply.length, skipped: conflicts };
       });
+      await this.notifyChanged([bookingId]);
+      return result;
     } catch (err) {
       if (isBookingOverlapError(err)) throw new DomainError('conflict', 'Outra reserva ocupou um desses horários. Tente de novo.');
       throw err;

@@ -4,19 +4,19 @@ import { DateTime } from 'luxon';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { EmptyState, PageHeader } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/input';
-import { api, apiSend, canBook, isBookable, type Occurrence, type Space } from '@/lib/api';
-import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, local, todayIn } from '@/lib/format';
-import { ROOM_STATUS, RoomIcon, roomStyle } from '@/lib/rooms';
-import { cn } from '@/lib/utils';
+import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card } from '@coxia/ui/components/ui/card';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Skeleton } from '@coxia/ui/components/ui/input';
+import { ApiBodyError, api, apiSend, canBook, isBookable, type Occurrence, type Space } from '@/lib/api';
+import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, local, todayIn } from '@coxia/ui/lib/format';
+import { ROOM_STATUS, RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
+import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { BookingForm } from './booking-form';
-import { AGENDA_VIEWS, type AgendaView, isAgendaView, monthGrid, monthsOf, periodOf, shiftPeriod, WEEKDAY_HEADERS } from './calendar';
+import { AGENDA_VIEWS, type AgendaView, isAgendaView, monthGrid, monthsOf, periodOf, shiftPeriod, WEEKDAY_HEADERS } from '@coxia/ui/calendar/calendar';
 
 function useIsDesktop() {
   const query = '(min-width: 1024px)';
@@ -556,14 +556,55 @@ function ReservationCard({ occ, tz, onCancel }: { occ: Occurrence; tz: string; o
             </Badge>
           ) : null}
           {occ.status === 'tentative' ? <Badge variant="pending">Provisória</Badge> : null}
+          <AttendanceBadges occ={occ} tz={tz} />
         </div>
       </div>
       {onCancel ? (
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancelar
-        </Button>
+        <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center">
+          <StaffCheckIn occ={occ} />
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancelar
+          </Button>
+        </div>
       ) : null}
     </Card>
+  );
+}
+
+/** Reserva de residente (contrato): presença. Falta e check-in atrasado consomem a reserva inteira. */
+function AttendanceBadges({ occ, tz }: { occ: Occurrence; tz: string }) {
+  if (!occ.booking.contractId) return null;
+  const ended = new Date(occ.endAt) <= new Date();
+  return (
+    <>
+      <Badge variant="neutral">Residente</Badge>
+      {occ.checkedInAt ? (
+        <Badge variant="active">Check-in {local(occ.checkedInAt, tz).toFormat('HH:mm')}</Badge>
+      ) : ended ? (
+        <Badge variant="late">Sem check-in</Badge>
+      ) : null}
+    </>
+  );
+}
+
+/** A equipe registra o check-in de quem chegou sem fazer (janela: 15 min antes até o fim). */
+function StaffCheckIn({ occ }: { occ: Occurrence }) {
+  const qc = useQueryClient();
+  const now = Date.now();
+  const open = !!occ.booking.contractId && !occ.checkedInAt && occ.status !== 'cancelled' && now >= new Date(occ.startAt).getTime() - 15 * 60_000 && now < new Date(occ.endAt).getTime();
+  const checkIn = useMutation({
+    mutationFn: () => apiSend(`/bookings/occurrences/${occ.id}/check-in`, 'POST'),
+    onSuccess: () => {
+      toast.success('Check-in registrado.');
+      void qc.invalidateQueries({ queryKey: ['bookings'] });
+    },
+    onError: (err) => toast.error(err instanceof ApiBodyError ? err.message : 'Não foi possível registrar.'),
+  });
+  if (!open) return null;
+  return (
+    <Button variant="outline" size="sm" loading={checkIn.isPending} onClick={() => checkIn.mutate()}>
+      Registrar check-in
+    </Button>
   );
 }
 

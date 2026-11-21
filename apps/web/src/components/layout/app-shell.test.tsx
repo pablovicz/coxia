@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import { AuthProvider } from '@/providers/auth-provider';
-import { ThemeProvider } from '@/providers/theme-provider';
+import { ThemeProvider } from '@coxia/ui/providers/theme-provider';
 import { AppShell } from './app-shell';
 
 function renderAt(path: string) {

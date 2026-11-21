@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { initialsOf } from '@/components/user-avatar';
 import { fetchResidentFile, type Resident, type ResidentSituation } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 
 export const SITUATION: Record<ResidentSituation, { label: string; variant: 'active' | 'pending' | 'late' | 'neutral' | 'info'; hint: string }> = {
   regular: { label: 'Regular', variant: 'active', hint: 'Pagamentos em dia' },

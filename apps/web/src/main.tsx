@@ -10,7 +10,7 @@ import { Toaster } from 'sonner';
 import { App } from './App';
 import { ApiError } from './lib/api';
 import { AuthProvider } from './providers/auth-provider';
-import { ThemeProvider, useTheme } from './providers/theme-provider';
+import { ThemeProvider, useTheme } from '@coxia/ui/providers/theme-provider';
 
 const queryClient = new QueryClient({
   defaultOptions: {

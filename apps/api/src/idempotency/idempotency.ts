@@ -41,12 +41,13 @@ export class IdempotencyInterceptor implements NestInterceptor {
       body: unknown;
       route?: { path?: string };
       user?: { userId: string };
+      resident?: { accountId: string };
     }>();
     const key = req.headers['idempotency-key'];
     if (!key || !MUTATING.has(req.method)) return next.handle();
     if (key.length > 200) throw new UnprocessableEntityException('Idempotency-Key muito longa');
 
-    const scope = `http:${req.user?.userId ?? 'anon'}:${req.method}:${req.route?.path ?? ''}`;
+    const scope = `http:${req.user?.userId ?? (req.resident ? `resident:${req.resident.accountId}` : 'anon')}:${req.method}:${req.route?.path ?? ''}`;
     const requestHash = stableHash(req.body ?? null);
 
     try {

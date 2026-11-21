@@ -2,16 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDownLeft, FolderKanban, Plus } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
-import { Field, Select } from '@/components/ui/field';
-import { Input, Textarea } from '@/components/ui/input';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@coxia/ui/components/ui/card';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Field, Select } from '@coxia/ui/components/ui/field';
+import { Input, Textarea } from '@coxia/ui/components/ui/input';
 import { api, apiSend, type Income, type IncomeSource, type ProjectListItem, type Space, canSeeContacts, type ResidentListItem } from '@/lib/api';
-import { centsToInput, formatBRL, formatDueDate, parseBRL, todayIn } from '@/lib/format';
-import { RoomIcon, roomStyle } from '@/lib/rooms';
-import { cn } from '@/lib/utils';
+import { centsToInput, formatBRL, formatDueDate, parseBRL, todayIn } from '@coxia/ui/lib/format';
+import { RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
+import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 
 export const SOURCE_LABEL: Record<IncomeSource, string> = {

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Link } from 'react-router';
 import { describe, expect, it } from 'vitest';
-import { Button } from './button';
+import { Button } from '@coxia/ui/components/ui/button';
 
 describe('Button', () => {
   it('asChild vira o próprio link, com o estilo do botão', () => {

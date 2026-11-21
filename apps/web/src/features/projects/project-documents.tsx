@@ -3,11 +3,11 @@ import { FileText, Paperclip, Ruler, Trash2, X } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select } from '@/components/ui/field';
-import { Skeleton } from '@/components/ui/input';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@coxia/ui/components/ui/card';
+import { Select } from '@coxia/ui/components/ui/field';
+import { Skeleton } from '@coxia/ui/components/ui/input';
 import {
   api,
   apiSend,
@@ -19,7 +19,7 @@ import {
   type ProjectDocumentKind,
   uploadProjectDocument,
 } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 
 export interface PendingDocument {
   file: File;

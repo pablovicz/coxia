@@ -20,7 +20,13 @@ export interface EnqueueDeliveryInput {
   scheduleId?: string | null;
   availableAt?: Date;
   maxAttempts?: number;
+  /** "whatsapp" (padrão) ou "email" — cada canal tem o seu despachante. */
+  channel?: DeliveryChannel;
+  /** Canal e-mail: dados do modelo (o worker monta assunto, corpo e anexo .ics ao enviar). */
+  payload?: Prisma.InputJsonValue;
 }
+
+export type DeliveryChannel = 'whatsapp' | 'email';
 
 export async function enqueueDelivery(tx: Tx, input: EnqueueDeliveryInput): Promise<NotificationDelivery> {
   return tx.notificationDelivery.upsert({
@@ -34,6 +40,8 @@ export async function enqueueDelivery(tx: Tx, input: EnqueueDeliveryInput): Prom
       scheduleId: input.scheduleId ?? null,
       availableAt: input.availableAt ?? new Date(),
       maxAttempts: input.maxAttempts ?? 5,
+      channel: input.channel ?? 'whatsapp',
+      payload: input.payload ?? undefined,
     },
   });
 }
@@ -43,13 +51,14 @@ export async function claimDueDeliveries(
   prisma: PrismaClient,
   limit: number,
   now: Date = new Date(),
+  channel: DeliveryChannel = 'whatsapp',
 ): Promise<NotificationDelivery[]> {
   const rows = await prisma.$queryRaw<Array<{ id: string }>>`
     UPDATE "notification_deliveries" AS d
        SET "status" = 'sending', "attempts" = d."attempts" + 1, "updated_at" = ${now}
      WHERE d."id" IN (
        SELECT "id" FROM "notification_deliveries"
-        WHERE "status" IN ('pending', 'failed') AND "available_at" <= ${now}
+        WHERE "status" IN ('pending', 'failed') AND "available_at" <= ${now} AND "channel" = ${channel}
         ORDER BY "available_at"
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED

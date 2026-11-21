@@ -7,7 +7,12 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // UI compartilhada (fonte TS): resolve direto no pacote, com extensão automática.
+      '@coxia/ui': fileURLToPath(new URL('../../packages/ui/src', import.meta.url)),
+    },
+    dedupe: ['react', 'react-dom'],
   },
   server: {
     port: 5173,

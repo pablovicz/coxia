@@ -1,9 +1,9 @@
 import { ChevronRight, LogOut, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router';
-import { PageHeader } from '@/components/empty-state';
-import { ThemeSwitch } from '@/components/theme-switch';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@coxia/ui/components/empty-state';
+import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@coxia/ui/components/ui/card';
 import { canManage } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { AccountAvatar, AccountPhone, ROLE_LABEL, TeamPanel } from './team-panel';

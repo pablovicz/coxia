@@ -1,20 +1,21 @@
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, Clock, DoorOpen, Images, KeyRound, Pencil, Plus, Tag } from 'lucide-react';
+import { CalendarDays, Clock, DoorOpen, Images, KeyRound, Pencil, Plus, QrCode, Tag } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { EmptyState, PageHeader } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/input';
+import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card } from '@coxia/ui/components/ui/card';
+import { Skeleton } from '@coxia/ui/components/ui/input';
 import { api, canManage, type Space } from '@/lib/api';
-import { formatBRL } from '@/lib/format';
-import { ROOM_STATUS, RoomIcon, roomStyle } from '@/lib/rooms';
-import { cn } from '@/lib/utils';
+import { formatBRL } from '@coxia/ui/lib/format';
+import { ROOM_STATUS, RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
+import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { describeHours } from './hours';
 import { RoomForm } from './room-form';
 import { RoomPhoto } from './room-photo';
+import { RoomQrDialog } from './room-qr-dialog';
 
 /** Salas da casa: a administração cadastra; a equipe consulta e reserva pela agenda. */
 export function RoomsPage() {
@@ -23,6 +24,7 @@ export function RoomsPage() {
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api<Space[]>('/spaces') });
   // null = fechado; 'new' = cadastro; Space = edição.
   const [editing, setEditing] = useState<Space | 'new' | null>(null);
+  const [qr, setQr] = useState<Space | null>(null);
 
   return (
     <>
@@ -68,7 +70,7 @@ export function RoomsPage() {
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {spaces.data.map((s) => (
             <li key={s.id}>
-              <RoomCard room={s} onEdit={admin ? () => setEditing(s) : undefined} />
+              <RoomCard room={s} onEdit={admin ? () => setEditing(s) : undefined} onQr={s.status === 'monthly_rental' ? undefined : () => setQr(s)} />
             </li>
           ))}
         </ul>
@@ -76,11 +78,12 @@ export function RoomsPage() {
 
       {/* Montagem condicional: o formulário abre sempre com os dados atuais. */}
       {editing ? <RoomForm room={editing === 'new' ? null : editing} onClose={() => setEditing(null)} /> : null}
+      {qr ? <RoomQrDialog room={qr} onClose={() => setQr(null)} /> : null}
     </>
   );
 }
 
-function RoomCard({ room, onEdit }: { room: Space; onEdit?: () => void }) {
+function RoomCard({ room, onEdit, onQr }: { room: Space; onEdit?: () => void; onQr?: () => void }) {
   const status = ROOM_STATUS[room.status];
   const cover = room.photos[0];
   return (
@@ -128,10 +131,19 @@ function RoomCard({ room, onEdit }: { room: Space; onEdit?: () => void }) {
           <Clock size={16} aria-hidden className="shrink-0" />
           {describeHours(room.availabilityRules)}
         </p>
-        {onEdit ? (
-          <Button variant="outline" size="sm" className="self-start" onClick={onEdit} aria-label={`Editar ${room.name}`}>
-            <Pencil aria-hidden /> Editar
-          </Button>
+        {onEdit || onQr ? (
+          <div className="flex flex-wrap gap-2">
+            {onEdit ? (
+              <Button variant="outline" size="sm" onClick={onEdit} aria-label={`Editar ${room.name}`}>
+                <Pencil aria-hidden /> Editar
+              </Button>
+            ) : null}
+            {onQr ? (
+              <Button variant="ghost" size="sm" onClick={onQr} aria-label={`QR code de check-in da ${room.name}`}>
+                <QrCode aria-hidden /> QR de check-in
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </Card>

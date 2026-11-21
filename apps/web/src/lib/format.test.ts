@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPhone } from './format';
+import { formatPhone } from '@coxia/ui/lib/format';
 
 describe('formatPhone', () => {
   it('celular e fixo brasileiros', () => {

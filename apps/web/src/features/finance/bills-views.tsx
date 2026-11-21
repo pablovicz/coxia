@@ -3,18 +3,18 @@ import { AlertTriangle, CalendarClock, Check, ChevronLeft, ChevronRight, FileTex
 import { DateTime } from 'luxon';
 import { type ReactNode, useRef } from 'react';
 import { toast } from 'sonner';
-import { EmptyState } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/input';
-import { monthGrid, WEEKDAY_HEADERS } from '@/features/rooms/calendar';
+import { EmptyState } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@coxia/ui/components/ui/card';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Skeleton } from '@coxia/ui/components/ui/input';
+import { monthGrid, WEEKDAY_HEADERS } from '@coxia/ui/calendar/calendar';
 import { api, apiSend, type BillDetails, type BillOccurrence, type ExpenseCategory, fetchPaymentProof, MAX_PROOF_BYTES, PAYMENT_METHODS, payWithProof, PROOF_TYPES, type RecurringBill } from '@/lib/api';
 import { CategoryIcon } from '@/lib/expense-categories';
-import { formatBRL, formatCompetence, formatDayTitle, formatDueDate, formatShortDay, todayIn } from '@/lib/format';
-import { roomStyle } from '@/lib/rooms';
-import { cn } from '@/lib/utils';
+import { formatBRL, formatCompetence, formatDayTitle, formatDueDate, formatShortDay, todayIn } from '@coxia/ui/lib/format';
+import { roomStyle } from '@coxia/ui/lib/rooms';
+import { cn } from '@coxia/ui/lib/utils';
 import { CategoryBadge } from './expense-categories';
 
 /** Filtro de categoria: 'all', 'none' (sem categoria) ou o id da categoria. */

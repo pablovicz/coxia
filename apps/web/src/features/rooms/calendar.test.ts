@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { monthGrid, monthsOf, periodOf, shiftPeriod } from './calendar';
+import { monthGrid, monthsOf, periodOf, shiftPeriod } from '@coxia/ui/calendar/calendar';
 
 describe('períodos da agenda', () => {
   it('semana começa na segunda', () => {

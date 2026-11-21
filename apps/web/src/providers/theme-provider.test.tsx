@@ -1,9 +1,9 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { ThemeSwitch } from '@/components/theme-switch';
+import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
 import { emitSystemTheme } from '@/test-setup';
-import { THEME_STORAGE_KEY, ThemeProvider } from './theme-provider';
+import { THEME_STORAGE_KEY, ThemeProvider } from '@coxia/ui/providers/theme-provider';
 
 const renderSwitch = () =>
   render(

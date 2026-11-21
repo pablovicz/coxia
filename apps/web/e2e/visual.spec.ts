@@ -717,6 +717,11 @@ async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; ro
     if (path === '/residents' && method === 'POST') return route.fulfill({ status: 201, json: { ...RESIDENTS[2], id: 'rs9', ...(route.request().postDataJSON() as object) } });
     if (/^\/residents\/rs\d+$/.test(path) && method === 'GET') return respond(RESIDENT_DETAILS);
     if (/^\/residents\/rs\d+$/.test(path) && method === 'PATCH') return route.fulfill({ json: RESIDENTS[0] });
+    // Contratos de horas e acesso ao workspace do residente.
+    if (/^\/residents\/rs\d+\/contracts$/.test(path) && method === 'GET') return respond([]);
+    if (/^\/residents\/rs\d+\/access$/.test(path) && method === 'GET') return respond(null);
+    // Tempo real (SSE): sem servidor de eventos nos goldens.
+    if (path === '/events/ticket') return route.fulfill({ status: 503, json: { message: 'sem eventos no teste' } });
     if (/^\/residents\/rs\d+\/(photo|contract)$/.test(path)) return method === 'GET' ? route.fulfill({ status: 200, contentType: 'image/png', body: PNG }) : route.fulfill({ json: { ...RESIDENTS[2], id: 'rs9' } });
     if (path === '/contacts' && method === 'GET') {
       const q = (url.searchParams.get('q') ?? '').toLowerCase();

@@ -3,9 +3,9 @@ import { ArrowDownLeft, ChevronLeft, ChevronRight, Paperclip, Pencil, Plus, Rece
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { EmptyState, PageHeader } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
 import {
   Card,
   CardContent,
@@ -13,10 +13,10 @@ import {
   CardHeader,
   CardTitle,
   MetricCard,
-} from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
-import { Checkbox, Field, Select } from '@/components/ui/field';
-import { Input, Skeleton, Textarea } from '@/components/ui/input';
+} from '@coxia/ui/components/ui/card';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Checkbox, Field, Select } from '@coxia/ui/components/ui/field';
+import { Input, Skeleton, Textarea } from '@coxia/ui/components/ui/input';
 import {
   api,
   apiSend,
@@ -33,13 +33,13 @@ import {
   PROOF_TYPES,
   type RecurringBill,
 } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 import { IncomeDialog, IncomeList } from '@/features/finance/incomes';
 import { CategoryBadge, ExpenseCategoriesDialog, useExpenseCategories } from '@/features/finance/expense-categories';
 import { BillDetailsDialog, BillsCalendar, CategoryFilter, type CategoryFilterValue, matchesCategory, UpcomingBills } from '@/features/finance/bills-views';
 import { DateTime } from 'luxon';
 import { CategoryIcon } from '@/lib/expense-categories';
-import { roomStyle } from '@/lib/rooms';
+import { roomStyle } from '@coxia/ui/lib/rooms';
 import {
   centsToInput,
   formatBRL,
@@ -49,7 +49,7 @@ import {
   parseBRL,
   shiftCompetence,
   todayIn,
-} from '@/lib/format';
+} from '@coxia/ui/lib/format';
 import { useAuth } from '@/providers/auth-provider';
 
 const STATUS: Record<

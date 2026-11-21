@@ -2,10 +2,23 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { type InboundMessageJob, QUEUES } from '@coxia/contracts';
 import { claimDueDeliveries, markDeliveryFailed, markDeliverySent, Prisma, reclaimStaleDeliveries } from '@coxia/database';
-import { audit, BillingService, BookingService, ContactService, IncomeService, NotificationService, ProjectService, SYSTEM_ACTOR } from '@coxia/domain';
-import { type WhatsappProvider, WhatsappProviderError } from '@coxia/shared';
+import {
+  audit,
+  BillingService,
+  BookingService,
+  ContactService,
+  IncomeService,
+  NotificationService,
+  ProjectService,
+  renderResidentEmail,
+  ResidentContractService,
+  type ResidentEmailPayload,
+  SYSTEM_ACTOR,
+} from '@coxia/domain';
+import { type EmailProvider, EmailProviderError, parseMailbox, type WhatsappProvider, WhatsappProviderError } from '@coxia/shared';
+import { WORKER_ENV, type WorkerEnv } from '../env';
 import type { Queue } from 'bullmq';
-import { PrismaService, WHATSAPP_PROVIDER } from '../infra.module';
+import { EMAIL_PROVIDER, PrismaService, WHATSAPP_PROVIDER } from '../infra.module';
 import { GROUP_SYNC_TTL_MS, GroupContactsService } from '../inbound/group-contacts.service';
 import { StorageService } from '../storage/storage.service';
 
@@ -39,7 +52,49 @@ export class MaintenanceService {
     private readonly projects: ProjectService,
     private readonly storage: StorageService,
     private readonly groupContacts: GroupContactsService,
+    private readonly contracts: ResidentContractService,
+    @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider,
+    @Inject(WORKER_ENV) private readonly env: WorkerEnv,
   ) {}
+
+  /** Concessão de horas do ciclo (e do próximo, na virada) e mensalidades previstas dos contratos. */
+  async runContractHours(now = new Date()) {
+    const result = await this.contracts.runMaintenance(now);
+    if (result.grants || result.incomes || result.ended) this.logger.log(result, 'contratos de residentes atualizados');
+    return result;
+  }
+
+  /**
+   * Envia os e-mails do outbox. Fila separada da do WhatsApp: uma queda do WhatsApp não segura
+   * convites e reservas. O assunto, o corpo e o .ics são montados agora, a partir do payload.
+   */
+  async dispatchEmailOutbox(batchSize = 20, now = new Date()): Promise<Omit<DispatchResult, 'reclaimed' | 'paused'>> {
+    const deliveries = await claimDueDeliveries(this.prisma, batchSize, now, 'email');
+    const result = { claimed: deliveries.length, sent: 0, failed: 0, dead: 0 };
+    const from = parseMailbox(this.env.EMAIL_FROM);
+    for (const d of deliveries) {
+      try {
+        const payload = d.payload as unknown as ResidentEmailPayload | null;
+        if (!payload) throw new EmailProviderError('entrega de e-mail sem payload', false);
+        const mail = renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient }, now);
+        const sent = await this.email.send({ from: this.env.EMAIL_FROM, to: d.recipient, ...mail });
+        // Desenvolvimento: sem envio real, o e-mail (com o link) aparece no log do worker.
+        if (this.email.name === 'fake' && this.env.NODE_ENV !== 'production') this.logger.log({ to: d.recipient, subject: mail.subject, text: mail.text }, 'e-mail (fake)');
+        await markDeliverySent(this.prisma, d.id, sent.providerMessageId);
+        // O link de senha não fica guardado depois de enviado.
+        if (payload.template === 'access') {
+          await this.prisma.notificationDelivery.update({ where: { id: d.id }, data: { payload: { ...payload, token: '[enviado]' } } });
+        }
+        result.sent++;
+      } catch (err) {
+        const retryable = err instanceof EmailProviderError ? err.retryable : true;
+        const outcome = await markDeliveryFailed(this.prisma, d, (err as Error).message, retryable);
+        result[outcome]++;
+        if (outcome === 'dead') this.logger.error({ delivery_id: d.id, err: (err as Error).message }, 'e-mail movido para dead-letter');
+      }
+    }
+    return result;
+  }
 
   private organizations() {
     return this.prisma.organization.findMany({ select: { id: true } });

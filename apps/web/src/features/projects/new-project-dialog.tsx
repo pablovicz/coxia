@@ -4,12 +4,12 @@ import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { UserAvatar } from '@/components/user-avatar';
-import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
-import { Checkbox, Field } from '@/components/ui/field';
-import { Input, Textarea } from '@/components/ui/input';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Checkbox, Field } from '@coxia/ui/components/ui/field';
+import { Input, Textarea } from '@coxia/ui/components/ui/input';
 import { api, apiSend, type CreateProjectResult, type ProjectDetail, type ProjectGroupInfo } from '@/lib/api';
-import { centsToInput, parseBRL } from '@/lib/format';
+import { centsToInput, parseBRL } from '@coxia/ui/lib/format';
 import { type PendingDocument, PendingDocuments, uploadPending } from './project-documents';
 
 /** Mesmo corte do servidor: "PROJETO - XPO" digitado vira só "XPO". */

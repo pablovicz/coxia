@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { QrCode, RefreshCw, Smartphone } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Field } from '@/components/ui/field';
-import { Input, Skeleton } from '@/components/ui/input';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Field } from '@coxia/ui/components/ui/field';
+import { Input, Skeleton } from '@coxia/ui/components/ui/input';
 import { api, apiSend, type ConnectCode, type WhatsappConnection } from '@/lib/api';
 
 /** O WhatsApp invalida o QR a cada ~20 s; a Z-API recomenda pedir de novo a cada 10–20 s e parar após 3 tentativas. */

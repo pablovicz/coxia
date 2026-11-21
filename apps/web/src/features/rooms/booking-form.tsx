@@ -2,15 +2,15 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DateTime } from 'luxon';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
-import { Checkbox, Field, Select } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Checkbox, Field, Select } from '@coxia/ui/components/ui/field';
+import { Input } from '@coxia/ui/components/ui/input';
 import { ContactPicker } from '@/features/contacts/contact-picker';
 import { ContactAvatar } from '@/features/contacts/contact-avatar';
 import { ApiBodyError, apiSend, type Conflict, type Contact, type Space } from '@/lib/api';
-import { centsToInput, formatBRL, formatPhone, formatRange, local, parseBRL, todayIn, toZonedIso } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { centsToInput, formatBRL, formatPhone, formatRange, local, parseBRL, todayIn, toZonedIso } from '@coxia/ui/lib/format';
+import { cn } from '@coxia/ui/lib/utils';
 import { WEEKDAYS } from './hours';
 
 const REASON: Record<Conflict['reason'], string> = {

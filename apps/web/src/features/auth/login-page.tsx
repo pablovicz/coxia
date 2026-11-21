@@ -1,8 +1,8 @@
 import { type FormEvent, useState } from 'react';
 import { Navigate } from 'react-router';
-import { ThemeSwitch } from '@/components/theme-switch';
-import { Button } from '@/components/ui/button';
-import { Input, Label } from '@/components/ui/input';
+import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Input, Label } from '@coxia/ui/components/ui/input';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 

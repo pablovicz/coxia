@@ -1,4 +1,4 @@
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3000';
+export const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3000';
 const TOKEN_KEY = 'coxia-token';
 
 export class ApiError extends Error {
@@ -116,8 +116,14 @@ export interface Occurrence {
     groupId?: string | null;
     notes: string | null;
     recurrenceRule: string | null;
+    /** Reserva de residente: consome as horas deste contrato. */
+    contractId?: string | null;
+    source?: 'staff' | 'resident';
   };
   space: { id: string; name: string; color: string; icon: string };
+  /** Check-in do residente (link do convite, QR da sala ou equipe). */
+  checkedInAt?: string | null;
+  checkInMethod?: 'email_link' | 'room_qr' | 'staff' | null;
 }
 
 export interface Conflict {
@@ -920,3 +926,100 @@ export const QUOTE_STATUS: Record<QuoteRequestStatus, { label: string; tab: stri
   approved: { label: 'Aprovado', tab: 'Aprovados', variant: 'active' },
   archived: { label: 'Arquivado', tab: 'Arquivados', variant: 'archived' },
 };
+
+// ───────────── Contratos de horas dos residentes ─────────────
+
+export interface CycleBalance {
+  cycle: string;
+  startsOn: string;
+  endsOn: string;
+  renewsOn: string;
+  grantedMinutes: number;
+  adjustedMinutes: number;
+  reservedMinutes: number;
+  usedMinutes: number;
+  availableMinutes: number;
+}
+
+export interface OpenCycle {
+  key: string;
+  startsOn: string;
+  endsOn: string;
+  bookableFrom: string;
+  bookableUntil: string;
+}
+
+export interface ResidentContract {
+  id: string;
+  residentId: string;
+  spaceId: string;
+  monthlyMinutes: number;
+  monthlyAmountCents: number | null;
+  paymentDueDay: number | null;
+  cycleDay: number;
+  bookingOpensDay: number;
+  startsOn: string;
+  endsOn: string | null;
+  status: 'active' | 'ended';
+  notes: string | null;
+  contractFileName: string | null;
+  contractUploadedAt: string | null;
+  space: { id: string; name: string; color: string; icon: string; slug: string };
+  balance?: { current: CycleBalance; next: CycleBalance | null; open: OpenCycle[] };
+}
+
+export interface LedgerEntry {
+  at: string;
+  kind: 'monthly' | 'adjustment' | 'booking';
+  minutes: number;
+  note?: string | null;
+  occurrenceId?: string;
+  attendance?: 'upcoming' | 'in_progress' | 'checked_in' | 'no_show';
+}
+
+export interface ContractBalance {
+  contract: ResidentContract;
+  open: OpenCycle[];
+  cycles: Array<CycleBalance & { ledger: LedgerEntry[] }>;
+}
+
+export interface ResidentAccess {
+  id: string;
+  email: string;
+  status: 'invited' | 'active' | 'disabled';
+  invitedAt: string | null;
+  lastLoginAt: string | null;
+  hasPassword: boolean;
+}
+
+/** Endereço do workspace do residente (links e QR code das salas). */
+export const RESIDENT_APP_URL = ((import.meta.env.VITE_RESIDENT_APP_URL as string | undefined) ?? 'https://residente.casakaju.com').replace(/\/$/, '');
+
+export async function uploadContractFile(contractId: string, file: File): Promise<ResidentContract> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/contracts/${contractId}/file`, {
+    method: 'POST',
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
+  if (!res.ok) throw new ApiBodyError(res.status, json);
+  return json as unknown as ResidentContract;
+}
+
+export async function fetchContractFile(contractId: string): Promise<Blob> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/contracts/${contractId}/file`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
+  return res.blob();
+}
+
+/** 750 → "12h30"; 240 → "4h"; 30 → "30min". */
+export function formatHours(minutes: number): string {
+  const sign = minutes < 0 ? '−' : '';
+  const abs = Math.abs(minutes);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  if (h === 0) return `${sign}${m}min`;
+  return `${sign}${h}h${m ? String(m).padStart(2, '0') : ''}`;
+}

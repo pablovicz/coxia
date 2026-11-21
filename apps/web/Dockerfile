@@ -8,10 +8,12 @@ WORKDIR /repo
 FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/
-RUN pnpm install --frozen-lockfile --filter "@coxia/web"
+COPY packages/ui/package.json packages/ui/
+RUN pnpm install --frozen-lockfile --filter "@coxia/web..."
 
 # ---------- dev ----------
 FROM deps AS dev
+COPY packages/ui packages/ui
 COPY apps/web apps/web
 EXPOSE 5173
 CMD ["pnpm", "--filter", "@coxia/web", "dev"]
@@ -19,7 +21,9 @@ CMD ["pnpm", "--filter", "@coxia/web", "dev"]
 # ---------- build estático ----------
 FROM deps AS build
 ARG VITE_API_URL
-ENV VITE_API_URL=${VITE_API_URL}
+ARG VITE_RESIDENT_APP_URL=https://residente.casakaju.com
+ENV VITE_API_URL=${VITE_API_URL} VITE_RESIDENT_APP_URL=${VITE_RESIDENT_APP_URL}
+COPY packages/ui packages/ui
 COPY apps/web apps/web
 RUN test -n "$VITE_API_URL" || (echo "VITE_API_URL é obrigatório no build" && exit 1) \
  && pnpm --filter @coxia/web build

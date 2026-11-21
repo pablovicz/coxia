@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Input } from '@/components/ui/input';
+import { Input } from '@coxia/ui/components/ui/input';
 import { api, type Contact } from '@/lib/api';
-import { formatPhone } from '@/lib/format';
+import { formatPhone } from '@coxia/ui/lib/format';
 
 /** Busca nos Contatos (nome sem acento ou trecho do telefone). */
 export function ContactPicker({ onPick, inputId = 'contact-picker' }: { onPick: (c: Contact) => void; inputId?: string }) {

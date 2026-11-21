@@ -72,8 +72,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm install -g pnpm@10.12.1
-      - run: pnpm install --frozen-lockfile --filter @coxia/web
+      - run: pnpm install --frozen-lockfile --filter "@coxia/web..." --filter "@coxia/resident..."
       - run: pnpm --filter @coxia/web test
+      - run: pnpm --filter @coxia/resident test
       - run: pnpm --filter @coxia/web exec playwright test
         env: { HOME: /root }
       - if: failure()
@@ -92,13 +93,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Sobe todos os serviços e espera os healthchecks
-        run: docker compose up -d --build --wait --wait-timeout 420 api worker ai web
+        run: docker compose up -d --build --wait --wait-timeout 420 api worker ai web resident
       - name: Healthchecks
         run: |
           curl -fsS http://localhost:3000/health
           curl -fsS http://localhost:3000/health/ready
           curl -fsS http://localhost:8000/health
           curl -fsS -o /dev/null http://localhost:5173/
+          curl -fsS -o /dev/null http://localhost:5174/
           docker compose exec -T worker node -e "fetch('http://localhost:3001/health/ready').then(r=>{if(!r.ok)process.exit(1)})"
       - name: Contrato API↔IA na rede do compose
         run: |

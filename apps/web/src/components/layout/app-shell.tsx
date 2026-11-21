@@ -1,10 +1,11 @@
 import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, Inbox, LogOut, MessageCircle, ReceiptText, Settings, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
-import { ThemeSwitch } from '@/components/theme-switch';
+import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
 import { UserAvatar } from '@/components/user-avatar';
-import { Button } from '@/components/ui/button';
+import { Button } from '@coxia/ui/components/ui/button';
 import { canManage, canSeeContacts } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
+import { useLiveUpdates } from '@/lib/use-live-updates';
 import { useAuth } from '@/providers/auth-provider';
 
 export const NAV_ITEMS = [
@@ -47,6 +48,7 @@ function Brand() {
  */
 export function AppShell() {
   const { session, logout } = useAuth();
+  useLiveUpdates();
   const role = session?.user.role;
   const items = NAV_ITEMS.filter(
     (i) => (!('team' in i) || canSeeContacts(role)) && (!('admin' in i) || canManage(role)),

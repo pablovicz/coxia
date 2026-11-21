@@ -3,14 +3,14 @@ import { ChevronLeft, FileAudio, ListChecks, MessageCircle, Paperclip, Pencil, P
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { EmptyState, PageHeader } from '@/components/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@/components/ui/card';
+import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
+import { Badge } from '@coxia/ui/components/ui/badge';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@coxia/ui/components/ui/card';
 import { ProjectIncomesCard } from '@/features/finance/incomes';
-import { Dialog } from '@/components/ui/dialog';
-import { Checkbox, Field } from '@/components/ui/field';
-import { Input, Skeleton } from '@/components/ui/input';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Checkbox, Field } from '@coxia/ui/components/ui/field';
+import { Input, Skeleton } from '@coxia/ui/components/ui/input';
 import {
   api,
   ApiError,
@@ -23,7 +23,7 @@ import {
   type ProjectSuggestion,
   type ProjectTask,
 } from '@/lib/api';
-import { formatBRL, formatPhone, local, todayIn } from '@/lib/format';
+import { formatBRL, formatPhone, local, todayIn } from '@coxia/ui/lib/format';
 import { quoteServices, whatsappLink } from '@/features/quotes/quote-requests-page';
 import { useAuth } from '@/providers/auth-provider';
 import { CreateWhatsappGroupCard, EditProjectDialog } from './new-project-dialog';

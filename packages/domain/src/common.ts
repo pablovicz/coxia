@@ -19,14 +19,51 @@ export class DomainError extends Error {
 
 /** Quem fez a ação — vai para a trilha de auditoria. */
 export interface Actor {
-  channel: 'whatsapp' | 'web' | 'system';
+  /** "resident": o próprio residente, pelo workspace (residente.casakaju.com). */
+  channel: 'whatsapp' | 'web' | 'system' | 'resident';
   userId?: string | null;
+  /** Conta do residente (canal "resident"). */
+  residentAccountId?: string | null;
   phone?: string | null;
   sourceMessageId?: string | null;
   traceId?: string | null;
 }
 
 export const SYSTEM_ACTOR: Actor = { channel: 'system' };
+
+// ───────────── eventos de atualização (tempo real nos painéis) ─────────────
+
+/**
+ * Algo mudou e as telas abertas devem recarregar. Só ids, nunca dados pessoais: o residente
+ * recebe os eventos das salas dos seus contratos (a disponibilidade mudou) sem saber de quem.
+ */
+export type DomainEventType = 'booking.changed' | 'contract.changed' | 'hours.changed' | 'access.changed' | 'income.changed';
+
+export interface DomainEvent {
+  organizationId: string;
+  type: DomainEventType;
+  /** Residente dono (contrato, acesso, reserva de residente). */
+  residentId?: string | null;
+  contractId?: string | null;
+  spaceId?: string | null;
+}
+
+export interface DomainEventPublisher {
+  publish(event: DomainEvent): void;
+}
+
+export const NO_EVENTS: DomainEventPublisher = { publish: () => undefined };
+
+/** Publica depois do commit; um erro do canal de eventos nunca desfaz a ação. */
+export function emit(events: DomainEventPublisher, ...list: DomainEvent[]) {
+  for (const e of list) {
+    try {
+      events.publish(e);
+    } catch {
+      // tempo real é melhor esforço: o polling das telas cobre a falha
+    }
+  }
+}
 
 export async function audit(
   tx: Tx,
@@ -41,7 +78,8 @@ export async function audit(
     data: {
       organizationId,
       actorChannel: actor.channel,
-      actorUserId: actor.userId ?? null,
+      // Canal "resident": o id é da conta do residente (o canal diz de que tabela é).
+      actorUserId: actor.userId ?? actor.residentAccountId ?? null,
       actorPhone: actor.phone ?? null,
       sourceMessageId: actor.sourceMessageId ?? null,
       traceId: actor.traceId ?? null,

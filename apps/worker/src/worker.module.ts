@@ -2,7 +2,8 @@ import { BullModule } from '@nestjs/bullmq';
 import { Controller, type DynamicModule, Get, HttpException, HttpStatus, Module } from '@nestjs/common';
 import { redisConnectionFromUrl } from '@coxia/config';
 import { QUEUES } from '@coxia/contracts';
-import type { WhatsappProvider } from '@coxia/shared';
+import type { EmailProvider, WhatsappProvider } from '@coxia/shared';
+import type { DomainEventPublisher } from '@coxia/domain';
 import { LoggerModule } from 'nestjs-pino';
 import type { WorkerEnv } from './env';
 import { GroupContactsService } from './inbound/group-contacts.service';
@@ -38,7 +39,7 @@ class HealthController {
 
 @Module({})
 export class WorkerModule {
-  static forRoot(env: WorkerEnv, overrides: { whatsapp?: WhatsappProvider; ai?: WorkerAi; withSchedulers?: boolean } = {}): DynamicModule {
+  static forRoot(env: WorkerEnv, overrides: { whatsapp?: WhatsappProvider; ai?: WorkerAi; email?: EmailProvider; events?: DomainEventPublisher; withSchedulers?: boolean } = {}): DynamicModule {
     return {
       module: WorkerModule,
       imports: [

@@ -12,7 +12,7 @@ import { trackAi } from './ai-tracking';
 import { BillingService, resolveBillHint } from './bills';
 import { BookingService, type Conflict } from './bookings';
 import { composeMorningBriefing, loadBriefingState } from './briefing';
-import { type Actor, type Db, DomainError, getOrganization } from './common';
+import { type Actor, type Db, type DomainEventPublisher, DomainError, getOrganization, NO_EVENTS } from './common';
 import { resolveSpaceHint } from './spaces';
 
 /** Interpretação de linguagem natural (FastAPI). Injetado para permitir stub nos testes. */
@@ -61,8 +61,9 @@ export class CommandService {
   constructor(
     private readonly db: Db,
     private readonly interpreter: CommandInterpreter,
+    events: DomainEventPublisher = NO_EVENTS,
   ) {
-    this.bookings = new BookingService(db);
+    this.bookings = new BookingService(db, events);
     this.billing = new BillingService(db);
   }
 

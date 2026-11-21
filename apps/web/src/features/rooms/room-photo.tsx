@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { ImageOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Skeleton } from '@/components/ui/input';
+import { Skeleton } from '@coxia/ui/components/ui/input';
 import { fetchSpacePhoto } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn } from '@coxia/ui/lib/utils';
 
 /**
  * Foto de sala. O bucket é privado e o <img> não envia o token:

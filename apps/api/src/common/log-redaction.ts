@@ -3,7 +3,8 @@
  */
 export function redactUrl(url: string | undefined): string | undefined {
   if (!url) return url;
-  return url.replace(/(\/webhooks\/[^/]+\/)[^/?#]+/, '$1[redacted]');
+  // Também o ticket do SSE (/events?ticket=...), que é uma credencial de curta duração.
+  return url.replace(/(\/webhooks\/[^/]+\/)[^/?#]+/, '$1[redacted]').replace(/([?&]ticket=)[^&#]+/, '$1[redacted]');
 }
 
 export const REDACTED_PATHS = [

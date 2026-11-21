@@ -2,13 +2,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { FileText, ImageIcon, X } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
-import { Field } from '@/components/ui/field';
-import { Input, Textarea } from '@/components/ui/input';
+import { Button } from '@coxia/ui/components/ui/button';
+import { Dialog } from '@coxia/ui/components/ui/dialog';
+import { Field } from '@coxia/ui/components/ui/field';
+import { Input, Textarea } from '@coxia/ui/components/ui/input';
 import { apiSend, MAX_RESIDENT_FILE_BYTES, type Resident, RESIDENT_FILE_TYPES, type ResidentStatus, uploadResidentFile } from '@/lib/api';
-import { formatPhone } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { formatPhone } from '@coxia/ui/lib/format';
+import { cn } from '@coxia/ui/lib/utils';
 
 function FilePick({
   label,

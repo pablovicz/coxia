@@ -52,10 +52,21 @@ export const apiEnvSchema = baseEnvSchema
     SITE_ORGANIZATION_SLUG: z.string().optional(),
   });
 
+/** E-mail (convites e reservas dos residentes). "fake" só registra no log. */
+export const emailEnvSchema = z.object({
+  EMAIL_PROVIDER: z.enum(['resend', 'fake']).default('fake'),
+  RESEND_API_KEY: z.string().optional(),
+  /** Remetente: "Nome <email>" (o domínio precisa estar verificado no Resend). */
+  EMAIL_FROM: z.string().default('Casa Kaju <reservas@casakaju.com>'),
+  /** Endereço do workspace do residente, usado nos links dos e-mails. */
+  RESIDENT_APP_URL: z.string().url().default('http://localhost:5174'),
+});
+
 export const workerEnvSchema = baseEnvSchema
   .merge(whatsappEnvSchema)
   .merge(aiClientEnvSchema)
   .merge(storageEnvSchema)
+  .merge(emailEnvSchema)
   .extend({
     WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
     /** Hora local (HH:mm) do briefing matinal unificado. */
