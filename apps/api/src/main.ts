@@ -34,7 +34,8 @@ export async function createApp(env: ApiEnv): Promise<NestExpressApplication> {
   app.enableCors({
     origin: env.CORS_ORIGINS.split(',').map((o) => o.trim()),
     credentials: false,
-    allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'x-request-id'],
+    // x-file-name: nome original nos uploads (foto/contrato do residente, documentos de projeto).
+    allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'x-request-id', 'x-file-name'],
   });
   app.enableShutdownHooks();
   return app;

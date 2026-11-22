@@ -238,3 +238,17 @@ describe('check-in desligado (padrão)', () => {
     await http().post(`/bookings/occurrences/${occId}/check-in`).set(auth(adminToken)).expect(404);
   });
 });
+
+describe('CORS', () => {
+  it('preflight dos uploads aceita o nome do arquivo (x-file-name)', async () => {
+    const origin = env.CORS_ORIGINS.split(',')[0]!.trim();
+    const res = await http()
+      .options(`/residents/${lumeId}/photo`)
+      .set('Origin', origin)
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'authorization,content-type,x-file-name')
+      .expect(204);
+    expect(res.headers['access-control-allow-origin']).toBe(origin);
+    expect(res.headers['access-control-allow-headers']).toContain('x-file-name');
+  });
+});
