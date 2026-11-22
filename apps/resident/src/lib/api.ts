@@ -55,7 +55,7 @@ export interface Contract {
 }
 
 export interface MeResponse {
-  resident: { id: string; name: string; email: string | null };
+  resident: { id: string; name: string; email: string | null; loginEmail: string | null; photoUpdatedAt: string | null };
   organization: { id: string; name: string; timezone: string };
   contracts: Contract[];
   /** Senha provisória definida pela equipe: precisa trocar antes de usar o workspace. */
@@ -78,6 +78,9 @@ export interface Occurrence {
   checkInMethod: 'email_link' | 'room_qr' | 'staff' | null;
   attendance: Attendance | null;
   recurring: boolean;
+  /** Nome e descrição internos (só o residente vê). */
+  label: string | null;
+  notes: string | null;
   space: Space;
   canCheckIn: boolean;
   canCancel: boolean;
@@ -107,7 +110,7 @@ export interface Availability {
   space: Space;
   openCycles: OpenCycle[];
   days: Array<{ date: string; open: Interval[]; free: Interval[] }>;
-  busy: Array<{ startAt: string; endAt: string; mine: boolean; occurrenceId: string | null }>;
+  busy: Array<{ startAt: string; endAt: string; mine: boolean; occurrenceId: string | null; label: string | null }>;
 }
 
 export interface Payment {

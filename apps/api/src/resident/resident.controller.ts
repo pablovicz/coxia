@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Res } from '@nestjs/common';
-import { type Actor, DomainError, ResidentBookingService, ResidentContractService } from '@coxia/domain';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import { type Actor, DomainError, ResidentAccountService, ResidentBookingService, ResidentContractService, ResidentService } from '@coxia/domain';
+import { randomUUID } from 'node:crypto';
 import { localDateOf } from '@coxia/shared';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { AllowPendingPassword, type AuthResident, CurrentResident, ResidentRoute } from '../auth/decorators';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { sniffImage } from '../domain/controllers';
 import { isoDate, isoDateTime } from '../domain/schemas';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -17,7 +19,13 @@ const bookSchema = z.object({
   endAt: isoDateTime,
   repeatWeekly: z.boolean().optional(),
   onConflict: z.enum(['fail', 'skip']).optional(),
+  label: z.string().max(80).nullish(),
+  notes: z.string().max(1000).nullish(),
 });
+const labelSchema = z.object({ label: z.string().max(80).nullish(), notes: z.string().max(1000).nullish() });
+const emailSchema = z.object({ email: z.string().email().max(200), currentPassword: z.string().min(1).max(200) });
+const PHOTO_MAX = 5 * 1024 * 1024;
+const PHOTO_EXT: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const rangeSchema = z.object({ from: isoDateTime, to: isoDateTime });
 const dayRangeSchema = z.object({ from: isoDate, to: isoDate });
 const cancelSeriesSchema = z.object({ fromDate: isoDate });
@@ -39,6 +47,8 @@ export class ResidentController {
     private readonly contracts: ResidentContractService,
     private readonly bookings: ResidentBookingService,
     private readonly storage: StorageService,
+    private readonly residents: ResidentService,
+    private readonly accounts: ResidentAccountService,
   ) {}
 
   @AllowPendingPassword()
@@ -46,14 +56,15 @@ export class ResidentController {
   async me(@CurrentResident() r: AuthResident) {
     const resident = await this.prisma.resident.findUniqueOrThrow({
       where: { id: r.residentId },
-      select: { id: true, name: true, email: true, photoUpdatedAt: true, organization: { select: { id: true, name: true, timezone: true } }, account: { select: { mustChangePassword: true } } },
+      select: { id: true, name: true, email: true, photoUpdatedAt: true, organization: { select: { id: true, name: true, timezone: true } }, account: { select: { mustChangePassword: true, email: true } } },
     });
+    const profile = { id: resident.id, name: resident.name, email: resident.email, loginEmail: resident.account?.email ?? resident.email, photoUpdatedAt: resident.photoUpdatedAt };
     if (resident.account?.mustChangePassword) {
-      return { resident: { id: resident.id, name: resident.name, email: resident.email }, organization: resident.organization, contracts: [], mustChangePassword: true, features: { checkIn: this.bookings.checkInEnabled } };
+      return { resident: profile, organization: resident.organization, contracts: [], mustChangePassword: true, features: { checkIn: this.bookings.checkInEnabled } };
     }
     const contracts = await this.contracts.list(r.organizationId, r.residentId);
     return {
-      resident: { id: resident.id, name: resident.name, email: resident.email },
+      resident: profile,
       organization: resident.organization,
       contracts: contracts.map((c) => this.presentContract(c)),
       mustChangePassword: false,
@@ -99,6 +110,12 @@ export class ResidentController {
     return this.bookings.book(r.organizationId, r.residentId, body, residentActor(r));
   }
 
+  /** Nome e descrição internos da reserva (só o residente vê). Vale para a série inteira. */
+  @Patch('bookings/:bookingId')
+  label(@CurrentResident() r: AuthResident, @Param('bookingId') bookingId: string, @Body(v(labelSchema)) body: z.infer<typeof labelSchema>) {
+    return this.bookings.updateLabel(r.organizationId, r.residentId, bookingId, body, residentActor(r));
+  }
+
   @Post('bookings/occurrences/:id/cancel')
   @HttpCode(200)
   cancel(@CurrentResident() r: AuthResident, @Param('id') id: string) {
@@ -135,6 +152,53 @@ export class ResidentController {
     if (status.state === 'booking') return this.bookings.checkIn(r.organizationId, r.residentId, status.occurrence.id, 'room_qr', residentActor(r));
     if (!body.durationMinutes) throw new DomainError('validation', 'Escolha por quanto tempo vai usar a sala', { code: 'duration_required', status });
     return this.bookings.walkIn(r.organizationId, r.residentId, spaceId, body.durationMinutes, residentActor(r));
+  }
+
+  // ───────────── configurações ─────────────
+
+  /** Foto do residente (a mesma que a equipe vê). Corpo bruto: JPG, PNG ou WebP, até 5 MB. */
+  @Post('photo')
+  async uploadPhoto(@CurrentResident() r: AuthResident, @Body() body: unknown, @Headers('content-type') contentType?: string) {
+    if (!Buffer.isBuffer(body) || body.length === 0) throw new DomainError('validation', 'Envie a foto em JPG, PNG ou WebP', { code: 'invalid_file' });
+    if (body.length > PHOTO_MAX) throw new DomainError('validation', 'A foto deve ter até 5 MB', { code: 'file_too_large' });
+    const sniffed = sniffImage(body);
+    if (!sniffed || (contentType && contentType.split(';')[0]!.trim() !== sniffed)) throw new DomainError('validation', 'Envie a foto em JPG, PNG ou WebP', { code: 'invalid_file' });
+    const key = `${r.organizationId}/residents/${r.residentId}/photo-${randomUUID()}.${PHOTO_EXT[sniffed]}`;
+    await this.storage.put(key, body, sniffed);
+    try {
+      const { previousKey } = await this.residents.setFile(r.organizationId, r.residentId, 'photo', { key, contentType: sniffed }, residentActor(r));
+      if (previousKey) await this.storage.delete(previousKey).catch(() => undefined);
+      return { ok: true };
+    } catch (err) {
+      await this.storage.delete(key).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  @Delete('photo')
+  async removePhoto(@CurrentResident() r: AuthResident) {
+    const { previousKey } = await this.residents.setFile(r.organizationId, r.residentId, 'photo', null, residentActor(r));
+    if (previousKey) await this.storage.delete(previousKey).catch(() => undefined);
+    return { ok: true };
+  }
+
+  @Get('photo')
+  async photo(@CurrentResident() r: AuthResident, @Res() res: Response) {
+    const resident = await this.residents.get(r.organizationId, r.residentId);
+    if (!resident.photoKey) throw new DomainError('not_found', 'Sem foto');
+    const stream = await this.storage.get(resident.photoKey);
+    res.setHeader('content-type', resident.photoContentType ?? 'application/octet-stream');
+    res.setHeader('cache-control', 'private, max-age=86400, immutable');
+    res.setHeader('x-content-type-options', 'nosniff');
+    stream.pipe(res);
+  }
+
+  /** Troca o e-mail de acesso (pede a senha atual). */
+  @Post('email')
+  @HttpCode(200)
+  async email(@CurrentResident() r: AuthResident, @Body(v(emailSchema)) body: z.infer<typeof emailSchema>) {
+    const acc = await this.accounts.changeEmail(r.accountId, body.currentPassword, body.email);
+    return { email: acc.email };
   }
 
   /** Mensalidades e pagamentos (entradas ligadas ao residente): feitos e futuros. */

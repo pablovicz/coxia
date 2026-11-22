@@ -90,6 +90,9 @@ export interface CreateBookingInput {
   /** Reserva de residente: consome as horas do contrato (ResidentBookingService). */
   contractId?: string | null;
   source?: 'staff' | 'resident';
+  /** Nome e descrição internos do residente (a equipe não vê). */
+  residentLabel?: string | null;
+  residentNotes?: string | null;
   /**
    * Chamado dentro da transação, antes de gravar, com os intervalos que serão criados
    * (ex.: trava o contrato e confere o saldo). Lançar desfaz tudo.
@@ -269,6 +272,8 @@ export class BookingService {
               notifyOneHourBefore: input.notifyOneHourBefore ?? false,
               contractId: input.contractId ?? null,
               source: input.source ?? 'staff',
+              residentLabel: input.residentLabel ?? null,
+              residentNotes: input.residentNotes ?? null,
               createdByPhone: actor.phone ?? null,
               sourceMessageId: actor.sourceMessageId ?? null,
               ...(series

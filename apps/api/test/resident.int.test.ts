@@ -281,3 +281,49 @@ describe('pagamentos do residente', () => {
     await http().get(`/incomes/${first!.id}/proof`).set(auth(token)).expect(403);
   });
 });
+
+describe('agenda e configurações do residente', () => {
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+
+  it('reserva com nome e descrição internos: o residente vê, a equipe não', async () => {
+    const token = (await http().post('/resident-auth/login').send({ email: lumeEmail, password: 'senha-do-lume' }).expect(200)).body.accessToken as string;
+    const startAt = slot(3, '09:00');
+    const res = await http()
+      .post('/me/bookings')
+      .set(auth(token))
+      .send({ contractId, startAt: startAt.toISOString(), endAt: new Date(startAt.getTime() + 3600_000).toISOString(), label: 'Ensaio geral', notes: 'Levar figurino' })
+      .expect(201);
+    const occId = res.body.occurrences[0].id as string;
+    const mine = await http().get(`/me/bookings/occurrences/${occId}`).set(auth(token)).expect(200);
+    expect(mine.body).toMatchObject({ label: 'Ensaio geral', notes: 'Levar figurino' });
+
+    const day = startAt.toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+    const avail = await http().get(`/me/contracts/${contractId}/availability`).query({ from: day, to: day }).set(auth(token)).expect(200);
+    expect(avail.body.busy.find((b: { occurrenceId: string | null }) => b.occurrenceId === occId)).toMatchObject({ mine: true, label: 'Ensaio geral' });
+
+    await http().patch(`/me/bookings/${mine.body.bookingId}`).set(auth(token)).send({ label: 'Ensaio aberto', notes: null }).expect(200);
+    expect((await http().get(`/me/bookings/occurrences/${occId}`).set(auth(token)).expect(200)).body).toMatchObject({ label: 'Ensaio aberto', notes: null });
+
+    // agenda da equipe: o nome do residente, não o rótulo interno
+    const agenda = await http().get('/bookings').query({ from: startAt.toISOString(), to: new Date(startAt.getTime() + 3600_000).toISOString() }).set(auth(adminToken)).expect(200);
+    const staffView = agenda.body.find((o: { id: string }) => o.id === occId);
+    expect(staffView.booking.title).toBe('Coletivo Lume');
+    expect(JSON.stringify(staffView)).not.toContain('Ensaio aberto');
+  });
+
+  it('foto e troca do e-mail de acesso (com a senha atual)', async () => {
+    const token = (await http().post('/resident-auth/login').send({ email: lumeEmail, password: 'senha-do-lume' }).expect(200)).body.accessToken as string;
+    await http().post('/me/photo').set(auth(token)).set('content-type', 'image/png').send(PNG).expect(201);
+    expect((await http().get('/me').set(auth(token)).expect(200)).body.resident.photoUpdatedAt).toBeTruthy();
+    expect((await http().get('/me/photo').set(auth(token)).expect(200)).headers['content-type']).toBe('image/png');
+
+    const newEmail = `lume-novo-${run}@residente.test`;
+    await http().post('/me/email').set(auth(token)).send({ email: newEmail, currentPassword: 'errada-000' }).expect(422);
+    await http().post('/me/email').set(auth(token)).send({ email: xpoEmail, currentPassword: 'senha-do-lume' }).expect(409);
+    await http().post('/me/email').set(auth(token)).send({ email: newEmail.toUpperCase(), currentPassword: 'senha-do-lume' }).expect(200);
+    await http().post('/resident-auth/login').send({ email: lumeEmail, password: 'senha-do-lume' }).expect(401);
+    await http().post('/resident-auth/login').send({ email: newEmail, password: 'senha-do-lume' }).expect(200);
+    const detail = await http().get(`/residents/${lumeId}`).set(auth(adminToken)).expect(200);
+    expect(detail.body.resident.email).toBe(newEmail);
+  });
+});

@@ -1,6 +1,6 @@
 import { DateTime } from 'luxon';
 import { describe, expect, it } from 'vitest';
-import { slotsOf } from './book-page';
+import { slotsOf } from './slots';
 
 const TZ = 'America/Sao_Paulo';
 const at = (local: string) => DateTime.fromISO(local, { zone: TZ });

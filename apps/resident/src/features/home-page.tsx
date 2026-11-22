@@ -34,7 +34,7 @@ export function HomePage() {
         action={
           contracts.length ? (
             <Button asChild>
-              <Link to="/reservar">
+              <Link to="/agenda">
                 <CalendarPlus /> Reservar sala
               </Link>
             </Button>
@@ -61,7 +61,7 @@ export function HomePage() {
                 ) : null}
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button asChild variant="outline" size="sm">
-                    <Link to={`/reservar?contrato=${c.id}`}>Reservar</Link>
+                    <Link to={`/agenda?contrato=${c.id}`}>Reservar</Link>
                   </Button>
                   <Button asChild variant="ghost" size="sm">
                     <Link to={`/contratos/${c.id}`}>Contrato e extrato</Link>

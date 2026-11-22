@@ -126,6 +126,29 @@ export class ResidentAccountService {
     return updated;
   }
 
+  /**
+   * O residente troca o e-mail de acesso (login). Pede a senha atual. O e-mail do cadastro
+   * acompanha (é para onde vão os convites das reservas).
+   */
+  async changeEmail(accountId: string, currentPassword: string, rawEmail: string) {
+    const email = rawEmail.trim().toLowerCase();
+    if (!EMAIL.test(email)) throw new DomainError('validation', 'E-mail inválido');
+    const account = await this.db.residentAccount.findUnique({ where: { id: accountId } });
+    if (!account?.passwordHash || account.status !== 'active') throw new DomainError('forbidden', 'Acesso desativado');
+    if (!(await this.hasher.compare(currentPassword, account.passwordHash))) throw new DomainError('validation', 'A senha atual está incorreta', { code: 'wrong_password' });
+    if (email === account.email) return account;
+    const taken = await this.db.residentAccount.findUnique({ where: { email } });
+    if (taken) throw new DomainError('conflict', 'Este e-mail já é o acesso de outra pessoa', { code: 'email_taken' });
+    const updated = await this.db.$transaction(async (tx) => {
+      const acc = await tx.residentAccount.update({ where: { id: accountId }, data: { email } });
+      await tx.resident.update({ where: { id: acc.residentId }, data: { email } });
+      await audit(tx, acc.organizationId, { channel: 'resident', residentAccountId: acc.id }, 'resident.email_change', 'resident', acc.residentId, { before: { email: account.email }, after: { email } });
+      return acc;
+    });
+    emit(this.events, { organizationId: updated.organizationId, type: 'access.changed', residentId: updated.residentId });
+    return updated;
+  }
+
   async disable(organizationId: string, residentId: string, actor: Actor, now = new Date()) {
     const account = await this.db.residentAccount.findFirst({ where: { organizationId, residentId } });
     if (!account) throw new DomainError('not_found', 'Este residente não tem acesso');

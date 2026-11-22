@@ -31,7 +31,10 @@ export function OccurrenceCard({ o, actions }: { o: Occurrence; actions?: ReactN
     <li className="room-bar flex flex-col gap-3 rounded-lg border bg-card p-4 pl-5 sm:flex-row sm:items-center sm:justify-between" style={roomStyle(o.space.color)}>
       <div className="min-w-0">
         <p className="text-sm capitalize text-muted-foreground">{start.toFormat("cccc, dd 'de' LLLL")}</p>
-        <p className="tabular mt-0.5 text-lg font-semibold">{formatRange(o.startAt, o.endAt, tz)}</p>
+        <p className="tabular mt-0.5 text-lg font-semibold">
+          {formatRange(o.startAt, o.endAt, tz)}
+          {o.label ? <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{o.label}</span> : null}
+        </p>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>{o.space.name}</span>
           <span aria-hidden>·</span>

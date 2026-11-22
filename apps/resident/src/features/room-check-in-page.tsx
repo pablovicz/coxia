@@ -75,7 +75,7 @@ export function RoomCheckInPage() {
     );
   } else if (s.state === 'occupied') {
     body = (
-      <CheckInResult tone="wait" title={`Sala ocupada até ${local(s.until, tz).toFormat('HH:mm')}`} action={<Button asChild variant="outline"><Link to="/reservar">Reservar outro horário</Link></Button>} />
+      <CheckInResult tone="wait" title={`Sala ocupada até ${local(s.until, tz).toFormat('HH:mm')}`} action={<Button asChild variant="outline"><Link to="/agenda">Reservar outro horário</Link></Button>} />
     );
   } else if (s.state === 'unavailable') {
     const msg = {

@@ -30,6 +30,20 @@ export interface ResidentBookingInput {
   /** Repete toda semana, no mesmo dia e horário, até o fim do ciclo. */
   repeatWeekly?: boolean;
   onConflict?: 'fail' | 'skip';
+  /** Nome e descrição internos (só o residente vê). */
+  label?: string | null;
+  notes?: string | null;
+}
+
+const LABEL_MAX = 80;
+const NOTES_MAX = 1000;
+
+function cleanLabel(input: { label?: string | null; notes?: string | null }) {
+  const label = input.label?.trim() || null;
+  const notes = input.notes?.trim() || null;
+  if (label && label.length > LABEL_MAX) throw new DomainError('validation', `Nome com até ${LABEL_MAX} caracteres`);
+  if (notes && notes.length > NOTES_MAX) throw new DomainError('validation', `Descrição com até ${NOTES_MAX} caracteres`);
+  return { label, notes };
 }
 
 export type RoomCheckInState =
@@ -49,7 +63,7 @@ const occurrenceSelect = {
   checkInMethod: true,
   bookingId: true,
   spaceId: true,
-  booking: { select: { id: true, contractId: true, recurrenceRule: true, groupId: true, seriesUntil: true } },
+  booking: { select: { id: true, contractId: true, recurrenceRule: true, groupId: true, seriesUntil: true, residentLabel: true, residentNotes: true } },
   space: { select: { id: true, name: true, color: true, icon: true } },
 } satisfies Prisma.BookingOccurrenceSelect;
 
@@ -72,6 +86,8 @@ function present(o: OccurrenceRow, now: Date, checkInEnabled = true) {
     attendance,
     /** Faz parte de uma série semanal. */
     recurring: !!o.booking.recurrenceRule,
+    label: o.booking.residentLabel,
+    notes: o.booking.residentNotes,
     space: o.space,
     canCheckIn: checkInEnabled && o.status !== 'cancelled' && !o.checkedInAt && opensAt <= now && now < o.endAt,
     canCancel: o.status !== 'cancelled' && !o.checkedInAt && now < o.startAt,
@@ -128,7 +144,7 @@ export class ResidentBookingService {
     const [occs, blocks] = await Promise.all([
       this.db.bookingOccurrence.findMany({
         where: { spaceId: contract.spaceId, status: { not: 'cancelled' }, startAt: { lt: end }, endAt: { gt: start } },
-        select: { id: true, startAt: true, endAt: true, booking: { select: { contractId: true, contract: { select: { residentId: true } } } } },
+        select: { id: true, startAt: true, endAt: true, booking: { select: { contractId: true, residentLabel: true, contract: { select: { residentId: true } } } } },
         orderBy: { startAt: 'asc' },
       }),
       this.db.spaceBlock.findMany({ where: { spaceId: contract.spaceId, startAt: { lt: end }, endAt: { gt: start } } }),
@@ -145,8 +161,12 @@ export class ResidentBookingService {
       openCycles: openCycles(terms, localDateOf(now, tz)),
       days,
       busy: [
-        ...occs.map((o) => ({ startAt: o.startAt, endAt: o.endAt, mine: o.booking.contract?.residentId === residentId, occurrenceId: o.booking.contract?.residentId === residentId ? o.id : null })),
-        ...blocks.map((b) => ({ startAt: b.startAt, endAt: b.endAt, mine: false, occurrenceId: null })),
+        ...occs.map((o) => {
+          const mine = o.booking.contract?.residentId === residentId;
+          // De outra pessoa: só o horário ocupado, sem nome.
+          return { startAt: o.startAt, endAt: o.endAt, mine, occurrenceId: mine ? o.id : null, label: mine ? o.booking.residentLabel : null };
+        }),
+        ...blocks.map((b) => ({ startAt: b.startAt, endAt: b.endAt, mine: false, occurrenceId: null, label: null })),
       ].sort((a, b) => a.startAt.getTime() - b.startAt.getTime()),
     };
   }
@@ -191,6 +211,7 @@ export class ResidentBookingService {
     if (input.startAt < now) throw new DomainError('validation', 'Escolha um horário a partir de agora');
     const date = localDateOf(input.startAt, tz);
     const cycle = this.openCycleFor(contractTerms(contract), today, date);
+    const extra = cleanLabel(input);
     await this.contracts.ensureGrants(contract, tz, now);
 
     const hhmm = (d: Date) => DateTime.fromJSDate(d, { zone: tz }).toFormat('HH:mm');
@@ -208,6 +229,8 @@ export class ResidentBookingService {
         hourlyRateCents: null,
         contractId: contract.id,
         source: 'resident',
+        residentLabel: extra.label,
+        residentNotes: extra.notes,
         onConflict: input.onConflict ?? 'fail',
         beforeInsert: (tx, intervals) => this.assertBalance(tx, contract.id, contract.cycleDay, tz, intervals, now),
       },
@@ -215,6 +238,22 @@ export class ResidentBookingService {
       now,
     );
     return { ...result, occurrences: result.occurrences.map((o) => ({ id: o.id, startAt: o.startAt, endAt: o.endAt })) };
+  }
+
+  /** Renomeia a própria reserva (vale para a série inteira). */
+  async updateLabel(organizationId: string, residentId: string, bookingId: string, input: { label?: string | null; notes?: string | null }, actor: Actor) {
+    const booking = await this.db.booking.findFirst({ where: { id: bookingId, organizationId, contract: { residentId } }, select: { id: true, groupId: true, spaceId: true, contractId: true } });
+    if (!booking) throw new DomainError('not_found', 'Reserva não encontrada');
+    const { label, notes } = cleanLabel(input);
+    const ids = booking.groupId
+      ? (await this.db.booking.findMany({ where: { organizationId, groupId: booking.groupId, contract: { residentId } }, select: { id: true } })).map((b) => b.id)
+      : [booking.id];
+    await this.db.$transaction(async (tx) => {
+      await tx.booking.updateMany({ where: { id: { in: ids } }, data: { residentLabel: label, residentNotes: notes } });
+      await audit(tx, organizationId, actor, 'booking.resident_label', 'booking', booking.id, { after: { label, notes, bookings: ids } });
+    });
+    emit(this.events, { organizationId, type: 'booking.changed', spaceId: booking.spaceId, contractId: booking.contractId, residentId });
+    return { label, notes };
   }
 
   async cancelOccurrence(organizationId: string, residentId: string, occurrenceId: string, actor: Actor, now = new Date()) {

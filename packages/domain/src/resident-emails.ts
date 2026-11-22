@@ -124,7 +124,7 @@ export function renderResidentEmail(
       const subject = `Seu acesso ao workspace da ${payload.organizationName}`;
       const lines = [
         `Olá, ${escapeHtml(payload.residentName)}!`,
-        'A equipe da Casa Kaju criou o seu acesso ao workspace do residente. Por lá você reserva as salas do seu contrato, acompanha o saldo de horas, faz check-in e vê os pagamentos.',
+        `A equipe da Casa Kaju criou o seu acesso ao workspace do residente. Por lá você reserva as salas do seu contrato, acompanha o saldo de horas${(ctx.checkInEnabled ?? true) ? ', faz check-in' : ''} e vê os pagamentos.`,
         'Para começar, defina a sua senha (o link vale por 7 dias):',
       ];
       return { subject, html: layout(subject, lines, { label: 'Definir minha senha', url }), text: `${lines.join('\n\n')}\n\n${url}` };

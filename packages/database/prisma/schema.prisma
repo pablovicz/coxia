@@ -818,6 +818,9 @@ model Booking {
   contractId          String?       @map("contract_id")
   /// Quem criou: a equipe (painel/WhatsApp) ou o próprio residente (workspace).
   source              BookingSource @default(staff)
+  /// Nome e descrição que o residente dá à própria reserva (só ele vê; a agenda da equipe mostra o residente).
+  residentLabel       String?       @map("resident_label")
+  residentNotes       String?       @map("resident_notes")
   createdByPhone      String?       @map("created_by_phone")
   sourceMessageId     String?       @map("source_message_id")
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
