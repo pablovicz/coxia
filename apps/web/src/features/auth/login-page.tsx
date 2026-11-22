@@ -1,3 +1,4 @@
+import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { type FormEvent, useState } from 'react';
 import { Navigate } from 'react-router';
 import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
@@ -34,9 +35,7 @@ export function LoginPage() {
       </div>
       <div className="w-full max-w-sm">
         <div className="mb-8">
-          <div className="mb-6 grid size-12 place-items-center rounded-md bg-primary font-display text-2xl font-semibold text-primary-foreground">
-            c.
-          </div>
+          <BrandMark className="mb-6 size-14" />
           <h1 className="font-display text-[32px] font-semibold leading-tight tracking-tight">Boas-vindas à Coxia.</h1>
           <p className="mt-1 text-muted-foreground">A inteligência por trás da cena.</p>
         </div>

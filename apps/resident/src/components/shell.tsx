@@ -1,3 +1,4 @@
+import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
 import { Button } from '@coxia/ui/components/ui/button';
 import { type LiveChange, useLiveEvents } from '@coxia/ui/lib/live-events';
@@ -22,9 +23,7 @@ export const NAV = [
 function Brand() {
   return (
     <div className="flex items-center gap-3">
-      <div className="grid size-10 place-items-center rounded-md bg-primary font-display text-xl font-semibold text-primary-foreground" aria-hidden>
-        k.
-      </div>
+      <BrandMark />
       <div className="leading-tight">
         <div className="font-display text-lg font-semibold">Casa Kaju</div>
         <div className="text-xs text-muted-foreground">Workspace do residente</div>

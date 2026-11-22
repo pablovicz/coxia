@@ -1,3 +1,4 @@
+import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, Inbox, LogOut, MessageCircle, ReceiptText, Settings, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
@@ -32,9 +33,7 @@ export const NAV_ITEMS = [
 function Brand() {
   return (
     <div className="flex items-center gap-3">
-      <div className="grid size-10 place-items-center rounded-md bg-primary font-display text-xl font-semibold text-primary-foreground">
-        c.
-      </div>
+      <BrandMark />
       <div className="leading-tight">
         <div className="font-display text-lg font-semibold">coxia</div>
         <div className="hidden text-xs text-muted-foreground sm:block">A inteligência por trás da cena.</div>

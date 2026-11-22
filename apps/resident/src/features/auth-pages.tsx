@@ -1,3 +1,4 @@
+import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { Button } from '@coxia/ui/components/ui/button';
 import { Card } from '@coxia/ui/components/ui/card';
 import { Field } from '@coxia/ui/components/ui/field';
@@ -14,9 +15,7 @@ function AuthLayout({ title, description, children }: { title: string; descripti
     <main className="grid min-h-dvh place-items-center bg-background px-4 py-10">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex items-center gap-3">
-          <div className="grid size-11 place-items-center rounded-md bg-primary font-display text-xl font-semibold text-primary-foreground" aria-hidden>
-            k.
-          </div>
+          <BrandMark className="size-12" />
           <div className="leading-tight">
             <div className="font-display text-xl font-semibold">Casa Kaju</div>
             <div className="text-sm text-muted-foreground">Workspace do residente</div>
