@@ -625,6 +625,11 @@ model Income {
   competence          String?
   /// Mensalidade gerada a partir de um contrato de residente: uma por contrato e competência.
   contractId          String?      @map("contract_id")
+  /// Comprovante do recebimento (PDF ou foto, no bucket privado).
+  proofKey            String?      @map("proof_key")
+  proofContentType    String?      @map("proof_content_type")
+  proofFileName       String?      @map("proof_file_name")
+  proofUploadedAt     DateTime?    @map("proof_uploaded_at") @db.Timestamptz(6)
   createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -970,6 +975,8 @@ model BillOccurrence {
   expectedAmountCents Int?                 @map("expected_amount_cents")
   paidAmountCents     Int                  @default(0) @map("paid_amount_cents")
   status              BillOccurrenceStatus @default(pending)
+  /// Removida pela equipe (cobrança errada, ex.: aluguel que só começa no mês seguinte): some das telas e não é gerada de novo.
+  removedAt           DateTime?            @map("removed_at") @db.Timestamptz(6)
   paidAt              DateTime?            @map("paid_at") @db.Timestamptz(6)
   confirmedByPhone    String?              @map("confirmed_by_phone")
   sourceMessageId     String?              @map("source_message_id")

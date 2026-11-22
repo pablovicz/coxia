@@ -32,6 +32,7 @@ import { API_ENV, type ApiEnv } from '../config/env';
 import { DOMAIN_EVENTS } from '../events/events.module';
 import { ResidentController } from '../resident/resident.controller';
 import { ContractsController } from './contracts.controller';
+import { IncomeProofController } from './income-proof.controller';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -102,6 +103,6 @@ export class DomainErrorFilter implements ExceptionFilter {
 export class DomainModule {}
 
 @Module({
-  controllers: [ContractsController, ResidentController, SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController, PublicSpacesController],
+  controllers: [ContractsController, IncomeProofController, ResidentController, SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController, PublicSpacesController],
 })
 export class DomainHttpModule {}

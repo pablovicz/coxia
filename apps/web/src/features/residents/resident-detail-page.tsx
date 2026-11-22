@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownLeft, AtSign, CalendarClock, ChevronLeft, FileText, Mail, MessageCircle, Pencil, Wallet } from 'lucide-react';
+import { ArrowDownLeft, AtSign, CalendarClock, ChevronLeft, FileText, Mail, MessageCircle, Paperclip, Pencil, Wallet } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -18,6 +18,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { ResidentAccessCard } from './resident-access';
 import { ResidentContracts } from './resident-contracts';
 import { ResidentForm } from './resident-form';
+import { ResidentPaymentDialog } from './resident-payment-dialog';
 import { instagramUrl, ResidentPhoto, SITUATION, WEEKDAY_SHORT } from './resident-shared';
 
 const date = (iso: string) => DateTime.fromISO(iso).toFormat('dd/LL/yyyy');
@@ -45,6 +46,7 @@ export function ResidentDetailPage() {
   const admin = canManage(session?.user.role);
   const [editing, setEditing] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [payment, setPayment] = useState<ResidentDetails['payments'][number] | null>(null);
   const details = useQuery({ queryKey: ['resident', id], queryFn: () => api<ResidentDetails>(`/residents/${id}`) });
   const d = details.data;
   const r = d?.resident;
@@ -173,7 +175,14 @@ export function ResidentDetailPage() {
                   ) : (
                     <ul className="divide-y">
                       {d.payments.map((p) => (
-                        <li key={p.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            disabled={!admin}
+                            onClick={() => setPayment(p)}
+                            aria-label={admin ? `Abrir pagamento: ${formatCompetence(p.month)}` : undefined}
+                            className="-mx-2 flex w-[calc(100%+1rem)] flex-wrap items-center gap-3 rounded-md px-2 py-2.5 text-left enabled:hover:bg-muted disabled:cursor-default"
+                          >
                           <span className="min-w-0 flex-1">
                             <span className="block font-medium first-letter:uppercase">{formatCompetence(p.month)}</span>
                             <span className="block truncate text-sm text-muted-foreground">
@@ -183,7 +192,9 @@ export function ResidentDetailPage() {
                             </span>
                           </span>
                           <span className="tabular font-semibold">{formatBRL(p.amountCents)}</span>
+                          {p.proof ? <Paperclip size={16} className="text-muted-foreground" aria-label="Com comprovante" /> : null}
                           <Badge variant={p.status === 'received' ? 'active' : p.overdue ? 'late' : 'pending'}>{p.status === 'received' ? 'Pago' : p.overdue ? 'Atrasado' : 'Previsto'}</Badge>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -242,6 +253,7 @@ export function ResidentDetailPage() {
           </div>
 
           {editing ? <ResidentForm resident={r} onClose={() => setEditing(false)} /> : null}
+          {payment ? <ResidentPaymentDialog payment={payment} residentId={r.id} tz={tz} onClose={() => setPayment(null)} /> : null}
           {paying ? <IncomeDialog tz={tz} resident={{ contactId: r.contactId, name: r.name }} onClose={() => setPaying(false)} /> : null}
         </>
       )}

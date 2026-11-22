@@ -140,6 +140,26 @@ export class IncomeService {
     });
   }
 
+  /** Comprovante do recebimento: a api guarda o arquivo; aqui só a referência (devolve a anterior para apagar). */
+  async setProof(organizationId: string, incomeId: string, file: { key: string; contentType: string; fileName?: string | null } | null, actor: Actor) {
+    const income = await this.get(organizationId, incomeId);
+    if (file && income.status === 'cancelled') throw new DomainError('validation', 'Entrada cancelada não recebe comprovante');
+    await this.db.$transaction(async (tx) => {
+      await tx.income.update({
+        where: { id: incomeId },
+        data: { proofKey: file?.key ?? null, proofContentType: file?.contentType ?? null, proofFileName: file?.fileName ?? null, proofUploadedAt: file ? new Date() : null },
+      });
+      await audit(tx, organizationId, actor, `income.proof_${file ? 'set' : 'removed'}`, 'income', incomeId);
+    });
+    return { previousKey: income.proofKey };
+  }
+
+  async proof(organizationId: string, incomeId: string) {
+    const income = await this.get(organizationId, incomeId);
+    if (!income.proofKey) throw new DomainError('not_found', 'Sem comprovante');
+    return { key: income.proofKey, contentType: income.proofContentType ?? 'application/octet-stream', fileName: income.proofFileName };
+  }
+
   async cancel(organizationId: string, incomeId: string, actor: Actor) {
     const income = await this.get(organizationId, incomeId);
     if (income.status === 'received') throw new DomainError('validation', 'Entrada recebida não pode ser cancelada');

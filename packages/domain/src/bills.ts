@@ -315,6 +315,26 @@ export class BillingService {
     return { storageKeys: payments.filter((p) => p.storageKey && !p.messageAttachmentId).map((p) => p.storageKey as string) };
   }
 
+  /**
+   * Remove o vencimento de um mês (cobrança errada, ex.: aluguel que só começa em dezembro).
+   * Fica cancelado e escondido; o gerador não cria de novo (um por conta e mês) e não há avisos.
+   * Só sem pagamento registrado.
+   */
+  async removeOccurrence(organizationId: string, occurrenceId: string, actor: Actor, now = new Date()) {
+    const occ = await this.db.billOccurrence.findFirst({ where: { id: occurrenceId, organizationId, removedAt: null }, include: { _count: { select: { payments: true } } } });
+    if (!occ) throw new DomainError('not_found', 'Vencimento não encontrado');
+    if (occ.paidAmountCents > 0 || occ._count.payments > 0) {
+      throw new DomainError('validation', 'Este vencimento já tem pagamento registrado e não pode ser removido', { code: 'has_payments' });
+    }
+    await this.db.$transaction(async (tx) => {
+      await tx.billOccurrence.update({ where: { id: occurrenceId }, data: { status: 'cancelled', removedAt: now } });
+      await audit(tx, organizationId, actor, 'bill.remove_occurrence', 'bill_occurrence', occurrenceId, {
+        before: { status: occ.status, competence: occ.competence, recurringBillId: occ.recurringBillId },
+      });
+    });
+    return { removed: true };
+  }
+
   async reactivateBill(organizationId: string, billId: string, actor: Actor, now = new Date()) {
     const org = await getOrganization(this.db, organizationId);
     await this.getBill(organizationId, billId);
@@ -322,7 +342,7 @@ export class BillingService {
     const bill = await this.db.$transaction(async (tx) => {
       const b = await tx.recurringBill.update({ where: { id: billId }, data: { active: true, suspendedAt: null } });
       await tx.billOccurrence.updateMany({
-        where: { recurringBillId: billId, status: 'cancelled', paidAmountCents: 0, dueDate: { gte: today } },
+        where: { recurringBillId: billId, status: 'cancelled', removedAt: null, paidAmountCents: 0, dueDate: { gte: today } },
         data: { status: 'pending' },
       });
       await audit(tx, organizationId, actor, 'bill.reactivate', 'recurring_bill', billId);
@@ -376,7 +396,7 @@ export class BillingService {
   listOccurrences(organizationId: string, competence: string) {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(competence)) throw new DomainError('validation', 'Competência inválida (use YYYY-MM)');
     return this.db.billOccurrence.findMany({
-      where: { organizationId, competence },
+      where: { organizationId, competence, removedAt: null },
       include: occurrenceInclude,
       orderBy: [{ dueDate: 'asc' }, { recurringBill: { name: 'asc' } }],
     });
@@ -456,7 +476,7 @@ export class BillingService {
       where: { id: billId, organizationId },
       include: {
         expenseCategory: { select: { id: true, name: true, icon: true, color: true } },
-        occurrences: { orderBy: { competence: 'asc' }, include: { payments: { orderBy: { createdAt: 'asc' } } } },
+        occurrences: { where: { removedAt: null }, orderBy: { competence: 'asc' }, include: { payments: { orderBy: { createdAt: 'asc' } } } },
       },
     });
     if (!bill) throw new DomainError('not_found', 'Conta não encontrada');

@@ -412,6 +412,14 @@ export class BillsController {
   pay(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body(v(paymentSchema)) body: z.infer<typeof paymentSchema>) {
     return this.billing.registerPayment(user.organizationId, id, body, webActor(user));
   }
+
+  /** Remove o vencimento de um mês (cobrança errada). Só sem pagamento registrado. */
+  @Roles('owner', 'admin')
+  @Post('occurrences/:id/remove')
+  @HttpCode(200)
+  removeOccurrence(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.billing.removeOccurrence(user.organizationId, id, webActor(user));
+  }
 }
 
 // ───────────────────────── Categorias de gasto ─────────────────────────

@@ -129,8 +129,12 @@ export class ResidentService {
       expectedOn: toIsoDate(i.expectedOn),
       receivedOn: i.receivedOn ? toIsoDate(i.receivedOn) : null,
       amountCents: i.status === 'received' ? (i.receivedAmountCents ?? i.amountCents) : i.amountCents,
+      /** Valor combinado (o recebido pode ser diferente). */
+      expectedAmountCents: i.amountCents,
+      competence: i.competence,
       overdue: i.status === 'expected' && toIsoDate(i.expectedOn) < today,
       space: i.space,
+      proof: i.proofKey ? { fileName: i.proofFileName, uploadedAt: i.proofUploadedAt } : null,
     }));
     const firstPaid = received.length ? toIsoDate(received.map((i) => i.receivedOn!).sort((a, b) => a.getTime() - b.getTime())[0]!) : null;
     const paidDays = [...new Set(received.map((i) => Number(toIsoDate(i.receivedOn!).slice(8, 10))))].sort((a, b) => a - b);

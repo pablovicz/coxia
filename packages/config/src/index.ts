@@ -66,6 +66,12 @@ export const emailEnvSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   /** Remetente: "Nome <email>" (o domínio precisa estar verificado no Resend). */
   EMAIL_FROM: z.string().default('Casa Kaju <reservas@casakaju.com>'),
+  /** Avisos para as administradoras (lembretes, contas, compromissos, orçamentos). */
+  EMAIL_FROM_NOTICES: z.string().default('Casa Kaju <noreply@casakaju.com>'),
+  /** Redefinição de senha do residente. */
+  EMAIL_FROM_RECOVERY: z.string().default('Casa Kaju <recovery@casakaju.com>'),
+  /** Boas-vindas do residente (convite de acesso ao workspace). */
+  EMAIL_FROM_WELCOME: z.string().default('Casa Kaju <contato@casakaju.com>'),
   /** Endereço do workspace do residente, usado nos links dos e-mails. */
   RESIDENT_APP_URL: z.string().url().default('http://localhost:5174'),
   /** Painel da equipe (Coxia), usado nos links dos avisos por e-mail às administradoras. */

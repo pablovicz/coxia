@@ -1,7 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CalendarClock, Check, ChevronLeft, ChevronRight, FileText, Paperclip, Pencil } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Check, ChevronLeft, ChevronRight, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react';
 import { DateTime } from 'luxon';
-import { type ReactNode, useRef } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState } from '@coxia/ui/components/empty-state';
 import { Badge } from '@coxia/ui/components/ui/badge';
@@ -520,6 +520,9 @@ export function BillDetailsDialog({
                         <ViewProofButton key={p.id} paymentId={p.id} />
                       ))}
                       {admin && o.status === 'paid' && !o.payments.some((p) => p.hasProof) ? <AttachProofButton occurrenceId={o.id} billId={b.id} /> : null}
+                      {admin && o.status !== 'paid' && o.status !== 'cancelled' && o.paidAmountCents === 0 && o.payments.length === 0 ? (
+                        <RemoveOccurrenceButton occurrenceId={o.id} billId={b.id} label={formatCompetence(o.competence)} />
+                      ) : null}
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </li>
                   );
@@ -556,6 +559,35 @@ function ViewProofButton({ paymentId }: { paymentId: string }) {
 }
 
 /** Conta paga sem comprovante: anexa o arquivo (foto ou PDF). */
+/**
+ * Remove o vencimento de um mês (cobrança errada, ex.: aluguel que só começa no mês seguinte).
+ * Dois cliques: o primeiro pede confirmação no próprio botão.
+ */
+function RemoveOccurrenceButton({ occurrenceId, billId, label }: { occurrenceId: string; billId: string; label: string }) {
+  const qc = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => apiSend(`/bills/occurrences/${occurrenceId}/remove`, 'POST'),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['bills'] });
+      void qc.invalidateQueries({ queryKey: ['finance'] });
+      void qc.invalidateQueries({ queryKey: ['overview'] });
+      void qc.invalidateQueries({ queryKey: ['reminders'] });
+      toast.success(`Vencimento de ${label} removido.`);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  return confirming ? (
+    <Button type="button" variant="destructive" size="sm" loading={remove.isPending} onClick={() => remove.mutate()} onBlur={() => !remove.isPending && setConfirming(false)} autoFocus>
+      Confirmar remoção
+    </Button>
+  ) : (
+    <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(true)} aria-label={`Remover o vencimento de ${label}`}>
+      <Trash2 aria-hidden /> <span className="hidden sm:inline">Remover</span>
+    </Button>
+  );
+}
+
 function AttachProofButton({ occurrenceId, billId }: { occurrenceId: string; billId: string }) {
   const input = useRef<HTMLInputElement>(null);
   const qc = useQueryClient();

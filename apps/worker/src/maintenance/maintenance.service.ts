@@ -24,6 +24,19 @@ import { EMAIL_PROVIDER, PrismaService, WHATSAPP_PROVIDER } from '../infra.modul
 import { GROUP_SYNC_TTL_MS, GroupContactsService } from '../inbound/group-contacts.service';
 import { StorageService } from '../storage/storage.service';
 
+/**
+ * Remetente por tipo de e-mail: avisos da equipe (noreply@), redefinição de senha (recovery@),
+ * boas-vindas do residente (contato@) e reservas (reservas@).
+ */
+export function senderFor(
+  payload: ResidentEmailPayload | StaffNoticePayload,
+  env: Pick<WorkerEnv, 'EMAIL_FROM' | 'EMAIL_FROM_NOTICES' | 'EMAIL_FROM_RECOVERY' | 'EMAIL_FROM_WELCOME'>,
+): string {
+  if (payload.template === 'staff_notice') return env.EMAIL_FROM_NOTICES;
+  if (payload.template === 'access') return payload.purpose === 'reset' ? env.EMAIL_FROM_RECOVERY : env.EMAIL_FROM_WELCOME;
+  return env.EMAIL_FROM;
+}
+
 export interface DispatchResult {
   claimed: number;
   sent: number;
@@ -73,16 +86,17 @@ export class MaintenanceService {
   async dispatchEmailOutbox(batchSize = 20, now = new Date()): Promise<Omit<DispatchResult, 'reclaimed' | 'paused'>> {
     const deliveries = await claimDueDeliveries(this.prisma, batchSize, now, 'email');
     const result = { claimed: deliveries.length, sent: 0, failed: 0, dead: 0 };
-    const from = parseMailbox(this.env.EMAIL_FROM);
     for (const d of deliveries) {
       try {
         const payload = d.payload as unknown as ResidentEmailPayload | StaffNoticePayload | null;
         if (!payload) throw new EmailProviderError('entrega de e-mail sem payload', false);
+        const sender = senderFor(payload, this.env);
+        const from = parseMailbox(sender);
         const mail =
           payload.template === 'staff_notice'
             ? renderStaffEmail(payload, { staffUrl: this.env.STAFF_APP_URL })
             : renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient, checkInEnabled: this.env.CHECK_IN_ENABLED }, now);
-        const sent = await this.email.send({ from: this.env.EMAIL_FROM, to: d.recipient, ...mail });
+        const sent = await this.email.send({ from: sender, to: d.recipient, ...mail });
         // Desenvolvimento: sem envio real, o e-mail (com o link) aparece no log do worker.
         if (this.email.name === 'fake' && this.env.NODE_ENV !== 'production') this.logger.log({ to: d.recipient, subject: mail.subject, text: mail.text }, 'e-mail (fake)');
         await markDeliverySent(this.prisma, d.id, sent.providerMessageId);

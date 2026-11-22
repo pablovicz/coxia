@@ -145,7 +145,7 @@ export class ResidentContractService {
     if (!resident) throw new DomainError('not_found', 'Residente não encontrado');
     const data = await this.validate(organizationId, input);
     const created = await this.db.$transaction(async (tx) => {
-      const c = await tx.residentContract.create({ data: { organizationId, residentId, ...data }, include: contractInclude });
+      const c = await tx.residentContract.create({ data: { organizationId, residentId, ...data, createdAt: now }, include: contractInclude });
       await audit(tx, organizationId, actor, 'contract.create', 'resident_contract', c.id, { after: c });
       return c;
     });
@@ -288,17 +288,21 @@ export class ResidentContractService {
     const today = localDateOf(now, timezone);
     const current = cycleForDate(today, contract.cycleDay);
     const terms = contractTerms(contract);
+    // Nada retroativo: a primeira mensalidade é a que vence a partir do dia em que o contrato foi criado.
+    const createdOn = localDateOf(contract.createdAt, timezone);
     const data: Prisma.IncomeCreateManyInput[] = [];
     for (const key of [current.key, shiftCycleKey(current.key, 1)]) {
       const bounds = cycleBounds(key, contract.cycleDay);
       if (bounds.endsOn < terms.startsOn || (terms.endsOn && bounds.startsOn > terms.endsOn)) continue;
       const [y, m] = key.split('-').map(Number) as [number, number];
+      const dueOn = dueDateForCompetence(y, m, contract.paymentDueDay ?? contract.cycleDay);
+      if (dueOn < createdOn) continue;
       data.push({
         organizationId: contract.organizationId,
         source: 'room_rental',
         description: `Mensalidade ${contract.space.name}`,
         amountCents: contract.monthlyAmountCents,
-        expectedOn: fromIsoDate(dueDateForCompetence(y, m, contract.paymentDueDay ?? contract.cycleDay)),
+        expectedOn: fromIsoDate(dueOn),
         contactId: contract.resident.contactId,
         contractId: contract.id,
         competence: key,
@@ -306,6 +310,20 @@ export class ResidentContractService {
     }
     if (!data.length) return 0;
     const { count } = await this.db.income.createMany({ data, skipDuplicates: true });
+    if (count) emit(this.events, { organizationId: contract.organizationId, type: 'income.changed', contractId: contract.id, residentId: contract.residentId });
+    return count;
+  }
+
+  /**
+   * Corrige mensalidades geradas antes da regra "sem retroativo" (vencimento anterior à criação do
+   * contrato): as ainda previstas são canceladas. Recebidas ficam como estão.
+   */
+  async cancelRetroactiveIncomes(contract: ResidentContract, timezone: string): Promise<number> {
+    const createdOn = localDateOf(contract.createdAt, timezone);
+    const { count } = await this.db.income.updateMany({
+      where: { contractId: contract.id, status: 'expected', expectedOn: { lt: fromIsoDate(createdOn) } },
+      data: { status: 'cancelled' },
+    });
     if (count) emit(this.events, { organizationId: contract.organizationId, type: 'income.changed', contractId: contract.id, residentId: contract.residentId });
     return count;
   }
@@ -355,6 +373,7 @@ export class ResidentContractService {
       const g = await this.ensureGrants(c, tz, now);
       if (g) emit(this.events, { organizationId: c.organizationId, type: 'hours.changed', contractId: c.id, residentId: c.residentId });
       grants += g;
+      await this.cancelRetroactiveIncomes(c, tz);
       incomes += await this.generateIncomes(c, tz, now);
     }
     return { contracts: contracts.length, grants, incomes, ended };

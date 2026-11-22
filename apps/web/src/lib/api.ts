@@ -817,8 +817,11 @@ export interface ResidentDetails {
     expectedOn: string;
     receivedOn: string | null;
     amountCents: number;
+    expectedAmountCents: number;
+    competence: string | null;
     overdue: boolean;
     space: { id: string; name: string } | null;
+    proof: { fileName: string | null; uploadedAt: string | null } | null;
   }>;
   totals: { receivedCents: number; openCents: number };
   firstPaymentMonth: string | null;
@@ -1026,4 +1029,26 @@ export function formatHours(minutes: number): string {
   const m = abs % 60;
   if (h === 0) return `${sign}${m}min`;
   return `${sign}${h}h${m ? String(m).padStart(2, '0') : ''}`;
+}
+
+// ───────────── Comprovante de entrada (mensalidade recebida) ─────────────
+
+export async function uploadIncomeProof(incomeId: string, file: File): Promise<void> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/incomes/${incomeId}/proof`, {
+    method: 'POST',
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: file,
+  });
+  if (!res.ok) {
+    const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
+    throw new ApiBodyError(res.status, json);
+  }
+}
+
+export async function fetchIncomeProof(incomeId: string): Promise<Blob> {
+  const token = tokenStore.get();
+  const res = await fetch(`${API_URL}/incomes/${incomeId}/proof`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
+  return res.blob();
 }

@@ -252,3 +252,32 @@ describe('CORS', () => {
     expect(res.headers['access-control-allow-headers']).toContain('x-file-name');
   });
 });
+
+describe('pagamentos do residente', () => {
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+
+  it('marca como pago com comprovante, abre o comprovante e remove uma cobrança errada', async () => {
+    const incomes = await prisma.income.findMany({ where: { contractId, status: 'expected' }, orderBy: { expectedOn: 'asc' } });
+    expect(incomes.length).toBeGreaterThan(0);
+    const [first, second] = incomes;
+
+    await http().post(`/incomes/${first!.id}/receive`).set(auth(adminToken)).send({ amountCents: 85000, receivedOn: '2026-11-20' }).expect(200);
+    await http().post(`/incomes/${first!.id}/proof`).set(auth(adminToken)).set('content-type', 'application/pdf').send(Buffer.from('não é pdf')).expect(422);
+    await http().post(`/incomes/${first!.id}/proof`).set(auth(adminToken)).set('content-type', 'image/png').set('x-file-name', encodeURIComponent('pix novembro.png')).send(PNG).expect(201);
+    const file = await http().get(`/incomes/${first!.id}/proof`).set(auth(adminToken)).expect(200);
+    expect(file.headers['content-type']).toBe('image/png');
+
+    const details = await http().get(`/residents/${lumeId}`).set(auth(adminToken)).expect(200);
+    const paid = details.body.payments.find((p: { id: string }) => p.id === first!.id);
+    expect(paid).toMatchObject({ status: 'received', amountCents: 85000, expectedAmountCents: 90000, proof: { fileName: 'pix novembro.png' } });
+
+    if (second) {
+      await http().post(`/incomes/${second.id}/cancel`).set(auth(adminToken)).expect(200);
+      const after = await http().get(`/residents/${lumeId}`).set(auth(adminToken)).expect(200);
+      expect(after.body.payments.some((p: { id: string }) => p.id === second.id)).toBe(false);
+    }
+    // residente não envia nem vê comprovante pelas rotas da equipe
+    const token = (await http().post('/resident-auth/login').send({ email: lumeEmail, password: 'senha-do-lume' }).expect(200)).body.accessToken as string;
+    await http().get(`/incomes/${first!.id}/proof`).set(auth(token)).expect(403);
+  });
+});

@@ -74,7 +74,7 @@ describe('contrato', () => {
     const c = await contracts.create(
       orgId,
       lumeId,
-      { spaceId, monthlyMinutes: 10 * 60, monthlyAmountCents: 90000, paymentDueDay: 10, cycleDay: 1, bookingOpensDay: 25, startsOn: '2026-11-01' },
+      { spaceId, monthlyMinutes: 10 * 60, monthlyAmountCents: 90000, paymentDueDay: 25, cycleDay: 1, bookingOpensDay: 25, startsOn: '2026-11-01' },
       staff,
       NOW,
     );
@@ -83,11 +83,28 @@ describe('contrato', () => {
     expect(grants.map((g) => [g.cycle, g.minutes])).toEqual([['2026-11', 600]]);
     const incomes = await db.income.findMany({ where: { contractId }, orderBy: { competence: 'asc' } });
     expect(incomes.map((i) => [i.competence, i.amountCents, i.expectedOn.toISOString().slice(0, 10), i.status])).toEqual([
-      ['2026-11', 90000, '2026-11-10', 'expected'],
-      ['2026-12', 90000, '2026-12-10', 'expected'],
+      ['2026-11', 90000, '2026-11-25', 'expected'],
+      ['2026-12', 90000, '2026-12-25', 'expected'],
     ]);
     expect(events.some((e) => e.type === 'contract.changed' && e.residentId === lumeId)).toBe(true);
     xpoContractId = (await contracts.create(orgId, xpoId, { spaceId, monthlyMinutes: 4 * 60, cycleDay: 1, bookingOpensDay: 25, startsOn: '2026-11-01' }, staff, NOW)).id;
+  });
+
+  it('contrato criado depois do vencimento do mês não cobra o mês: a primeira mensalidade é a próxima', async () => {
+    // Criado em 21/11, ciclo no dia 5 e vencimento no dia do ciclo: novembro venceu em 05/11.
+    const late = await contracts.create(orgId, xpoId, { spaceId: otherSpaceId, monthlyMinutes: 600, monthlyAmountCents: 60000, cycleDay: 5, bookingOpensDay: 25, startsOn: '2026-11-21' }, staff, NOW);
+    const incomes = await db.income.findMany({ where: { contractId: late.id }, orderBy: { competence: 'asc' } });
+    expect(incomes.map((i) => [i.competence, i.expectedOn.toISOString().slice(0, 10)])).toEqual([['2026-12', '2026-12-05']]);
+    // As horas do ciclo atual valem desde já.
+    expect((await contracts.balance(orgId, late.id, NOW)).cycles[0]).toMatchObject({ cycle: '2026-11', availableMinutes: 600 });
+
+    // Mensalidade retroativa gerada antes desta regra: o job cancela (as recebidas ficariam).
+    const old = await db.income.create({
+      data: { organizationId: orgId, source: 'room_rental', description: 'Mensalidade Estúdio', amountCents: 60000, expectedOn: new Date('2026-11-05T00:00:00Z'), contractId: late.id, competence: '2026-11' },
+    });
+    await contracts.runMaintenance(NOW);
+    expect((await db.income.findUniqueOrThrow({ where: { id: old.id } })).status).toBe('cancelled');
+    await contracts.end(orgId, late.id, null, staff, NOW);
   });
 
   it('o job é idempotente e, na virada, concede o próximo ciclo', async () => {
