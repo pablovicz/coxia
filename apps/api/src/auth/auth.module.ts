@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Injectable, Module, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Injectable, Module, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { LoginThrottle } from './login-throttle';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService, type JwtSignOptions } from '@nestjs/jwt';
@@ -25,6 +25,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    @Inject(API_ENV) private readonly env: ApiEnv,
   ) {}
 
   async login({ email, password }: LoginInput) {
@@ -69,6 +70,8 @@ export class AuthService {
         avatarUpdatedAt: member.user.avatarUpdatedAt,
       },
       organization: { id: member.organization.id, name: member.organization.name, timezone: member.organization.timezone },
+      /** Recursos ligados nesta instalação (as telas escondem o que está desligado). */
+      features: { checkIn: this.env.CHECK_IN_ENABLED },
     };
   }
 }

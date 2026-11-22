@@ -11,7 +11,7 @@ import { api, canManage, type Space } from '@/lib/api';
 import { formatBRL } from '@coxia/ui/lib/format';
 import { ROOM_STATUS, RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
 import { cn } from '@coxia/ui/lib/utils';
-import { useAuth } from '@/providers/auth-provider';
+import { useAuth, useCheckInEnabled } from '@/providers/auth-provider';
 import { describeHours } from './hours';
 import { RoomForm } from './room-form';
 import { RoomPhoto } from './room-photo';
@@ -20,6 +20,7 @@ import { RoomQrDialog } from './room-qr-dialog';
 /** Salas da casa: a administração cadastra; a equipe consulta e reserva pela agenda. */
 export function RoomsPage() {
   const { session } = useAuth();
+  const checkIn = useCheckInEnabled();
   const admin = canManage(session?.user.role);
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api<Space[]>('/spaces') });
   // null = fechado; 'new' = cadastro; Space = edição.
@@ -70,7 +71,7 @@ export function RoomsPage() {
         <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {spaces.data.map((s) => (
             <li key={s.id}>
-              <RoomCard room={s} onEdit={admin ? () => setEditing(s) : undefined} onQr={s.status === 'monthly_rental' ? undefined : () => setQr(s)} />
+              <RoomCard room={s} onEdit={admin ? () => setEditing(s) : undefined} onQr={!checkIn || s.status === 'monthly_rental' ? undefined : () => setQr(s)} />
             </li>
           ))}
         </ul>

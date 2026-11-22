@@ -81,7 +81,7 @@ export class MaintenanceService {
         const mail =
           payload.template === 'staff_notice'
             ? renderStaffEmail(payload, { staffUrl: this.env.STAFF_APP_URL })
-            : renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient }, now);
+            : renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient, checkInEnabled: this.env.CHECK_IN_ENABLED }, now);
         const sent = await this.email.send({ from: this.env.EMAIL_FROM, to: d.recipient, ...mail });
         // Desenvolvimento: sem envio real, o e-mail (com o link) aparece no log do worker.
         if (this.email.name === 'fake' && this.env.NODE_ENV !== 'production') this.logger.log({ to: d.recipient, subject: mail.subject, text: mail.text }, 'e-mail (fake)');

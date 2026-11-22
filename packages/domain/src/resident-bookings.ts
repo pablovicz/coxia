@@ -56,7 +56,7 @@ const occurrenceSelect = {
 type OccurrenceRow = Prisma.BookingOccurrenceGetPayload<{ select: typeof occurrenceSelect }>;
 export type ResidentOccurrence = ReturnType<typeof present>;
 
-function present(o: OccurrenceRow, now: Date) {
+function present(o: OccurrenceRow, now: Date, checkInEnabled = true) {
   const opensAt = new Date(o.startAt.getTime() - CHECK_IN_EARLY_MINUTES * 60_000);
   const attendance = o.status === 'cancelled' ? null : attendanceOf(o, now);
   return {
@@ -73,7 +73,7 @@ function present(o: OccurrenceRow, now: Date) {
     /** Faz parte de uma série semanal. */
     recurring: !!o.booking.recurrenceRule,
     space: o.space,
-    canCheckIn: o.status !== 'cancelled' && !o.checkedInAt && opensAt <= now && now < o.endAt,
+    canCheckIn: checkInEnabled && o.status !== 'cancelled' && !o.checkedInAt && opensAt <= now && now < o.endAt,
     canCancel: o.status !== 'cancelled' && !o.checkedInAt && now < o.startAt,
   };
 }
@@ -94,7 +94,17 @@ export class ResidentBookingService {
     private readonly bookings: BookingService,
     private readonly contracts: ResidentContractService,
     private readonly events: DomainEventPublisher = NO_EVENTS,
+    /** Check-in desligado: ninguém faz check-in e as horas saem no horário da reserva. */
+    private readonly opts: { checkInEnabled?: boolean } = {},
   ) {}
+
+  get checkInEnabled() {
+    return this.opts.checkInEnabled ?? true;
+  }
+
+  private assertCheckInEnabled() {
+    if (!this.checkInEnabled) throw new DomainError('not_found', 'O check-in está desativado', { code: 'check_in_disabled' });
+  }
 
   // ───────────── contrato ─────────────
 
@@ -155,7 +165,7 @@ export class ResidentBookingService {
       select: occurrenceSelect,
       orderBy: { startAt: 'asc' },
     });
-    return rows.map((o) => present(o, now));
+    return rows.map((o) => present(o, now, this.checkInEnabled));
   }
 
   async getOwn(organizationId: string, residentId: string, occurrenceId: string, now = new Date()) {
@@ -164,7 +174,7 @@ export class ResidentBookingService {
       select: occurrenceSelect,
     });
     if (!o) throw new DomainError('not_found', 'Reserva não encontrada');
-    return present(o, now);
+    return present(o, now, this.checkInEnabled);
   }
 
   /**
@@ -238,6 +248,7 @@ export class ResidentBookingService {
    * `residentId` null = equipe registrando pelo painel.
    */
   async checkIn(organizationId: string, residentId: string | null, occurrenceId: string, method: 'email_link' | 'room_qr' | 'staff', actor: Actor, now = new Date()) {
+    this.assertCheckInEnabled();
     const o = await this.db.bookingOccurrence.findFirst({
       where: { id: occurrenceId, organizationId, booking: residentId ? { contract: { residentId } } : { contractId: { not: null } } },
       select: { ...occurrenceSelect, booking: { select: { ...occurrenceSelect.booking.select, contract: { select: { residentId: true } } } } },
@@ -259,6 +270,7 @@ export class ResidentBookingService {
 
   /** QR code da sala: o que fazer agora (check-in da reserva, uso avulso, ou sala ocupada). */
   async roomStatus(organizationId: string, residentId: string, spaceId: string, now = new Date()): Promise<RoomCheckInState> {
+    this.assertCheckInEnabled();
     const org = await getOrganization(this.db, organizationId);
     const tz = org.timezone;
     const today = localDateOf(now, tz);
@@ -302,6 +314,7 @@ export class ResidentBookingService {
 
   /** Uso avulso pelo QR: cria a reserva começando agora e já faz o check-in. */
   async walkIn(organizationId: string, residentId: string, spaceId: string, durationMinutes: number, actor: Actor, now = new Date()) {
+    this.assertCheckInEnabled();
     const status = await this.roomStatus(organizationId, residentId, spaceId, now);
     if (status.state !== 'walk_in') throw new DomainError('validation', 'Não dá para usar a sala agora', { code: 'walk_in_unavailable', status });
     if (!Number.isInteger(durationMinutes) || durationMinutes < MIN_BOOKING_MINUTES || durationMinutes % BOOKING_STEP_MINUTES !== 0) {

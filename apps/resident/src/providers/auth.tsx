@@ -61,6 +61,11 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+/** Check-in (link do convite e QR da sala) ligado nesta instalação? */
+export function useCheckInEnabled(): boolean {
+  return useAuth().me?.features?.checkIn ?? false;
+}
+
 /** Fuso da casa (horários sempre no fuso da organização, não do celular). */
 export function useTimezone(): string {
   return useAuth().me?.organization.timezone ?? 'America/Sao_Paulo';

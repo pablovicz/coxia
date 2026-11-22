@@ -26,6 +26,41 @@ export function generatePassword(length = 10): string {
 
 const APP_HOST = RESIDENT_APP_URL.replace(/^https?:\/\//, '');
 
+export function accessMessage(email: string, password: string) {
+  return `Seu acesso ao workspace da Casa Kaju: ${RESIDENT_APP_URL}\nE-mail: ${email}\nSenha provisória: ${password}\nNo primeiro acesso, você vai criar uma senha nova.`;
+}
+
+/** Depois de definir a senha provisória: a mensagem pronta para mandar ao residente. */
+export function AccessShareDialog({ email, password, onClose }: { email: string; password: string; onClose: () => void }) {
+  const message = accessMessage(email, password);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      toast.success('Mensagem copiada.');
+    } catch {
+      toast.error('Não foi possível copiar.');
+    }
+  };
+  return (
+    <Dialog
+      open
+      onOpenChange={(v) => !v && onClose()}
+      title="Senha provisória definida"
+      description="Passe estes dados ao residente (por WhatsApp, por exemplo). No primeiro acesso ele cria uma senha nova."
+      footer={
+        <div className="flex w-full justify-end gap-2">
+          <Button variant="outline" onClick={copy}>
+            <Copy aria-hidden /> Copiar mensagem
+          </Button>
+          <Button onClick={onClose}>Pronto</Button>
+        </div>
+      }
+    >
+      <pre className="whitespace-pre-wrap rounded-md bg-muted p-4 font-mono text-sm">{message}</pre>
+    </Dialog>
+  );
+}
+
 function ProvisionalPasswordDialog({ residentId, email, onClose }: { residentId: string; email: string; onClose: () => void }) {
   const qc = useQueryClient();
   const [password, setPassword] = useState(() => generatePassword());
@@ -39,7 +74,7 @@ function ProvisionalPasswordDialog({ residentId, email, onClose }: { residentId:
     },
     onError: (err) => setError(err instanceof ApiBodyError ? err.message : 'Não foi possível salvar.'),
   });
-  const message = `Seu acesso ao workspace da Casa Kaju: ${RESIDENT_APP_URL}\nE-mail: ${email}\nSenha provisória: ${saved ?? password}\nNo primeiro acesso, você vai criar uma senha nova.`;
+  const message = accessMessage(email, saved ?? password);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(message);

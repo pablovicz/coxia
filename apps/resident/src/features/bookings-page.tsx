@@ -10,7 +10,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { OccurrenceCard } from '@/components/occurrence-card';
 import { ApiBodyError, api, apiSend, hours, type Occurrence } from '@/lib/api';
-import { useTimezone } from '@/providers/auth';
+import { useCheckInEnabled, useTimezone } from '@/providers/auth';
 
 function CancelDialog({ o, onClose }: { o: Occurrence; onClose: () => void }) {
   const tz = useTimezone();
@@ -55,6 +55,7 @@ function CancelDialog({ o, onClose }: { o: Occurrence; onClose: () => void }) {
 }
 
 export function BookingsPage() {
+  const checkIn = useCheckInEnabled();
   const [cancelling, setCancelling] = useState<Occurrence | null>(null);
   const now = new Date();
   const from = new Date(now.getTime() - 30 * 86400_000);
@@ -72,7 +73,7 @@ export function BookingsPage() {
       <PageHeader
         eyebrow="Reservas"
         title="Minhas reservas"
-        description="Cancele até o início para as horas voltarem. O check-in abre 15 minutos antes."
+        description={checkIn ? 'Cancele até o início para as horas voltarem. O check-in abre 15 minutos antes.' : 'Cancele até o início para as horas voltarem. No horário da reserva, as horas são debitadas do saldo.'}
         action={
           <Button asChild>
             <Link to="/reservar">

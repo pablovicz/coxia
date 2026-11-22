@@ -62,7 +62,7 @@ export function LoginPage() {
   }
 
   return (
-    <AuthLayout title="Entrar" description={next.startsWith('/sala/') || next.includes('/check-in') ? 'Entre para fazer o check-in na sala.' : 'Reservas, saldo de horas e check-in.'}>
+    <AuthLayout title="Entrar" description={next.startsWith('/sala/') || next.includes('/check-in') ? 'Entre para fazer o check-in na sala.' : 'Reservas, saldo de horas e pagamentos.'}>
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <Field label="E-mail">{(id) => <Input id={id} name="email" type="email" autoComplete="email" required />}</Field>
         <Field label="Senha">{(id) => <Input id={id} name="password" type="password" autoComplete="current-password" required />}</Field>

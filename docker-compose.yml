@@ -9,6 +9,7 @@ x-node-dev-env: &node-dev-env
   DATABASE_URL: postgresql://coxia:coxia@postgres:5432/coxia?schema=public
   REDIS_URL: redis://redis:6379
   ORG_DEFAULT_TIMEZONE: America/Sao_Paulo
+  CHECK_IN_ENABLED: ${CHECK_IN_ENABLED:-false}
   WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-fake}
   ZAPI_INSTANCE_ID: ${ZAPI_INSTANCE_ID:-}
   ZAPI_INSTANCE_TOKEN: ${ZAPI_INSTANCE_TOKEN:-}

@@ -1,12 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, ImageIcon, X } from 'lucide-react';
+import { FileText, ImageIcon, RefreshCw, X } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@coxia/ui/components/ui/button';
 import { Dialog } from '@coxia/ui/components/ui/dialog';
 import { Field } from '@coxia/ui/components/ui/field';
 import { Input, Textarea } from '@coxia/ui/components/ui/input';
-import { apiSend, MAX_RESIDENT_FILE_BYTES, type Resident, RESIDENT_FILE_TYPES, type ResidentStatus, uploadResidentFile } from '@/lib/api';
+import { apiSend, MAX_RESIDENT_FILE_BYTES, type Resident, RESIDENT_APP_URL, RESIDENT_FILE_TYPES, type ResidentStatus, uploadResidentFile } from '@/lib/api';
+import { AccessShareDialog, generatePassword } from './resident-access';
 import { formatPhone } from '@coxia/ui/lib/format';
 import { cn } from '@coxia/ui/lib/utils';
 
@@ -74,6 +75,10 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
   const [photo, setPhoto] = useState<File | null>(null);
   const [contract, setContract] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Senha provisória (opcional): o residente entra no workspace e troca no primeiro acesso. */
+  const [password, setPassword] = useState('');
+  /** Depois de salvar com senha: mostra a mensagem para mandar ao residente. */
+  const [shared, setShared] = useState<{ email: string; password: string } | null>(null);
 
   function pick(kind: 'photo' | 'contract', f: File | null) {
     setError(null);
@@ -99,15 +104,18 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
       // Os arquivos vão depois do cadastro (precisam do id do residente).
       if (photo) saved = await uploadResidentFile(saved.id, 'photo', photo);
       if (contract) saved = await uploadResidentFile(saved.id, 'contract', contract);
+      if (password) await apiSend(`/residents/${saved.id}/access/password`, 'POST', { password });
       return saved;
     },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['residents'] });
       qc.invalidateQueries({ queryKey: ['resident'] });
       qc.invalidateQueries({ queryKey: ['contacts'] });
+      qc.invalidateQueries({ queryKey: ['resident-access', r.id] });
       toast.success(resident ? 'Residente atualizado.' : 'Residente cadastrado.');
       onSaved?.(r);
-      onClose();
+      if (password) setShared({ email: r.email ?? email.trim(), password });
+      else onClose();
     },
     onError: (e) => setError(e.message),
   });
@@ -117,10 +125,15 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
     setError(null);
     if (!name.trim()) return setError('Informe o nome.');
     if (phone.replace(/\D/g, '').length < 10) return setError('Informe o WhatsApp com DDD.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('Informe o e-mail do residente (é o login do workspace).');
+    if (password && password.length < 8) return setError('A senha provisória precisa ter pelo menos 8 caracteres.');
     const day = paymentDay.trim() ? Number(paymentDay) : null;
     if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) return setError('Dia de pagamento entre 1 e 31.');
     save.mutate();
   }
+
+  // Salvou com senha provisória: troca o formulário pela mensagem para mandar ao residente.
+  if (shared) return <AccessShareDialog email={shared.email} password={shared.password} onClose={onClose} />;
 
   return (
     <Dialog
@@ -146,7 +159,7 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
           <Field label="WhatsApp">{(id) => <Input id={id} inputMode="tel" value={phone} placeholder="11 98765-4321" onChange={(e) => setPhone(e.target.value)} />}</Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Instagram (opcional)">{(id) => <Input id={id} value={instagram} placeholder="@coletivolume" onChange={(e) => setInstagram(e.target.value)} />}</Field>
-            <Field label="E-mail (opcional)">{(id) => <Input id={id} type="email" value={email} placeholder="contato@exemplo.com" onChange={(e) => setEmail(e.target.value)} />}</Field>
+            <Field label="E-mail">{(id) => <Input id={id} type="email" required value={email} placeholder="contato@exemplo.com" onChange={(e) => setEmail(e.target.value)} />}</Field>
           </div>
           <Field label="Descrição (opcional)" hint="Para a página dos residentes, no futuro">
             {(id, describedBy) => (
@@ -181,6 +194,19 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
           </fieldset>
           <Field label="Dia de pagamento (opcional)" hint="Dia do mês combinado para pagar">
             {(id, describedBy) => <Input id={id} inputMode="numeric" className="tabular w-32" value={paymentDay} aria-describedby={describedBy} placeholder="Ex.: 5" onChange={(e) => setPaymentDay(e.target.value)} />}
+          </Field>
+          <Field
+            label={resident ? 'Nova senha provisória (opcional)' : 'Senha provisória (opcional)'}
+            hint={`Acesso ao workspace (${RESIDENT_APP_URL.replace(/^https?:\/\//, '')}) com o e-mail e esta senha; o residente troca no primeiro acesso.${resident ? ' Quem estiver logado precisa entrar de novo.' : ''}`}
+          >
+            {(id, describedBy) => (
+              <div className="flex gap-2">
+                <Input id={id} value={password} autoComplete="off" spellCheck={false} className="font-mono" aria-describedby={describedBy} placeholder="Deixe vazio para não criar agora" onChange={(e) => setPassword(e.target.value)} />
+                <Button type="button" variant="outline" size="icon" onClick={() => setPassword(generatePassword())} aria-label="Gerar senha">
+                  <RefreshCw />
+                </Button>
+              </div>
+            )}
           </Field>
         </div>
       </form>

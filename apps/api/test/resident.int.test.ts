@@ -221,3 +221,20 @@ describe('senha provisória', () => {
     expect(access.body).toMatchObject({ status: 'active', mustChangePassword: false });
   });
 });
+
+describe('check-in desligado (padrão)', () => {
+  it('as telas sabem pelo /me e as rotas de check-in não existem', async () => {
+    const token = (await http().post('/resident-auth/login').send({ email: lumeEmail, password: 'senha-do-lume' }).expect(200)).body.accessToken as string;
+    const me = await http().get('/me').set(auth(token)).expect(200);
+    expect(me.body.features).toEqual({ checkIn: false });
+    expect((await http().get('/auth/me').set(auth(adminToken)).expect(200)).body.features).toEqual({ checkIn: false });
+
+    const startAt = slot(2, '10:00');
+    const booked = await http().post('/me/bookings').set(auth(token)).send({ contractId, startAt: startAt.toISOString(), endAt: new Date(startAt.getTime() + 3600_000).toISOString() }).expect(201);
+    const occId = booked.body.occurrences[0].id as string;
+    expect((await http().get(`/me/bookings/occurrences/${occId}`).set(auth(token)).expect(200)).body.canCheckIn).toBe(false);
+    await http().post(`/me/bookings/occurrences/${occId}/check-in`).set(auth(token)).expect(404);
+    await http().get(`/me/rooms/${spaceId}/check-in`).set(auth(token)).expect(404);
+    await http().post(`/bookings/occurrences/${occId}/check-in`).set(auth(adminToken)).expect(404);
+  });
+});

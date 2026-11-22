@@ -28,6 +28,7 @@ import {
   SpaceService,
 } from '@coxia/domain';
 import bcrypt from 'bcryptjs';
+import { API_ENV, type ApiEnv } from '../config/env';
 import { DOMAIN_EVENTS } from '../events/events.module';
 import { ResidentController } from '../resident/resident.controller';
 import { ContractsController } from './contracts.controller';
@@ -74,8 +75,9 @@ export class DomainErrorFilter implements ExceptionFilter {
     { provide: ResidentContractService, inject: [PrismaService, DOMAIN_EVENTS], useFactory: (db: PrismaService, events: DomainEventPublisher) => new ResidentContractService(db, events) },
     {
       provide: ResidentBookingService,
-      inject: [PrismaService, BookingService, ResidentContractService, DOMAIN_EVENTS],
-      useFactory: (db: PrismaService, bookings: BookingService, contracts: ResidentContractService, events: DomainEventPublisher) => new ResidentBookingService(db, bookings, contracts, events),
+      inject: [PrismaService, BookingService, ResidentContractService, DOMAIN_EVENTS, API_ENV],
+      useFactory: (db: PrismaService, bookings: BookingService, contracts: ResidentContractService, events: DomainEventPublisher, env: ApiEnv) =>
+        new ResidentBookingService(db, bookings, contracts, events, { checkInEnabled: env.CHECK_IN_ENABLED }),
     },
     {
       provide: ResidentAccountService,

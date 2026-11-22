@@ -1934,7 +1934,7 @@ test.describe('interação acessível', () => {
     await dialog.getByLabel('Nome').fill('Cia. Sopro');
     await dialog.getByLabel('WhatsApp').fill('11 97777-1234');
     await dialog.getByLabel('Instagram (opcional)').fill('@ciasopro');
-    await dialog.getByLabel('E-mail (opcional)').fill('oi@sopro.art');
+    await dialog.getByLabel('E-mail', { exact: true }).fill('oi@sopro.art');
     await dialog.getByLabel('Descrição (opcional)').fill('Companhia de circo.');
     await dialog.getByLabel('Dia de pagamento (opcional)').fill('10');
     await dialog.getByLabel('Foto (opcional)').setInputFiles({ name: 'sopro.png', mimeType: 'image/png', buffer: PNG });

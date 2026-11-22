@@ -60,7 +60,9 @@ describe('residentes', () => {
     expect(r).toMatchObject({ name: 'Coletivo Lume', instagram: 'coletivolume', paymentDay: 5, status: 'active' });
     expect(r.contact.phone).toBe(PHONE);
     expect((await db.contact.findUniqueOrThrow({ where: { id: r.contactId } })).kind).toBe('resident');
-    await expectDomainError(residents.create(orgId, { name: 'Outro', phone: PHONE }, actor), 'conflict');
+    await expectDomainError(residents.create(orgId, { name: 'Outro', phone: PHONE, email: 'outro@lume.art' }, actor), 'conflict');
+    // E-mail é o login do workspace: obrigatório no cadastro.
+    await expectDomainError(residents.create(orgId, { name: 'Sem e-mail', phone: `551196${suffix}9` }, actor), 'validation');
     await expectDomainError(residents.create(orgId, { name: 'X', phone: '123' }, actor), 'validation');
     await expectDomainError(residents.create(orgId, { name: 'X', phone: '11 98888-7777', email: 'sem-arroba' }, actor), 'validation');
   });

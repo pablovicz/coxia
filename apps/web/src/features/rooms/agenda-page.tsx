@@ -14,7 +14,7 @@ import { ApiBodyError, api, apiSend, canBook, isBookable, type Occurrence, type 
 import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, local, todayIn } from '@coxia/ui/lib/format';
 import { ROOM_STATUS, RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
 import { cn } from '@coxia/ui/lib/utils';
-import { useAuth } from '@/providers/auth-provider';
+import { useAuth, useCheckInEnabled } from '@/providers/auth-provider';
 import { BookingForm } from './booking-form';
 import { AGENDA_VIEWS, type AgendaView, isAgendaView, monthGrid, monthsOf, periodOf, shiftPeriod, WEEKDAY_HEADERS } from '@coxia/ui/calendar/calendar';
 
@@ -573,8 +573,10 @@ function ReservationCard({ occ, tz, onCancel }: { occ: Occurrence; tz: string; o
 
 /** Reserva de residente (contrato): presença. Falta e check-in atrasado consomem a reserva inteira. */
 function AttendanceBadges({ occ, tz }: { occ: Occurrence; tz: string }) {
+  const checkIn = useCheckInEnabled();
   if (!occ.booking.contractId) return null;
   const ended = new Date(occ.endAt) <= new Date();
+  if (!checkIn) return <Badge variant="neutral">Residente</Badge>;
   return (
     <>
       <Badge variant="neutral">Residente</Badge>
@@ -590,8 +592,9 @@ function AttendanceBadges({ occ, tz }: { occ: Occurrence; tz: string }) {
 /** A equipe registra o check-in de quem chegou sem fazer (janela: 15 min antes até o fim). */
 function StaffCheckIn({ occ }: { occ: Occurrence }) {
   const qc = useQueryClient();
+  const enabled = useCheckInEnabled();
   const now = Date.now();
-  const open = !!occ.booking.contractId && !occ.checkedInAt && occ.status !== 'cancelled' && now >= new Date(occ.startAt).getTime() - 15 * 60_000 && now < new Date(occ.endAt).getTime();
+  const open = enabled && !!occ.booking.contractId && !occ.checkedInAt && occ.status !== 'cancelled' && now >= new Date(occ.startAt).getTime() - 15 * 60_000 && now < new Date(occ.endAt).getTime();
   const checkIn = useMutation({
     mutationFn: () => apiSend(`/bookings/occurrences/${occ.id}/check-in`, 'POST'),
     onSuccess: () => {

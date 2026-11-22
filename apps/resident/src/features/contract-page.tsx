@@ -11,16 +11,18 @@ import { useParams } from 'react-router';
 import { toast } from 'sonner';
 import { CycleCard } from '@/components/balance';
 import { api, apiBlob, brDate, type ContractDetail, hours, type LedgerEntry } from '@/lib/api';
-import { useTimezone } from '@/providers/auth';
+import { useCheckInEnabled, useTimezone } from '@/providers/auth';
 
-function ledgerLabel(e: LedgerEntry) {
+function ledgerLabel(e: LedgerEntry, checkIn: boolean) {
   if (e.kind === 'monthly') return 'Horas do ciclo';
   if (e.kind === 'adjustment') return e.note ? `Ajuste da equipe — ${e.note}` : 'Ajuste da equipe';
+  if (!checkIn) return e.attendance === 'checked_in' || e.attendance === 'no_show' ? 'Reserva realizada' : 'Reserva';
   const a = { upcoming: 'Reserva', in_progress: 'Reserva (agora)', checked_in: 'Reserva · check-in feito', no_show: 'Reserva · sem check-in' } as const;
   return a[e.attendance ?? 'upcoming'];
 }
 
 export function ContractPage() {
+  const checkIn = useCheckInEnabled();
   const { id } = useParams();
   const tz = useTimezone();
   const [opening, setOpening] = useState(false);
@@ -76,7 +78,10 @@ export function ContractPage() {
             </div>
           ))}
         </dl>
-        <p className="mt-4 text-xs text-muted-foreground">As horas não acumulam de um ciclo para o outro. Reservar já usa as horas; cancelar antes do início devolve. Faltas e check-in atrasado contam a reserva inteira.</p>
+        <p className="mt-4 text-xs text-muted-foreground">
+          As horas não acumulam de um ciclo para o outro. Reservar já usa as horas; cancelar antes do início devolve.{' '}
+          {checkIn ? 'Faltas e check-in atrasado contam a reserva inteira.' : 'Sem cancelamento, as horas são debitadas no horário da reserva.'}
+        </p>
       </Card>
 
       <div className="flex flex-col gap-6">
@@ -88,7 +93,7 @@ export function ContractPage() {
                 {cy.ledger.map((e, i) => (
                   <li key={`${e.at}-${i}`} className="flex items-center justify-between gap-3 py-2">
                     <div className="min-w-0">
-                      <p className="truncate">{ledgerLabel(e)}</p>
+                      <p className="truncate">{ledgerLabel(e, checkIn)}</p>
                       <p className="tabular text-xs text-muted-foreground">{local(e.at, tz).toFormat(e.kind === 'booking' ? "dd/MM 'às' HH:mm" : 'dd/MM')}</p>
                     </div>
                     <span className={`tabular shrink-0 font-medium ${e.minutes < 0 ? 'text-muted-foreground' : 'text-success'}`}>

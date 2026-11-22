@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { planNotifications, type PlannerInput } from './notifications';
+import { renderResidentEmail } from './resident-emails';
 import { renderStaffEmail } from './staff-emails';
 
 const at = (local: string) => new Date(`${local}-03:00`);
@@ -64,5 +65,15 @@ describe('avisos por e-mail para as administradoras', () => {
     expect(mail.html).toContain('href="https://coxia.casakaju.com/orcamentos"');
     expect(mail.text).toBe('📩 Novo pedido\n\nLume\nE-mail: oi@lume.art <x>\n\nhttps://coxia.casakaju.com/orcamentos');
     expect(mail.replyTo).toBe('oi@lume.art');
+  });
+
+  it('convite da reserva sem check-in: sem link de check-in, avisa que as horas saem no horário', () => {
+    const payload = { template: 'booking' as const, method: 'REQUEST' as const, occurrenceId: 'o1', sequence: 0, startAt: '2026-11-24T17:00:00.000Z', endAt: '2026-11-24T21:00:00.000Z', spaceName: 'Sala Média', residentName: 'Lume', organizationName: 'Casa Kaju', timezone: 'America/Sao_Paulo' };
+    const ctx = { appUrl: 'https://residente.casakaju.com', fromEmail: 'reservas@casakaju.com', fromName: 'Casa Kaju', to: 'oi@lume.art' };
+    const off = renderResidentEmail(payload, { ...ctx, checkInEnabled: false });
+    expect(off.html).not.toContain('check-in');
+    expect(off.html).toContain('https://residente.casakaju.com/reservas"');
+    expect(off.text).toContain('as horas voltam');
+    expect(renderResidentEmail(payload, { ...ctx, checkInEnabled: true }).html).toContain('/reservas/o1/check-in');
   });
 });

@@ -70,7 +70,7 @@ describe('e-mails do residente', () => {
     expect((d.payload as { token: string }).token).toBe('[enviado]');
   });
 
-  it('convite de reserva leva o .ics e o link de check-in', async () => {
+  it('convite de reserva leva o .ics e o link das reservas', async () => {
     await enqueueResidentEmail(
       prisma,
       orgId,
@@ -90,9 +90,11 @@ describe('e-mails do residente', () => {
       `test_booking:${run}`,
     );
     await maintenance.dispatchEmailOutbox(50);
-    const mail = email.sent.find((m) => m.subject.includes('Reserva confirmada') && m.html.includes(`occ-${run}`))!;
+    const mail = email.sent.find((m) => m.subject.includes('Reserva confirmada') && m.attachments?.[0]?.content.includes(`occ-${run}`))!;
     expect(mail.subject).toBe('Reserva confirmada: Sala Média · 24/11 14:00');
-    expect(mail.html).toContain(`https://residente.casakaju.com/reservas/occ-${run}/check-in`);
+    // Check-in desligado (padrão): o botão leva às reservas, para cancelar a tempo se precisar.
+    expect(mail.html).toContain('https://residente.casakaju.com/reservas"');
+    expect(mail.html).not.toContain('/check-in');
     expect(mail.attachments?.[0]).toMatchObject({ filename: 'reserva.ics', contentType: 'text/calendar; charset=utf-8; method=REQUEST' });
     expect(mail.attachments?.[0]?.content).toContain(`UID:occ-${run}@casakaju.com`);
   });

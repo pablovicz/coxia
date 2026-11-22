@@ -112,7 +112,11 @@ export function layout(title: string, paragraphs: string[], cta?: { label: strin
 }
 
 /** Monta o e-mail a partir do payload do outbox. */
-export function renderResidentEmail(payload: ResidentEmailPayload, ctx: { appUrl: string; fromEmail: string; fromName: string; to: string }, now = new Date()): RenderedEmail {
+export function renderResidentEmail(
+  payload: ResidentEmailPayload,
+  ctx: { appUrl: string; fromEmail: string; fromName: string; to: string; checkInEnabled?: boolean },
+  now = new Date(),
+): RenderedEmail {
   const app = ctx.appUrl.replace(/\/$/, '');
   if (payload.template === 'access') {
     const url = `${app}/definir-senha?token=${encodeURIComponent(payload.token)}`;
@@ -133,14 +137,18 @@ export function renderResidentEmail(payload: ResidentEmailPayload, ctx: { appUrl
   const start = DateTime.fromISO(payload.startAt, { zone: payload.timezone }).setLocale('pt-BR');
   const end = DateTime.fromISO(payload.endAt, { zone: payload.timezone }).setLocale('pt-BR');
   const when = `${start.toFormat("cccc, dd 'de' LLLL")} · ${start.toFormat('HH:mm')}–${end.toFormat('HH:mm')}`;
-  const checkInUrl = `${app}/reservas/${payload.occurrenceId}/check-in`;
+  const checkIn = ctx.checkInEnabled ?? true;
+  // Com check-in: o link faz o check-in. Sem: leva às reservas (para cancelar a tempo, se precisar).
+  const checkInUrl = checkIn ? `${app}/reservas/${payload.occurrenceId}/check-in` : `${app}/reservas`;
   const cancelled = payload.method === 'CANCEL';
   const subject = cancelled ? `Reserva cancelada: ${payload.spaceName} · ${start.toFormat('dd/MM HH:mm')}` : `Reserva confirmada: ${payload.spaceName} · ${start.toFormat('dd/MM HH:mm')}`;
   const lines = cancelled
     ? [`A sua reserva da <strong>${escapeHtml(payload.spaceName)}</strong> em ${escapeHtml(when)} foi cancelada. As horas voltaram para o seu saldo.`]
     : [
         `Sua reserva da <strong>${escapeHtml(payload.spaceName)}</strong> está confirmada: ${escapeHtml(when)}.`,
-        'Ao chegar, faça o check-in pelo link abaixo (ou pelo QR code da sala). O check-in abre 15 minutos antes do horário. As horas da reserva saem do seu saldo, com ou sem check-in.',
+        checkIn
+          ? 'Ao chegar, faça o check-in pelo link abaixo (ou pelo QR code da sala). O check-in abre 15 minutos antes do horário. As horas da reserva saem do seu saldo, com ou sem check-in.'
+          : 'As horas da reserva saem do seu saldo no horário marcado. Se não puder vir, cancele pelo workspace antes do início e as horas voltam.',
       ];
   const ics = buildIcs({
     uid: `${payload.occurrenceId}@casakaju.com`,
@@ -149,7 +157,7 @@ export function renderResidentEmail(payload: ResidentEmailPayload, ctx: { appUrl
     startAt: new Date(payload.startAt),
     endAt: new Date(payload.endAt),
     summary: `${payload.spaceName} — ${payload.organizationName}`,
-    description: cancelled ? 'Reserva cancelada.' : `Check-in: ${checkInUrl}`,
+    description: cancelled ? 'Reserva cancelada.' : checkIn ? `Check-in: ${checkInUrl}` : `Minhas reservas: ${checkInUrl}`,
     location: `${payload.organizationName} · ${payload.spaceName}`,
     url: cancelled ? undefined : checkInUrl,
     organizer: { name: ctx.fromName, email: ctx.fromEmail },
@@ -158,8 +166,8 @@ export function renderResidentEmail(payload: ResidentEmailPayload, ctx: { appUrl
   });
   return {
     subject,
-    html: layout(subject, lines, cancelled ? undefined : { label: 'Fazer check-in', url: checkInUrl }),
-    text: `${lines.join('\n\n').replace(/<[^>]+>/g, '')}${cancelled ? '' : `\n\nCheck-in: ${checkInUrl}`}`,
+    html: layout(subject, lines, cancelled ? undefined : { label: checkIn ? 'Fazer check-in' : 'Minhas reservas', url: checkInUrl }),
+    text: `${lines.join('\n\n').replace(/<[^>]+>/g, '')}${cancelled ? '' : `\n\n${checkIn ? 'Check-in' : 'Minhas reservas'}: ${checkInUrl}`}`,
     attachments: [{ filename: cancelled ? 'cancelamento.ics' : 'reserva.ics', content: ics, contentType: `text/calendar; charset=utf-8; method=${payload.method}` }],
   };
 }

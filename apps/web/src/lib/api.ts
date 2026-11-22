@@ -54,6 +54,8 @@ export async function api<T>(path: string, init: RequestInit & { idempotencyKey?
 export interface SessionInfo {
   user: { id: string; memberId?: string; name: string; email: string | null; phone?: string | null; role: string; avatarUpdatedAt?: string | null };
   organization: { id: string; name: string; timezone: string };
+  /** Recursos ligados nesta instalação (check-in dos residentes pode estar desligado). */
+  features?: { checkIn: boolean };
 }
 
 export interface OpeningRule {

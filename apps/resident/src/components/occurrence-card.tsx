@@ -6,10 +6,17 @@ import { Repeat } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { hours, type Occurrence } from '@/lib/api';
-import { useTimezone } from '@/providers/auth';
+import { useCheckInEnabled, useTimezone } from '@/providers/auth';
 
 export function AttendanceBadge({ o }: { o: Occurrence }) {
+  const checkIn = useCheckInEnabled();
   if (o.status === 'cancelled') return <Badge variant="archived">Cancelada</Badge>;
+  if (!checkIn) {
+    // Sem check-in: passou do horário = realizada (horas debitadas).
+    if (o.attendance === 'in_progress') return <Badge variant="pending">Agora</Badge>;
+    if (o.attendance === 'checked_in' || o.attendance === 'no_show') return <Badge variant="neutral">Realizada</Badge>;
+    return null;
+  }
   if (o.attendance === 'checked_in') return <Badge variant="active">Check-in feito</Badge>;
   if (o.attendance === 'no_show') return <Badge variant="late">Sem check-in</Badge>;
   if (o.attendance === 'in_progress') return <Badge variant="pending">Agora</Badge>;

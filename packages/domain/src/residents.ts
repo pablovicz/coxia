@@ -237,6 +237,8 @@ export class ResidentService {
     const name = input.name?.trim();
     if (pick('name') && !name) throw new DomainError('validation', 'Informe o nome do residente');
     const email = input.email?.trim() || null;
+    // E-mail é o login do workspace do residente: obrigatório no cadastro e não pode ser apagado.
+    if (pick('email') && !email) throw new DomainError('validation', 'Informe o e-mail do residente (é o login do workspace)', { code: 'email_required' });
     if (pick('email') && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new DomainError('validation', 'E-mail inválido');
     if (pick('paymentDay') && input.paymentDay != null && (!Number.isInteger(input.paymentDay) || input.paymentDay < 1 || input.paymentDay > 31)) {
       throw new DomainError('validation', 'Dia de pagamento entre 1 e 31');

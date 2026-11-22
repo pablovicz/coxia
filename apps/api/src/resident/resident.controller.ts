@@ -49,7 +49,7 @@ export class ResidentController {
       select: { id: true, name: true, email: true, photoUpdatedAt: true, organization: { select: { id: true, name: true, timezone: true } }, account: { select: { mustChangePassword: true } } },
     });
     if (resident.account?.mustChangePassword) {
-      return { resident: { id: resident.id, name: resident.name, email: resident.email }, organization: resident.organization, contracts: [], mustChangePassword: true };
+      return { resident: { id: resident.id, name: resident.name, email: resident.email }, organization: resident.organization, contracts: [], mustChangePassword: true, features: { checkIn: this.bookings.checkInEnabled } };
     }
     const contracts = await this.contracts.list(r.organizationId, r.residentId);
     return {
@@ -57,6 +57,7 @@ export class ResidentController {
       organization: resident.organization,
       contracts: contracts.map((c) => this.presentContract(c)),
       mustChangePassword: false,
+      features: { checkIn: this.bookings.checkInEnabled },
     };
   }
 

@@ -10,7 +10,7 @@ import { ChangePasswordPage, ForgotPasswordPage, LoginPage, SetPasswordPage } fr
 import { HomePage } from './features/home-page';
 import { PaymentsPage } from './features/payments-page';
 import { RoomCheckInPage } from './features/room-check-in-page';
-import { useAuth } from './providers/auth';
+import { useAuth, useCheckInEnabled } from './providers/auth';
 
 /** Sem sessão: vai para o login e volta para onde estava (link do e-mail, QR da sala). */
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -30,6 +30,11 @@ function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Check-in desligado: link antigo do convite leva às reservas; QR da sala, a reservar. */
+function CheckInOnly({ children, fallback }: { children: ReactNode; fallback: string }) {
+  return useCheckInEnabled() ? <>{children}</> : <Navigate to={fallback} replace />;
+}
+
 export function App() {
   return (
     <Routes>
@@ -46,8 +51,8 @@ export function App() {
         <Route index element={<HomePage />} />
         <Route path="reservar" element={<BookPage />} />
         <Route path="reservas" element={<BookingsPage />} />
-        <Route path="reservas/:id/check-in" element={<CheckInPage />} />
-        <Route path="sala/:spaceId" element={<RoomCheckInPage />} />
+        <Route path="reservas/:id/check-in" element={<CheckInOnly fallback="/reservas"><CheckInPage /></CheckInOnly>} />
+        <Route path="sala/:spaceId" element={<CheckInOnly fallback="/reservar"><RoomCheckInPage /></CheckInOnly>} />
         <Route path="contratos/:id" element={<ContractPage />} />
         <Route path="pagamentos" element={<PaymentsPage />} />
       </Route>

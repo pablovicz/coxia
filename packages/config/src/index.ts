@@ -7,6 +7,14 @@ export const baseEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
   ORG_DEFAULT_TIMEZONE: z.string().default('America/Sao_Paulo'),
+  /**
+   * Check-in dos residentes (link do convite e QR da sala). Desligado: as horas da reserva saem
+   * do saldo no horário de qualquer jeito (só não há registro de presença).
+   */
+  CHECK_IN_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
 });
 
 export const whatsappEnvSchema = z.object({

@@ -61,6 +61,8 @@ export default defineRailway((ctx) => {
     NODE_ENV: 'production',
     LOG_LEVEL: prod ? 'info' : 'debug',
     ORG_DEFAULT_TIMEZONE: 'America/Sao_Paulo',
+    // Check-in dos residentes (link e QR da sala): desligado; as horas saem no horário da reserva.
+    CHECK_IN_ENABLED: 'false',
     DATABASE_URL: db.env.DATABASE_URL,
     REDIS_URL: cache.env.REDIS_URL,
     // Rede privada: o serviço de IA nunca é exposto publicamente.

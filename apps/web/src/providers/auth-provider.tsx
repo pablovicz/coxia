@@ -51,6 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+/** Check-in dos residentes ligado? Desligado, as telas não mostram nada de check-in. */
+export function useCheckInEnabled(): boolean {
+  return useAuth().session?.features?.checkIn ?? false;
+}
+
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth precisa de <AuthProvider>');

@@ -24,6 +24,7 @@ import {
   type Space,
   uploadContractFile,
 } from '@/lib/api';
+import { useCheckInEnabled } from '@/providers/auth-provider';
 
 const brDate = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/');
 const brDayMonth = (iso: string) => iso.slice(5, 10).split('-').reverse().join('/');
@@ -287,13 +288,16 @@ function AdjustDialog({ contract, onClose }: { contract: ResidentContract; onClo
   );
 }
 
-function ledgerLabel(e: LedgerEntry) {
+function ledgerLabel(e: LedgerEntry, checkIn: boolean) {
   if (e.kind === 'monthly') return 'Horas do ciclo';
   if (e.kind === 'adjustment') return `Ajuste${e.note ? ` — ${e.note}` : ''}`;
+  // Sem check-in, a reserva é debitada no horário: só "agendada" ou "realizada".
+  if (!checkIn) return e.attendance === 'checked_in' || e.attendance === 'no_show' ? 'Reserva · realizada' : 'Reserva';
   return { upcoming: 'Reserva', in_progress: 'Reserva (agora)', checked_in: 'Reserva · check-in', no_show: 'Reserva · sem check-in' }[e.attendance ?? 'upcoming'];
 }
 
 function StatementDialog({ contract, tz, onClose }: { contract: ResidentContract; tz: string; onClose: () => void }) {
+  const checkIn = useCheckInEnabled();
   const q = useQuery({ queryKey: ['contract', contract.id], queryFn: () => api<ContractBalance>(`/contracts/${contract.id}`) });
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()} title="Extrato de horas" description={contract.space.name} size="wide">
@@ -309,7 +313,7 @@ function StatementDialog({ contract, tz, onClose }: { contract: ResidentContract
                   <li key={`${e.at}-${i}`} className="flex items-center justify-between gap-3 py-2">
                     <span className="min-w-0 truncate">
                       <span className="tabular mr-2 text-muted-foreground">{local(e.at, tz).toFormat(e.kind === 'booking' ? 'dd/MM HH:mm' : 'dd/MM')}</span>
-                      {ledgerLabel(e)}
+                      {ledgerLabel(e, checkIn)}
                     </span>
                     <span className={`tabular shrink-0 font-medium ${e.minutes < 0 ? 'text-muted-foreground' : 'text-success'}`}>
                       {e.minutes > 0 ? '+' : ''}
