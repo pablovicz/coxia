@@ -5,6 +5,7 @@ import { claimDueDeliveries, markDeliveryFailed, markDeliverySent, Prisma, recla
 import {
   audit,
   BillingService,
+  EMAIL_LOGO_PATH,
   BookingService,
   ContactService,
   IncomeService,
@@ -94,7 +95,7 @@ export class MaintenanceService {
         const from = parseMailbox(sender);
         const mail =
           payload.template === 'staff_notice'
-            ? renderStaffEmail(payload, { staffUrl: this.env.STAFF_APP_URL })
+            ? renderStaffEmail(payload, { staffUrl: this.env.STAFF_APP_URL, logoUrl: `${this.env.RESIDENT_APP_URL.replace(/\/$/, '')}${EMAIL_LOGO_PATH}` })
             : renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient, checkInEnabled: this.env.CHECK_IN_ENABLED }, now);
         const sent = await this.email.send({ from: sender, to: d.recipient, ...mail });
         // Desenvolvimento: sem envio real, o e-mail (com o link) aparece no log do worker.

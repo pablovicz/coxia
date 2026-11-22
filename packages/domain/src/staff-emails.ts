@@ -41,13 +41,13 @@ export async function enqueueStaffEmail(tx: Tx, organizationId: string, to: stri
 const plain = (s: string) => s.replace(/\*([^*\n]+)\*/g, '$1');
 const strong = (s: string) => escapeHtml(s).replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
 
-export function renderStaffEmail(payload: StaffNoticePayload, ctx: { staffUrl: string }): RenderedEmail {
+export function renderStaffEmail(payload: StaffNoticePayload, ctx: { staffUrl: string; logoUrl?: string | null }): RenderedEmail {
   const paragraphs = payload.text
     .split(/\n{2,}/)
     .map((block) => block.split('\n').map(strong).join('<br>'))
     .filter(Boolean);
   const url = payload.path ? `${ctx.staffUrl.replace(/\/$/, '')}${payload.path}` : null;
   // Os parágrafos já vão escapados (strong): layout() recebe HTML pronto.
-  const html = layout(payload.subject, paragraphs, url ? { label: payload.actionLabel ?? 'Abrir no Coxia', url } : undefined, 'Coxia · Casa Kaju');
+  const html = layout(payload.subject, paragraphs, url ? { label: payload.actionLabel ?? 'Abrir no Coxia', url } : undefined, 'Coxia · Casa Kaju', ctx.logoUrl);
   return { subject: payload.subject, html, text: `${plain(payload.text)}${url ? `\n\n${url}` : ''}`, ...(payload.replyTo ? { replyTo: payload.replyTo } : {}) };
 }

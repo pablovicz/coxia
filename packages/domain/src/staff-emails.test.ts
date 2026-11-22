@@ -76,4 +76,16 @@ describe('avisos por e-mail para as administradoras', () => {
     expect(off.text).toContain('as horas voltam');
     expect(renderResidentEmail(payload, { ...ctx, checkInEnabled: true }).html).toContain('/reservas/o1/check-in');
   });
+
+  it('todo e-mail tem o cabeçalho com o logo da Kaju e "Casa Kaju"', () => {
+    const staff = renderStaffEmail({ template: 'staff_notice', subject: 'Lembrete: X', text: 'Lembrete: X' }, { staffUrl: 'https://coxia.casakaju.com', logoUrl: 'https://residente.casakaju.com/email/kaju-mark.png' });
+    expect(staff.html).toContain('<img src="https://residente.casakaju.com/email/kaju-mark.png" width="40" height="40"');
+    expect(staff.html).toContain('>Casa Kaju</td>');
+    const invite = renderResidentEmail(
+      { template: 'access', purpose: 'invite', residentName: 'Lume', organizationName: 'Casa Kaju', token: 't' },
+      { appUrl: 'https://residente.casakaju.com/', fromEmail: 'contato@casakaju.com', fromName: 'Casa Kaju', to: 'oi@lume.art' },
+    );
+    expect(invite.html).toContain('src="https://residente.casakaju.com/email/kaju-mark.png"');
+    expect(invite.html.indexOf('>Casa Kaju</td>')).toBeLessThan(invite.html.indexOf('<h1'));
+  });
 });

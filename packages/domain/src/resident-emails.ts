@@ -103,21 +103,33 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function layout(title: string, paragraphs: string[], cta?: { label: string; url: string }, footer = 'Casa Kaju · workspace do residente'): string {
+/** Logo dos e-mails: PNG público (Gmail não mostra imagem embutida; Outlook não mostra WebP). */
+export const EMAIL_LOGO_PATH = '/email/kaju-mark.png';
+
+/** Cabeçalho de todos os e-mails: logo da Kaju + "Casa Kaju" (tabela: funciona em qualquer cliente de e-mail). */
+function brandHeader(logoUrl?: string | null): string {
+  const logo = logoUrl
+    ? `<td style="padding:0 10px 0 0;vertical-align:middle"><img src="${escapeHtml(logoUrl)}" width="40" height="40" alt="" style="display:block;border:0;width:40px;height:40px"></td>`
+    : '';
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:collapse"><tr>${logo}<td style="vertical-align:middle;font-family:Georgia,'Times New Roman',serif;font-size:22px;font-weight:600;color:#1f1f1f">Casa Kaju</td></tr></table>`;
+}
+
+export function layout(title: string, paragraphs: string[], cta?: { label: string; url: string }, footer = 'Casa Kaju · workspace do residente', logoUrl?: string | null): string {
   const body = paragraphs.map((p) => `<p style="margin:0 0 16px;line-height:1.5">${p}</p>`).join('');
   const button = cta
     ? `<p style="margin:24px 0"><a href="${escapeHtml(cta.url)}" style="background:#2f5d50;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">${escapeHtml(cta.label)}</a></p><p style="margin:0 0 16px;font-size:13px;color:#666">Ou copie o link: ${escapeHtml(cta.url)}</p>`
     : '';
-  return `<!doctype html><html lang="pt-BR"><body style="margin:0;padding:24px;background:#f6f3ee;font-family:Arial,Helvetica,sans-serif;color:#1f1f1f"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:32px"><h1 style="font-size:20px;margin:0 0 20px">${escapeHtml(title)}</h1>${body}${button}<p style="margin:32px 0 0;font-size:12px;color:#888">${escapeHtml(footer)}</p></div></body></html>`;
+  return `<!doctype html><html lang="pt-BR"><body style="margin:0;padding:24px;background:#f6f3ee;font-family:Arial,Helvetica,sans-serif;color:#1f1f1f"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:12px;padding:32px">${brandHeader(logoUrl)}<h1 style="font-size:20px;margin:0 0 20px">${escapeHtml(title)}</h1>${body}${button}<p style="margin:32px 0 0;font-size:12px;color:#888">${escapeHtml(footer)}</p></div></body></html>`;
 }
 
 /** Monta o e-mail a partir do payload do outbox. */
 export function renderResidentEmail(
   payload: ResidentEmailPayload,
-  ctx: { appUrl: string; fromEmail: string; fromName: string; to: string; checkInEnabled?: boolean },
+  ctx: { appUrl: string; fromEmail: string; fromName: string; to: string; checkInEnabled?: boolean; logoUrl?: string | null },
   now = new Date(),
 ): RenderedEmail {
   const app = ctx.appUrl.replace(/\/$/, '');
+  const logo = ctx.logoUrl === undefined ? `${app}${EMAIL_LOGO_PATH}` : ctx.logoUrl;
   if (payload.template === 'access') {
     const url = `${app}/definir-senha?token=${encodeURIComponent(payload.token)}`;
     if (payload.purpose === 'invite') {
@@ -127,11 +139,11 @@ export function renderResidentEmail(
         `A equipe da Casa Kaju criou o seu acesso ao workspace do residente. Por lá você reserva as salas do seu contrato, acompanha o saldo de horas${(ctx.checkInEnabled ?? true) ? ', faz check-in' : ''} e vê os pagamentos.`,
         'Para começar, defina a sua senha (o link vale por 7 dias):',
       ];
-      return { subject, html: layout(subject, lines, { label: 'Definir minha senha', url }), text: `${lines.join('\n\n')}\n\n${url}` };
+      return { subject, html: layout(subject, lines, { label: 'Definir minha senha', url }, undefined, logo), text: `${lines.join('\n\n')}\n\n${url}` };
     }
     const subject = 'Redefinir a senha do workspace';
     const lines = [`Olá, ${escapeHtml(payload.residentName)}!`, 'Recebemos um pedido para redefinir a sua senha. O link vale por 1 hora. Se não foi você, ignore este e-mail.'];
-    return { subject, html: layout(subject, lines, { label: 'Redefinir senha', url }), text: `${lines.join('\n\n')}\n\n${url}` };
+    return { subject, html: layout(subject, lines, { label: 'Redefinir senha', url }, undefined, logo), text: `${lines.join('\n\n')}\n\n${url}` };
   }
 
   const start = DateTime.fromISO(payload.startAt, { zone: payload.timezone }).setLocale('pt-BR');
@@ -166,7 +178,7 @@ export function renderResidentEmail(
   });
   return {
     subject,
-    html: layout(subject, lines, cancelled ? undefined : { label: checkIn ? 'Fazer check-in' : 'Minhas reservas', url: checkInUrl }),
+    html: layout(subject, lines, cancelled ? undefined : { label: checkIn ? 'Fazer check-in' : 'Minhas reservas', url: checkInUrl }, undefined, logo),
     text: `${lines.join('\n\n').replace(/<[^>]+>/g, '')}${cancelled ? '' : `\n\n${checkIn ? 'Check-in' : 'Minhas reservas'}: ${checkInUrl}`}`,
     attachments: [{ filename: cancelled ? 'cancelamento.ics' : 'reserva.ics', content: ics, contentType: `text/calendar; charset=utf-8; method=${payload.method}` }],
   };
