@@ -104,7 +104,7 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
       // Os arquivos vão depois do cadastro (precisam do id do residente).
       if (photo) saved = await uploadResidentFile(saved.id, 'photo', photo);
       if (contract) saved = await uploadResidentFile(saved.id, 'contract', contract);
-      if (password) await apiSend(`/residents/${saved.id}/access/password`, 'POST', { password });
+      if (password && !resident) await apiSend(`/residents/${saved.id}/access/password`, 'POST', { password });
       return saved;
     },
     onSuccess: (r) => {
@@ -114,7 +114,7 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
       qc.invalidateQueries({ queryKey: ['resident-access', r.id] });
       toast.success(resident ? 'Residente atualizado.' : 'Residente cadastrado.');
       onSaved?.(r);
-      if (password) setShared({ email: r.email ?? email.trim(), password });
+      if (password && !resident) setShared({ email: r.email ?? email.trim(), password });
       else onClose();
     },
     onError: (e) => setError(e.message),
@@ -195,19 +195,22 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
           <Field label="Dia de pagamento (opcional)" hint="Dia do mês combinado para pagar">
             {(id, describedBy) => <Input id={id} inputMode="numeric" className="tabular w-32" value={paymentDay} aria-describedby={describedBy} placeholder="Ex.: 5" onChange={(e) => setPaymentDay(e.target.value)} />}
           </Field>
-          <Field
-            label={resident ? 'Nova senha provisória (opcional)' : 'Senha provisória (opcional)'}
-            hint={`Acesso ao workspace (${RESIDENT_APP_URL.replace(/^https?:\/\//, '')}) com o e-mail e esta senha; o residente troca no primeiro acesso.${resident ? ' Quem estiver logado precisa entrar de novo.' : ''}`}
-          >
-            {(id, describedBy) => (
-              <div className="flex gap-2">
-                <Input id={id} value={password} autoComplete="off" spellCheck={false} className="font-mono" aria-describedby={describedBy} placeholder="Deixe vazio para não criar agora" onChange={(e) => setPassword(e.target.value)} />
-                <Button type="button" variant="outline" size="icon" onClick={() => setPassword(generatePassword())} aria-label="Gerar senha">
-                  <RefreshCw />
-                </Button>
-              </div>
-            )}
-          </Field>
+          {/* Só no cadastro. Depois, a senha provisória fica no card "Workspace do residente". */}
+          {resident ? null : (
+            <Field
+              label="Senha provisória (opcional)"
+              hint={`Acesso ao workspace (${RESIDENT_APP_URL.replace(/^https?:\/\//, '')}) com o e-mail e esta senha; o residente troca no primeiro acesso.`}
+            >
+              {(id, describedBy) => (
+                <div className="flex gap-2">
+                  <Input id={id} value={password} autoComplete="off" spellCheck={false} className="font-mono" aria-describedby={describedBy} placeholder="Deixe vazio para não criar agora" onChange={(e) => setPassword(e.target.value)} />
+                  <Button type="button" variant="outline" size="icon" onClick={() => setPassword(generatePassword())} aria-label="Gerar senha">
+                    <RefreshCw />
+                  </Button>
+                </div>
+              )}
+            </Field>
+          )}
         </div>
       </form>
       {error ? (
