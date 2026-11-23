@@ -17,6 +17,8 @@ interface StaffPayload {
   mid: string;
   role: MemberRole;
   kind?: undefined;
+  /** Emitido em (segundos), preenchido pelo JWT. */
+  iat?: number;
 }
 
 /** Token do residente (workspace). */
@@ -77,8 +79,14 @@ export class JwtAuthGuard implements CanActivate {
     if (residentRoute) throw new ForbiddenException();
     // O papel vem do banco, não do token: remover alguém ou mudar o papel vale na hora,
     // sem esperar o JWT expirar.
-    const member = await this.prisma.organizationMember.findUnique({ where: { id: payload.mid }, select: { role: true, userId: true, organizationId: true } });
+    const member = await this.prisma.organizationMember.findUnique({
+      where: { id: payload.mid },
+      select: { role: true, userId: true, organizationId: true, user: { select: { sessionsValidFrom: true } } },
+    });
     if (!member || member.userId !== payload.sub || member.organizationId !== payload.org) throw new UnauthorizedException();
+    // Senha redefinida depois que este token foi emitido: precisa entrar de novo.
+    const validFrom = member.user.sessionsValidFrom;
+    if (validFrom && (payload.iat ?? 0) < Math.floor(validFrom.getTime() / 1000)) throw new UnauthorizedException();
     req.user = { userId: payload.sub, organizationId: payload.org, memberId: payload.mid, role: member.role };
     return true;
   }

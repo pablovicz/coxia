@@ -1,6 +1,6 @@
 import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { type FormEvent, useState } from 'react';
-import { Navigate } from 'react-router';
+import { Link, Navigate } from 'react-router';
 import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
 import { Button } from '@coxia/ui/components/ui/button';
 import { Input, Label } from '@coxia/ui/components/ui/input';
@@ -56,6 +56,9 @@ export function LoginPage() {
           <Button type="submit" loading={submitting} className="mt-2 w-full">
             Entrar
           </Button>
+          <Link to="/esqueci-senha" className="text-center text-sm text-muted-foreground underline-offset-4 hover:underline">
+            Esqueci a senha
+          </Link>
         </form>
         <p className="mt-8 text-center text-xs text-muted-foreground">Coxia · by Casa Kaju</p>
       </div>

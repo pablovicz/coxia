@@ -12,9 +12,11 @@ import {
   NotificationService,
   ProjectService,
   renderResidentEmail,
+  renderStaffAccessEmail,
   renderStaffEmail,
   ResidentContractService,
   type ResidentEmailPayload,
+  type StaffAccessPayload,
   type StaffNoticePayload,
   SYSTEM_ACTOR,
 } from '@coxia/domain';
@@ -30,10 +32,11 @@ import { StorageService } from '../storage/storage.service';
  * boas-vindas do residente (contato@) e reservas (reservas@).
  */
 export function senderFor(
-  payload: ResidentEmailPayload | StaffNoticePayload,
+  payload: ResidentEmailPayload | StaffNoticePayload | StaffAccessPayload,
   env: Pick<WorkerEnv, 'EMAIL_FROM' | 'EMAIL_FROM_NOTICES' | 'EMAIL_FROM_RECOVERY' | 'EMAIL_FROM_WELCOME'>,
 ): string {
   if (payload.template === 'staff_notice') return env.EMAIL_FROM_NOTICES;
+  if (payload.template === 'staff_access') return env.EMAIL_FROM_RECOVERY;
   if (payload.template === 'access') return payload.purpose === 'reset' ? env.EMAIL_FROM_RECOVERY : env.EMAIL_FROM_WELCOME;
   return env.EMAIL_FROM;
 }
@@ -89,20 +92,23 @@ export class MaintenanceService {
     const result = { claimed: deliveries.length, sent: 0, failed: 0, dead: 0 };
     for (const d of deliveries) {
       try {
-        const payload = d.payload as unknown as ResidentEmailPayload | StaffNoticePayload | null;
+        const payload = d.payload as unknown as ResidentEmailPayload | StaffNoticePayload | StaffAccessPayload | null;
         if (!payload) throw new EmailProviderError('entrega de e-mail sem payload', false);
         const sender = senderFor(payload, this.env);
         const from = parseMailbox(sender);
+        const logoUrl = `${this.env.RESIDENT_APP_URL.replace(/\/$/, '')}${EMAIL_LOGO_PATH}`;
         const mail =
           payload.template === 'staff_notice'
-            ? renderStaffEmail(payload, { staffUrl: this.env.STAFF_APP_URL, logoUrl: `${this.env.RESIDENT_APP_URL.replace(/\/$/, '')}${EMAIL_LOGO_PATH}` })
-            : renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient, checkInEnabled: this.env.CHECK_IN_ENABLED }, now);
+            ? renderStaffEmail(payload, { staffUrl: this.env.STAFF_APP_URL, logoUrl })
+            : payload.template === 'staff_access'
+              ? renderStaffAccessEmail(payload, { staffUrl: this.env.STAFF_APP_URL, logoUrl })
+              : renderResidentEmail(payload, { appUrl: this.env.RESIDENT_APP_URL, fromEmail: from.email, fromName: from.name, to: d.recipient, checkInEnabled: this.env.CHECK_IN_ENABLED }, now);
         const sent = await this.email.send({ from: sender, to: d.recipient, ...mail });
         // Desenvolvimento: sem envio real, o e-mail (com o link) aparece no log do worker.
         if (this.email.name === 'fake' && this.env.NODE_ENV !== 'production') this.logger.log({ to: d.recipient, subject: mail.subject, text: mail.text }, 'e-mail (fake)');
         await markDeliverySent(this.prisma, d.id, sent.providerMessageId);
         // O link de senha não fica guardado depois de enviado.
-        if (payload.template === 'access') {
+        if (payload.template === 'access' || payload.template === 'staff_access') {
           await this.prisma.notificationDelivery.update({ where: { id: d.id }, data: { payload: { ...payload, token: '[enviado]' } } });
         }
         result.sent++;

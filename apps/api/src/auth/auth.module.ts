@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Inject, Injectable, Module, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { LoginThrottle } from './login-throttle';
+import { StaffPasswordService } from '@coxia/domain';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
@@ -16,6 +17,8 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 type LoginInput = z.infer<typeof loginSchema>;
+const forgotSchema = z.object({ email: z.string().email().transform((e) => e.toLowerCase()) });
+const passwordSchema = z.object({ token: z.string().min(20).max(200), password: z.string().min(1).max(200) });
 
 // Hash real com o mesmo custo, para igualar o tempo de resposta quando o e-mail não existe.
 const DUMMY_HASH = bcrypt.hashSync('coxia-dummy-password', 12);
@@ -79,8 +82,12 @@ export class AuthService {
 @Controller('auth')
 export class AuthController {
   private readonly throttle = new LoginThrottle();
+  private readonly forgotThrottle = new LoginThrottle();
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly passwords: StaffPasswordService,
+  ) {}
 
   @Public()
   @Post('login')
@@ -102,6 +109,25 @@ export class AuthController {
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user);
   }
+
+  /** "Esqueci a senha": manda o link por e-mail. Sempre 204 (não revela se o e-mail existe). */
+  @Public()
+  @Post('forgot')
+  @HttpCode(204)
+  async forgot(@Body(new ZodValidationPipe(forgotSchema)) body: z.infer<typeof forgotSchema>, @Req() req: { ip?: string }) {
+    const ip = req.ip ?? 'unknown';
+    this.forgotThrottle.check(ip, body.email);
+    this.forgotThrottle.fail(ip, body.email);
+    await this.passwords.requestReset(body.email);
+  }
+
+  /** Senha nova pelo link do e-mail (vale uma vez, por 1 hora). */
+  @Public()
+  @Post('password')
+  @HttpCode(204)
+  async password(@Body(new ZodValidationPipe(passwordSchema)) body: z.infer<typeof passwordSchema>) {
+    await this.passwords.setPassword(body.token, body.password);
+  }
 }
 
 @Module({
@@ -118,6 +144,11 @@ export class AuthController {
   controllers: [AuthController, ResidentAuthController],
   providers: [
     AuthService,
+    {
+      provide: StaffPasswordService,
+      inject: [PrismaService],
+      useFactory: (db: PrismaService) => new StaffPasswordService(db, { hash: (p) => bcrypt.hash(p, 12), compare: (p, h) => bcrypt.compare(p, h) }),
+    },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

@@ -15,6 +15,7 @@ export * from './residents';
 export * from './hour-balance';
 export * from './resident-emails';
 export * from './staff-emails';
+export * from './staff-accounts';
 export * from './resident-contracts';
 export * from './resident-bookings';
 export * from './resident-accounts';

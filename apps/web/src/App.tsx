@@ -1,3 +1,4 @@
+import { ForgotPasswordPage, ResetPasswordPage } from './features/auth/password-pages';
 import { Navigate, Outlet, Route, Routes } from 'react-router';
 import { AppShell } from '@/components/layout/app-shell';
 import { Skeleton } from '@coxia/ui/components/ui/input';
@@ -35,6 +36,8 @@ export function App() {
   return (
     <Routes>
       <Route path="/entrar" element={<LoginPage />} />
+      <Route path="/esqueci-senha" element={<ForgotPasswordPage />} />
+      <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<HomePage />} />

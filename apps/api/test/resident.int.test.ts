@@ -344,3 +344,27 @@ describe('agenda e configurações do residente', () => {
     expect(detail.body.resident.email).toBe(newEmail);
   });
 });
+
+describe('redefinir senha da equipe', () => {
+  it('esqueci a senha → link por e-mail → senha nova; link vale uma vez e derruba a sessão antiga', async () => {
+    const oldToken = adminToken;
+    await http().post('/auth/forgot').send({ email: `ninguem-${run}@coxia.test` }).expect(204);
+    await http().post('/auth/forgot').send({ email: adminEmail.toUpperCase() }).expect(204);
+    const delivery = await prisma.notificationDelivery.findFirstOrThrow({ where: { recipient: adminEmail, idempotencyKey: { startsWith: 'staff_password_reset:' } } });
+    expect(delivery).toMatchObject({ channel: 'email' });
+    const token = (delivery.payload as { template: string; token: string }).token;
+    expect((delivery.payload as { template: string }).template).toBe('staff_access');
+
+    await http().post('/auth/password').send({ token, password: 'curta' }).expect(422);
+    // ainda valia: a sessão antiga continua até a senha mudar
+    await http().get('/auth/me').set(auth(oldToken)).expect(200);
+    await new Promise((r) => setTimeout(r, 1100));
+    await http().post('/auth/password').send({ token, password: 'senha-nova-da-admin' }).expect(204);
+    await http().post('/auth/password').send({ token, password: 'outra-senha-123' }).expect(422);
+
+    await http().get('/auth/me').set(auth(oldToken)).expect(401);
+    await http().post('/auth/login').send({ email: adminEmail, password: 'senha-forte-123' }).expect(401);
+    const login = await http().post('/auth/login').send({ email: adminEmail, password: 'senha-nova-da-admin' }).expect(200);
+    await http().get('/auth/me').set(auth(login.body.accessToken)).expect(200);
+  });
+});

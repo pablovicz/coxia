@@ -125,6 +125,19 @@ describe('e-mails para as administradoras', () => {
   });
 });
 
+describe('senha da equipe', () => {
+  it('link de redefinição sai de recovery@ com o endereço do painel; o token some do outbox', async () => {
+    await enqueueStaffEmail(prisma, orgId, `kao-${run}@casakaju.test`, { template: 'staff_access', purpose: 'reset', userName: 'Kao Maria', token: 'tok-staff' }, `test_staff_reset:${run}`);
+    await maintenance.dispatchEmailOutbox(50);
+    const mail = email.sent.find((m) => m.to === `kao-${run}@casakaju.test`)!;
+    expect(mail.from).toBe('Casa Kaju <recovery@casakaju.com>');
+    expect(mail.subject).toBe('Redefinir a senha da Coxia');
+    expect(mail.html).toContain('https://coxia.casakaju.com/redefinir-senha?token=tok-staff');
+    const d = await prisma.notificationDelivery.findUniqueOrThrow({ where: { idempotencyKey: `test_staff_reset:${run}` } });
+    expect((d.payload as { token: string }).token).toBe('[enviado]');
+  });
+});
+
 describe('job de contratos', () => {
   it('concede o ciclo e publica o evento para as telas', async () => {
     const contact = await prisma.contact.create({ data: { organizationId: orgId, phone: `5541${run.replace(/\D/g, '1').slice(0, 9).padEnd(9, '3')}`, kind: 'resident' } });

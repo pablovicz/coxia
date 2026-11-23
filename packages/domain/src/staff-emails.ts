@@ -18,6 +18,15 @@ export interface StaffNoticePayload {
   replyTo?: string | null;
 }
 
+/** Redefinição de senha de quem é da equipe (painel Coxia). */
+export interface StaffAccessPayload {
+  template: 'staff_access';
+  purpose: 'reset';
+  userName: string;
+  /** Token bruto do link (o banco guarda só o hash). O worker apaga daqui depois de enviar. */
+  token: string;
+}
+
 /** E-mails das administradoras da organização (owner e admin). */
 export async function adminEmails(db: Tx, organizationId: string): Promise<string[]> {
   const rows = await db.organizationMember.findMany({
@@ -27,11 +36,11 @@ export async function adminEmails(db: Tx, organizationId: string): Promise<strin
   return [...new Set(rows.map((r) => r.user.email!.trim().toLowerCase()).filter(Boolean))];
 }
 
-export async function enqueueStaffEmail(tx: Tx, organizationId: string, to: string, payload: StaffNoticePayload, idempotencyKey: string) {
+export async function enqueueStaffEmail(tx: Tx, organizationId: string, to: string, payload: StaffNoticePayload | StaffAccessPayload, idempotencyKey: string) {
   return enqueueDelivery(tx, {
     organizationId,
     recipient: to,
-    text: payload.subject,
+    text: payload.template === 'staff_access' ? 'Redefinir senha (equipe)' : payload.subject,
     idempotencyKey,
     channel: 'email',
     payload: payload as unknown as Prisma.InputJsonValue,
@@ -50,4 +59,15 @@ export function renderStaffEmail(payload: StaffNoticePayload, ctx: { staffUrl: s
   // Os parágrafos já vão escapados (strong): layout() recebe HTML pronto.
   const html = layout(payload.subject, paragraphs, url ? { label: payload.actionLabel ?? 'Abrir no Coxia', url } : undefined, 'Coxia · Casa Kaju', ctx.logoUrl);
   return { subject: payload.subject, html, text: `${plain(payload.text)}${url ? `\n\n${url}` : ''}`, ...(payload.replyTo ? { replyTo: payload.replyTo } : {}) };
+}
+
+export function renderStaffAccessEmail(payload: StaffAccessPayload, ctx: { staffUrl: string; logoUrl?: string | null }): RenderedEmail {
+  const url = `${ctx.staffUrl.replace(/\/$/, '')}/redefinir-senha?token=${encodeURIComponent(payload.token)}`;
+  const subject = 'Redefinir a senha da Coxia';
+  const lines = [
+    `Olá, ${escapeHtml(payload.userName.split(' ')[0] ?? payload.userName)}!`,
+    'Recebemos um pedido para redefinir a sua senha do painel da Coxia. O link vale por 1 hora e só pode ser usado uma vez.',
+    'Se não foi você, ignore este e-mail: a sua senha continua a mesma.',
+  ];
+  return { subject, html: layout(subject, lines, { label: 'Redefinir senha', url }, 'Coxia · Casa Kaju', ctx.logoUrl), text: `${lines.join('\n\n')}\n\n${url}` };
 }
