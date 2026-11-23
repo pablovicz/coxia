@@ -277,10 +277,42 @@ model User {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships OrganizationMember[]
-  authTokens  UserAuthToken[]
+  memberships  OrganizationMember[]
+  authTokens   UserAuthToken[]
+  authSessions AuthSession[]
 
   @@map("users")
+}
+
+enum AuthSessionKind {
+  staff
+  resident
+}
+
+/// Sessão de login (equipe ou residente): guarda o hash do refresh token atual. Vale 7 dias a
+/// partir do login (prazo fixo); cada renovação troca o refresh token, e reusar um antigo derruba a sessão.
+model AuthSession {
+  id                String          @id @default(cuid())
+  kind              AuthSessionKind
+  userId            String?         @map("user_id")
+  memberId          String?         @map("member_id")
+  residentAccountId String?         @map("resident_account_id")
+  tokenHash         String          @unique @map("token_hash")
+  /// Refresh token anterior: se aparecer de novo, foi copiado, e a sessão é revogada.
+  previousTokenHash String?         @map("previous_token_hash")
+  expiresAt         DateTime        @map("expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime?       @map("revoked_at") @db.Timestamptz(6)
+  lastUsedAt        DateTime?       @map("last_used_at") @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user            User?               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member          OrganizationMember? @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  residentAccount ResidentAccount?    @relation(fields: [residentAccountId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([residentAccountId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
 }
 
 /// Link de redefinição de senha da equipe. Só o hash fica no banco; o token vai no e-mail.
@@ -314,6 +346,7 @@ model OrganizationMember {
   assignedTasks  TaskAssignee[]
   completedTasks TaskCompleter[]
   taskNotes      TaskNote[]
+  authSessions   AuthSession[]
 
   @@unique([organizationId, userId])
   @@map("organization_members")
@@ -1414,6 +1447,7 @@ model ResidentAccount {
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   resident     Resident            @relation(fields: [residentId], references: [id], onDelete: Cascade)
   tokens       ResidentAuthToken[]
+  authSessions AuthSession[]
 
   @@map("resident_accounts")
 }

@@ -184,6 +184,37 @@ describe('auth e RBAC', () => {
     expect(org.body.timezone).toBe('America/Sao_Paulo');
   });
 
+  it('refresh token: troca a cada uso, reuso derruba a sessão e logout revoga', async () => {
+    const http = () => request(app.getHttpServer());
+    const res = await login(email).expect(200);
+    const first = res.body.refreshToken as string;
+    expect(first).toEqual(expect.any(String));
+    const expiresAt = new Date(res.body.refreshExpiresAt as string).getTime();
+    expect(Math.abs(expiresAt - (Date.now() + 7 * 24 * 60 * 60_000))).toBeLessThan(60_000);
+
+    const renewed = await http().post('/auth/refresh').send({ refreshToken: first }).expect(200);
+    expect(renewed.body.refreshToken).not.toBe(first);
+    // Prazo fixo: renovar não estende os 7 dias do login.
+    expect(renewed.body.refreshExpiresAt).toBe(res.body.refreshExpiresAt);
+    const me = await http().get('/auth/me').set('authorization', `Bearer ${renewed.body.accessToken}`).expect(200);
+    expect(me.body.user.role).toBe('owner');
+
+    // Token antigo reapresentado: a sessão inteira cai, inclusive o token novo.
+    await http().post('/auth/refresh').send({ refreshToken: first }).expect(401);
+    await http().post('/auth/refresh').send({ refreshToken: renewed.body.refreshToken }).expect(401);
+
+    const other = (await login(email).expect(200)).body.refreshToken as string;
+    await http().post('/auth/logout').send({ refreshToken: other }).expect(204);
+    await http().post('/auth/refresh').send({ refreshToken: other }).expect(401);
+    await http().post('/auth/refresh').send({ refreshToken: 'lixo' }).expect(401);
+  });
+
+  it('refresh token vencido (7 dias depois do login) não renova', async () => {
+    const refreshToken = (await login(email).expect(200)).body.refreshToken as string;
+    await prisma.authSession.update({ where: { id: refreshToken.split('.')[0] }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    await request(app.getHttpServer()).post('/auth/refresh').send({ refreshToken }).expect(401);
+  });
+
   it('staff não acessa a rota de conexão do WhatsApp (admin)', async () => {
     const res = await login(staffEmail).expect(200);
     await request(app.getHttpServer()).get('/whatsapp/connection').set('authorization', `Bearer ${res.body.accessToken}`).expect(403);

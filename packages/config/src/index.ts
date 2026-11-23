@@ -54,7 +54,8 @@ export const apiEnvSchema = baseEnvSchema
   .extend({
     PORT: z.coerce.number().int().default(3000),
     JWT_SECRET: z.string().min(32),
-    JWT_EXPIRES_IN: z.string().default('12h'),
+    // Access token curto; a sessão (refresh token) dura 7 dias a partir do login.
+    JWT_EXPIRES_IN: z.string().default('15m'),
     CORS_ORIGINS: z.string().default('http://localhost:5173'),
     /** Organização que recebe os pedidos de orçamento do site público; vazio = a única que existe. */
     SITE_ORGANIZATION_SLUG: z.string().optional(),

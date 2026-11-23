@@ -378,6 +378,9 @@ export class MaintenanceService {
       messages += orgMessages;
       files += orgFiles;
     }
+    // Sessões de login vencidas (7 dias depois do login; revogadas também vencem) não servem mais.
+    const sessions = await this.prisma.authSession.deleteMany({ where: { expiresAt: { lt: now } } });
+    if (sessions.count) this.logger.log({ sessions: sessions.count }, 'sessões vencidas removidas');
     return { messages, files };
   }
 }

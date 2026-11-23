@@ -1,14 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, type MeResponse, tokenStore, UNAUTHORIZED_EVENT } from '@/lib/api';
+import { api, client, type MeResponse, type SessionTokens, tokenStore, UNAUTHORIZED_EVENT } from '@/lib/api';
 
 interface AuthContextValue {
   me: MeResponse | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
-  /** Troca o token da sessão (a api emite um novo ao trocar a senha). */
-  replaceToken: (token: string) => void;
+  /** Troca a sessão (a api abre uma nova ao trocar a senha). */
+  replaceToken: (tokens: SessionTokens) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -32,18 +32,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await api<{ accessToken: string }>('/resident-auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-    tokenStore.set(res.accessToken);
+    const res = await api<SessionTokens>('/resident-auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    tokenStore.setSession(res);
     setToken(res.accessToken);
   }, []);
 
-  const replaceToken = useCallback((next: string) => {
-    tokenStore.set(next);
-    setToken(next);
+  const replaceToken = useCallback((next: SessionTokens) => {
+    tokenStore.setSession(next);
+    setToken(next.accessToken);
   }, []);
 
   const logout = useCallback(() => {
-    tokenStore.set(null);
+    client.logout();
     setToken(null);
     queryClient.clear();
   }, [queryClient]);

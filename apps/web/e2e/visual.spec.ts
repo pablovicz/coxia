@@ -688,7 +688,7 @@ type DataMode = 'ok' | 'empty' | 'error' | 'loading';
 async function mockApi(page: Page, opts: { authed?: boolean; data?: DataMode; role?: string; opsDown?: boolean } = {}) {
   const { authed = true, data = 'ok', role = 'owner', opsDown = false } = opts;
   await page.clock.setFixedTime(NOW);
-  if (authed) await page.addInitScript(() => sessionStorage.setItem('coxia-token', 'test-token'));
+  if (authed) await page.addInitScript(() => localStorage.setItem('coxia-token', 'test-token'));
   const empty = data === 'empty';
   await page.route('http://api.mock/**', async (route) => {
     const url = new URL(route.request().url());

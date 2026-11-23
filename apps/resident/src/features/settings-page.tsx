@@ -10,7 +10,7 @@ import { Camera, LogOut, Trash2 } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ResidentAvatar } from '@/components/resident-avatar';
-import { API_URL, ApiBodyError, apiSend, tokenStore } from '@/lib/api';
+import { ApiBodyError, apiSend, authFetch } from '@/lib/api';
 import { useAuth } from '@/providers/auth';
 
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -33,8 +33,7 @@ export function SettingsPage() {
     if (file.size > PHOTO_MAX) return toast.error('A foto deve ter até 5 MB.');
     setUploading(true);
     try {
-      const token = tokenStore.get();
-      const res = await fetch(`${API_URL}/me/photo`, { method: 'POST', headers: { 'content-type': file.type, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: file });
+      const res = await authFetch('/me/photo', { method: 'POST', headers: { 'content-type': file.type }, body: file });
       if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { message?: string } | null)?.message ?? 'Não foi possível enviar a foto.');
       toast.success('Foto atualizada.');
       await qc.invalidateQueries({ queryKey: ['me'] });

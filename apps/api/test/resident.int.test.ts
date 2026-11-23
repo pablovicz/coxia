@@ -216,6 +216,7 @@ describe('senha provisória', () => {
     const login = await http().post('/resident-auth/login').send({ email: xpoEmail, password: 'provisoria-123' }).expect(200);
     expect(login.body.mustChangePassword).toBe(true);
     const tmp = login.body.accessToken as string;
+    const tmpRefresh = login.body.refreshToken as string;
 
     const me = await http().get('/me').set(auth(tmp)).expect(200);
     expect(me.body).toMatchObject({ mustChangePassword: true, contracts: [] });
@@ -228,6 +229,10 @@ describe('senha provisória', () => {
     const fresh = changed.body.accessToken as string;
 
     await http().get('/me/payments').set(auth(tmp)).expect(401);
+    // A sessão da senha provisória acabou; a nova renova normalmente.
+    await http().post('/auth/refresh').send({ refreshToken: tmpRefresh }).expect(401);
+    const renewed = await http().post('/auth/refresh').send({ refreshToken: changed.body.refreshToken }).expect(200);
+    await http().get('/me/payments').set(auth(renewed.body.accessToken)).expect(200);
     await http().get('/me/payments').set(auth(fresh)).expect(200);
     expect((await http().get('/me').set(auth(fresh)).expect(200)).body.mustChangePassword).toBe(false);
     const access = await http().get(`/residents/${xpoId}/access`).set(auth(adminToken)).expect(200);
@@ -348,6 +353,7 @@ describe('agenda e configurações do residente', () => {
 describe('redefinir senha da equipe', () => {
   it('esqueci a senha → link por e-mail → senha nova; link vale uma vez e derruba a sessão antiga', async () => {
     const oldToken = adminToken;
+    const oldRefresh = (await http().post('/auth/login').send({ email: adminEmail, password: 'senha-forte-123' }).expect(200)).body.refreshToken as string;
     await http().post('/auth/forgot').send({ email: `ninguem-${run}@coxia.test` }).expect(204);
     await http().post('/auth/forgot').send({ email: adminEmail.toUpperCase() }).expect(204);
     const delivery = await prisma.notificationDelivery.findFirstOrThrow({ where: { recipient: adminEmail, idempotencyKey: { startsWith: 'staff_password_reset:' } } });
@@ -363,6 +369,7 @@ describe('redefinir senha da equipe', () => {
     await http().post('/auth/password').send({ token, password: 'outra-senha-123' }).expect(422);
 
     await http().get('/auth/me').set(auth(oldToken)).expect(401);
+    await http().post('/auth/refresh').send({ refreshToken: oldRefresh }).expect(401);
     await http().post('/auth/login').send({ email: adminEmail, password: 'senha-forte-123' }).expect(401);
     const login = await http().post('/auth/login').send({ email: adminEmail, password: 'senha-nova-da-admin' }).expect(200);
     await http().get('/auth/me').set(auth(login.body.accessToken)).expect(200);

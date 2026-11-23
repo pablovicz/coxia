@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api, type SessionInfo, tokenStore } from '@/lib/api';
+import { api, logoutSession, type SessionInfo, type SessionTokens, tokenStore } from '@/lib/api';
 
 interface AuthContextValue {
   session: SessionInfo | null;
@@ -30,16 +30,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await api<{ accessToken: string }>('/auth/login', {
+    const res = await api<SessionTokens>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    tokenStore.set(res.accessToken);
+    tokenStore.setSession(res);
     setToken(res.accessToken);
   }, []);
 
   const logout = useCallback(() => {
-    tokenStore.set(null);
+    logoutSession();
     setToken(null);
     queryClient.clear();
   }, [queryClient]);
