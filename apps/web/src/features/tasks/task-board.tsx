@@ -30,20 +30,17 @@ import { useAuth } from '@/providers/auth-provider';
 import { dateBr, TaskDetailDialog, TaskFormDialog } from './task-dialogs';
 
 /**
- * Abas de situação + filtros + tabela de tarefas. Na tela "Tarefas" os filtros ficam na URL;
+ * Abas de situação (com “Nova tarefa” ao lado), filtros numa linha e a tabela na largura toda. Na tela "Tarefas" os filtros ficam na URL;
  * na tela do projeto, `projectId` fixa o projeto (sem coluna nem filtro de projeto).
  */
 export function TaskBoard({
   filters,
   onFiltersChange,
   projectId,
-  layout = 'page',
 }: {
   filters: TaskFilters;
   onFiltersChange: (f: TaskFilters) => void;
   projectId?: string;
-  /** page: abas na lateral esquerda; card: abas em cima (tela do projeto). */
-  layout?: 'page' | 'card';
 }) {
   const { session } = useAuth();
   const canEdit = canBook(session?.user.role);
@@ -57,66 +54,50 @@ export function TaskBoard({
   const tasks = (list.data?.tasks ?? []).filter((t) => !status || t.status === status);
   const set = (patch: Partial<TaskFilters>) => onFiltersChange({ ...filters, ...patch });
 
-  const tabs = (
-    <div
-      role="tablist"
-      aria-label="Situação das tarefas"
-      aria-orientation={layout === 'page' ? 'vertical' : 'horizontal'}
-      className={cn(
-        'flex gap-1 rounded-md border bg-card p-1',
-        layout === 'page' ? 'overflow-x-auto lg:flex-col lg:self-start' : 'overflow-x-auto sm:inline-flex sm:self-start',
-      )}
-    >
-      {([undefined, ...TASK_STATUSES] as const).map((s) => (
-        <button
-          key={s ?? 'all'}
-          type="button"
-          role="tab"
-          aria-selected={status === s}
-          onClick={() => set({ status: s })}
-          className={cn(
-            'flex min-h-11 shrink-0 items-center justify-between gap-3 whitespace-nowrap rounded-sm px-3 text-left text-sm font-medium text-muted-foreground lg:min-h-9',
-            status === s && 'bg-primary text-primary-foreground',
-          )}
-        >
-          {s ? TASK_STATE[s].tab : 'Todas'}
-          <span className="tabular opacity-80">{counts ? (s ? counts[s] : total) : '·'}</span>
-        </button>
-      ))}
-    </div>
-  );
-
   return (
-    <div className={cn('grid gap-4', layout === 'page' && 'lg:grid-cols-[13rem_1fr] lg:items-start')}>
-      {layout === 'page' ? tabs : null}
-      <div className="flex min-w-0 flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          {layout === 'card' ? tabs : <span />}
-          {canEdit ? (
-            <Button className="sm:self-start" onClick={() => setCreating(true)}>
-              <Plus aria-hidden /> Nova tarefa
-            </Button>
-          ) : null}
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div role="tablist" aria-label="Situação das tarefas" className="flex gap-1 overflow-x-auto rounded-md border bg-card p-1 sm:self-start">
+          {([undefined, ...TASK_STATUSES] as const).map((s) => (
+            <button
+              key={s ?? 'all'}
+              type="button"
+              role="tab"
+              aria-selected={status === s}
+              onClick={() => set({ status: s })}
+              className={cn(
+                'min-h-11 shrink-0 whitespace-nowrap rounded-sm px-3 text-sm font-medium text-muted-foreground sm:px-4 lg:min-h-9',
+                status === s && 'bg-primary text-primary-foreground',
+              )}
+            >
+              {s ? TASK_STATE[s].tab : 'Todas'} <span className="tabular opacity-80">({counts ? (s ? counts[s] : total) : '·'})</span>
+            </button>
+          ))}
         </div>
-        <TaskFiltersBar filters={filters} onChange={set} hideProject={!!projectId} />
-        {list.isPending ? (
-          <div className="grid gap-2" aria-busy="true" aria-label="Carregando tarefas">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-14" />
-            ))}
-          </div>
-        ) : list.isError ? (
-          <p role="alert" className="text-sm text-destructive">
-            Não foi possível carregar as tarefas.
-          </p>
-        ) : tasks.length === 0 ? (
-          <EmptyState icon={ListChecks} title={total === 0 && !hasFilters(rest) ? 'Nenhuma tarefa ainda' : 'Nenhuma tarefa encontrada'}>
-            {total === 0 && !hasFilters(rest) ? 'Cadastre as tarefas para acompanhar quem faz o quê.' : 'Mude a aba ou os filtros para ver outras tarefas.'}
-          </EmptyState>
-        ) : (
-          <TasksTable tasks={tasks} showProject={!projectId} onOpen={setOpenId} />
-        )}
+        {canEdit ? (
+          <Button className="shrink-0" onClick={() => setCreating(true)}>
+            <Plus aria-hidden /> Nova tarefa
+          </Button>
+        ) : null}
       </div>
+      <TaskFiltersBar filters={filters} onChange={set} hideProject={!!projectId} />
+      {list.isPending ? (
+        <div className="grid gap-2" aria-busy="true" aria-label="Carregando tarefas">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-14" />
+          ))}
+        </div>
+      ) : list.isError ? (
+        <p role="alert" className="text-sm text-destructive">
+          Não foi possível carregar as tarefas.
+        </p>
+      ) : tasks.length === 0 ? (
+        <EmptyState icon={ListChecks} title={total === 0 && !hasFilters(rest) ? 'Nenhuma tarefa ainda' : 'Nenhuma tarefa encontrada'}>
+          {total === 0 && !hasFilters(rest) ? 'Cadastre as tarefas para acompanhar quem faz o quê.' : 'Mude a aba ou os filtros para ver outras tarefas.'}
+        </EmptyState>
+      ) : (
+        <TasksTable tasks={tasks} showProject={!projectId} onOpen={setOpenId} />
+      )}
       {openId ? <TaskDetailDialog taskId={openId} onClose={() => setOpenId(null)} /> : null}
       {creating ? <TaskFormDialog projectId={projectId ?? null} onClose={() => setCreating(false)} onSaved={(t) => setOpenId(t.id)} /> : null}
     </div>
@@ -146,7 +127,7 @@ export function ProjectTasksCard({ projectId }: { projectId: string }) {
         </div>
       </CardHeader>
       <CardContent>
-        <TaskBoard filters={filters} onFiltersChange={setFilters} projectId={projectId} layout="card" />
+        <TaskBoard filters={filters} onFiltersChange={setFilters} projectId={projectId} />
       </CardContent>
     </Card>
   );
@@ -164,10 +145,10 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
     (a, b) => Number(a.status === 'closed') - Number(b.status === 'closed') || a.title.localeCompare(b.title, 'pt-BR'),
   );
   return (
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="Filtros">
-      <Input type="search" aria-label="Buscar tarefa" placeholder="Buscar tarefa" value={f.q ?? ''} onChange={(e) => onChange({ q: e.target.value || undefined })} />
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtros">
+      <Input type="search" className="min-w-48 flex-1 basis-56" aria-label="Buscar tarefa" placeholder="Buscar tarefa" value={f.q ?? ''} onChange={(e) => onChange({ q: e.target.value || undefined })} />
       {hideProject ? null : (
-        <Select aria-label="Projeto" value={f.projectId ?? ''} onChange={(e) => onChange({ projectId: e.target.value || undefined })}>
+        <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Projeto" value={f.projectId ?? ''} onChange={(e) => onChange({ projectId: e.target.value || undefined })}>
           <option value="">Todos os projetos</option>
           <option value="none">Sem projeto</option>
           {sortedProjects.map((p) => (
@@ -178,7 +159,7 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
           ))}
         </Select>
       )}
-      <Select aria-label="Responsável" value={f.residentId ?? ''} onChange={(e) => onChange({ residentId: e.target.value || undefined })}>
+      <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Responsável" value={f.residentId ?? ''} onChange={(e) => onChange({ residentId: e.target.value || undefined })}>
         <option value="">Todos os responsáveis</option>
         {(residents.data ?? []).map((r) => (
           <option key={r.id} value={r.id}>
@@ -186,7 +167,7 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
           </option>
         ))}
       </Select>
-      <Select aria-label="Complexidade" value={f.complexity ?? ''} onChange={(e) => onChange({ complexity: (e.target.value || undefined) as TaskFilters['complexity'] })}>
+      <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Complexidade" value={f.complexity ?? ''} onChange={(e) => onChange({ complexity: (e.target.value || undefined) as TaskFilters['complexity'] })}>
         <option value="">Toda complexidade</option>
         {TASK_COMPLEXITIES.map((c) => (
           <option key={c} value={c}>
@@ -194,7 +175,7 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
           </option>
         ))}
       </Select>
-      <Select aria-label="Quem realizou" value={f.completedBy ?? ''} onChange={(e) => onChange({ completedBy: e.target.value || undefined })}>
+      <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Quem realizou" value={f.completedBy ?? ''} onChange={(e) => onChange({ completedBy: e.target.value || undefined })}>
         <option value="">Realizada por qualquer um</option>
         {(members.data ?? []).map((m) => (
           <option key={m.memberId} value={m.memberId}>
@@ -204,16 +185,15 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
       </Select>
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
         <span className="shrink-0">De</span>
-        <Input type="date" aria-label="Data inicial" value={f.from ?? ''} onChange={(e) => onChange({ from: e.target.value || undefined })} />
+        <Input type="date" className="w-auto" aria-label="Data inicial" value={f.from ?? ''} onChange={(e) => onChange({ from: e.target.value || undefined })} />
       </label>
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
         <span className="shrink-0">Até</span>
-        <Input type="date" aria-label="Data final" value={f.to ?? ''} onChange={(e) => onChange({ to: e.target.value || undefined })} />
+        <Input type="date" className="w-auto" aria-label="Data final" value={f.to ?? ''} onChange={(e) => onChange({ to: e.target.value || undefined })} />
       </label>
       {active ? (
         <Button
           variant="ghost"
-          className="justify-self-start"
           onClick={() => onChange({ q: undefined, projectId: undefined, residentId: undefined, complexity: undefined, completedBy: undefined, from: undefined, to: undefined })}
         >
           <X aria-hidden /> Limpar filtros
