@@ -1,5 +1,5 @@
 import type { Prisma } from '@coxia/database';
-import { normalizeBrPhone, normalizePhone, normalizeText } from '@coxia/shared';
+import { normalizePhone, normalizeText, parsePanelPhone } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError } from './common';
 
 /** Pessoa vista na lista de participantes de um grupo ou num aviso de entrada. */
@@ -179,8 +179,8 @@ export class ContactService {
   async create(organizationId: string, input: { name: string; phone: string; notes?: string | null; typeId?: string | null }, actor: Actor) {
     const name = input.name?.trim();
     if (!name) throw new DomainError('validation', 'Informe o nome do contato');
-    const phone = normalizeBrPhone(input.phone);
-    if (!phone || phone.length < 12 || phone.length > 15) throw new DomainError('validation', 'WhatsApp inválido');
+    const phone = parsePanelPhone(input.phone);
+    if (!phone) throw new DomainError('validation', 'WhatsApp inválido: use DDD e número, ou + e o código do país');
     const existing = await this.db.contact.findUnique({ where: { organizationId_phone: { organizationId, phone } } });
     if (existing) throw new DomainError('conflict', 'Este número já está nos contatos', { code: 'contact_exists', contactId: existing.id });
     const typeId = await this.validType(organizationId, input.typeId);

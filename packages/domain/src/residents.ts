@@ -1,5 +1,5 @@
 import type { ResidentStatus } from '@coxia/database';
-import { addDays, localDateOf, normalizeBrPhone, normalizeText } from '@coxia/shared';
+import { addDays, localDateOf, normalizeText, parsePanelPhone } from '@coxia/shared';
 import { type Actor, audit, type Db, DomainError, getOrganization, toIsoDate, type Tx } from './common';
 
 export interface ResidentInput {
@@ -221,8 +221,8 @@ export class ResidentService {
   }
 
   private phoneOf(raw: string) {
-    const phone = normalizeBrPhone(raw);
-    if (!phone || phone.length < 12 || phone.length > 15) throw new DomainError('validation', 'WhatsApp inválido');
+    const phone = parsePanelPhone(raw);
+    if (!phone) throw new DomainError('validation', 'WhatsApp inválido: use DDD e número, ou + e o código do país');
     return phone;
   }
 

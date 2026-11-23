@@ -9,6 +9,7 @@ import { Input, Textarea } from '@coxia/ui/components/ui/input';
 import { apiSend, MAX_RESIDENT_FILE_BYTES, type Resident, RESIDENT_APP_URL, RESIDENT_FILE_TYPES, type ResidentStatus, uploadResidentFile } from '@/lib/api';
 import { AccessShareDialog, generatePassword } from './resident-access';
 import { formatPhone } from '@coxia/ui/lib/format';
+import { PHONE_HINT, phoneInputError } from '@/lib/phone';
 import { cn } from '@coxia/ui/lib/utils';
 
 function FilePick({
@@ -124,7 +125,8 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
     e.preventDefault();
     setError(null);
     if (!name.trim()) return setError('Informe o nome.');
-    if (phone.replace(/\D/g, '').length < 10) return setError('Informe o WhatsApp com DDD.');
+    const phoneError = phoneInputError(phone);
+    if (phoneError) return setError(phoneError);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('Informe o e-mail do residente (é o login do workspace).');
     if (password && password.length < 8) return setError('A senha provisória precisa ter pelo menos 8 caracteres.');
     const day = paymentDay.trim() ? Number(paymentDay) : null;
@@ -156,7 +158,9 @@ export function ResidentForm({ resident, onClose, onSaved }: { resident: Residen
       <form id="resident-form" onSubmit={submit} noValidate className="grid grid-cols-1 gap-6 lg:grid-cols-2 [&>*]:min-w-0">
         <div className="flex flex-col gap-4">
           <Field label="Nome">{(id) => <Input id={id} value={name} maxLength={120} placeholder="Ex.: Coletivo Lume" onChange={(e) => setName(e.target.value)} />}</Field>
-          <Field label="WhatsApp">{(id) => <Input id={id} inputMode="tel" value={phone} placeholder="11 98765-4321" onChange={(e) => setPhone(e.target.value)} />}</Field>
+          <Field label="WhatsApp" hint={PHONE_HINT}>
+            {(id, describedBy) => <Input id={id} type="tel" inputMode="tel" autoComplete="tel" value={phone} placeholder="11 98765-4321" aria-describedby={describedBy} onChange={(e) => setPhone(e.target.value)} />}
+          </Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Instagram (opcional)">{(id) => <Input id={id} value={instagram} placeholder="@coletivolume" onChange={(e) => setInstagram(e.target.value)} />}</Field>
             <Field label="E-mail">{(id) => <Input id={id} type="email" required value={email} placeholder="contato@exemplo.com" onChange={(e) => setEmail(e.target.value)} />}</Field>

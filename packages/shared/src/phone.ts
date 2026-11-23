@@ -33,3 +33,16 @@ export function normalizeBrPhone(raw: string | null | undefined): string | null 
   if ((digits.length === 10 || digits.length === 11) && !(raw ?? '').trim().startsWith('+')) return `55${digits}`;
   return digits;
 }
+
+/**
+ * Telefone/WhatsApp digitado no painel, já validado. Padrão BR: sem "+", precisa de DDD e
+ * número (vira 55…). Com "+" na frente, aceita qualquer país (E.164: 8 a 15 dígitos).
+ * Retorna null quando não é um número válido.
+ */
+export function parsePanelPhone(raw: string | null | undefined): string | null {
+  const phone = normalizeBrPhone(raw);
+  if (!phone || phone.length > 15) return null;
+  const international = (raw ?? '').trim().startsWith('+');
+  if (international) return phone.length >= 8 ? phone : null;
+  return phone.length >= 12 ? phone : null;
+}

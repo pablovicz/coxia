@@ -8,6 +8,7 @@ import { Button } from '@coxia/ui/components/ui/button';
 import { Skeleton } from '@coxia/ui/components/ui/input';
 import { api, canManage, type ResidentListItem } from '@/lib/api';
 import { formatPhone } from '@coxia/ui/lib/format';
+import { WhatsappButton } from '@/components/whatsapp-button';
 import { RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
 import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
@@ -81,8 +82,8 @@ export function ResidentsPage() {
           {items.map((r) => {
             const sit = SITUATION[r.situation];
             return (
-              <li key={r.id}>
-                <Link to={`/residentes/${r.id}`} className={cn('flex h-full flex-col gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-muted/50', r.status === 'disabled' && 'opacity-70')}>
+              <li key={r.id} className="relative">
+                <Link to={`/residentes/${r.id}`} className={cn('flex h-full flex-col gap-3 rounded-lg border bg-card p-4 pr-14 transition-colors hover:bg-muted/50', r.status === 'disabled' && 'opacity-70')}>
                   <span className="flex items-center gap-3">
                     <ResidentPhoto resident={r} />
                     <span className="min-w-0 flex-1">
@@ -113,6 +114,7 @@ export function ResidentsPage() {
                     <span className="text-sm text-muted-foreground">Sem sala fixa</span>
                   )}
                 </Link>
+                <WhatsappButton phone={r.contact.phone} className="absolute top-3 right-2" />
               </li>
             );
           })}

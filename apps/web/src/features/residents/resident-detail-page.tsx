@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownLeft, AtSign, CalendarClock, ChevronLeft, FileText, Mail, MessageCircle, Paperclip, Pencil, Wallet } from 'lucide-react';
+import { ArrowDownLeft, AtSign, CalendarClock, ChevronLeft, FileText, Mail, Paperclip, Pencil, Wallet } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { type ReactNode, useState } from 'react';
 import { Link, useParams } from 'react-router';
@@ -12,6 +12,7 @@ import { Skeleton } from '@coxia/ui/components/ui/input';
 import { IncomeDialog } from '@/features/finance/incomes';
 import { api, canManage, fetchResidentFile, type ResidentDetails } from '@/lib/api';
 import { formatBRL, formatCompetence, formatPhone } from '@coxia/ui/lib/format';
+import { WhatsappButton } from '@/components/whatsapp-button';
 import { RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
 import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
@@ -211,9 +212,12 @@ export function ResidentDetailPage() {
                   <CardTitle>Contato</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-1 text-sm">
-                  <a className="-my-1 flex min-h-11 items-center gap-2 font-medium text-primary underline-offset-4 hover:underline" href={`https://wa.me/${r.contact.phone}`} target="_blank" rel="noreferrer">
-                    <MessageCircle size={16} aria-hidden /> <span className="tabular">{formatPhone(r.contact.phone)}</span>
-                  </a>
+                  <div className="-my-1 flex min-h-11 items-center justify-between gap-2">
+                    <a className="tabular font-medium text-primary underline-offset-4 hover:underline" href={`tel:+${r.contact.phone}`}>
+                      {formatPhone(r.contact.phone)}
+                    </a>
+                    <WhatsappButton phone={r.contact.phone} className="-mr-2" />
+                  </div>
                   {r.instagram ? (
                     <a className="-my-1 flex min-h-11 items-center gap-2 font-medium text-primary underline-offset-4 hover:underline" href={instagramUrl(r.instagram)} target="_blank" rel="noreferrer">
                       <AtSign size={16} aria-hidden /> {r.instagram}

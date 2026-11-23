@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Inbox, Plus, Search, Tags, UserCheck, Users } from 'lucide-react';
+import { Inbox, Plus, Search, Tags, UserCheck, Users } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
@@ -12,6 +12,8 @@ import { Input, Skeleton, Textarea } from '@coxia/ui/components/ui/input';
 import { Link } from 'react-router';
 import { api, apiSend, canManage, type Contact, type ContactGroupOption } from '@/lib/api';
 import { formatPhone, local } from '@coxia/ui/lib/format';
+import { WhatsappButton, WhatsappIcon } from '@/components/whatsapp-button';
+import { PHONE_HINT, phoneInputError } from '@/lib/phone';
 import { UserAvatar } from '@/components/user-avatar';
 import { ContactAvatar } from './contact-avatar';
 import { ContactTypeSelect, ContactTypesDialog, useContactTypes } from './contact-types';
@@ -206,8 +208,8 @@ function ContactRow({ contact: c, tz, onOpen }: { contact: Contact; tz: string; 
   const title = contactTitle(c);
   const extra = c.groups.length - 2;
   return (
-    <button type="button" onClick={onOpen} className="block w-full text-left" aria-label={`${title}, ${formatPhone(c.phone)}`}>
-      <Card className="flex items-center gap-3 p-3 transition-colors hover:bg-muted/40 sm:gap-4 sm:p-4">
+    <Card className="flex items-center gap-2 p-3 transition-colors hover:bg-muted/40 sm:gap-3 sm:p-4">
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 text-left sm:gap-4" aria-label={`${title}, ${formatPhone(c.phone)}`}>
         {c.member?.userId && c.member.avatarUpdatedAt ? (
           <UserAvatar userId={c.member.userId} name={c.member.name} version={c.member.avatarUpdatedAt} className="size-11" />
         ) : (
@@ -258,8 +260,9 @@ function ContactRow({ contact: c, tz, onOpen }: { contact: Contact; tz: string; 
             {local(c.lastMessageAt, tz).toRelative({ locale: 'pt-BR' })}
           </span>
         ) : null}
-      </Card>
-    </button>
+      </button>
+      <WhatsappButton phone={c.phone} />
+    </Card>
   );
 }
 
@@ -308,7 +311,7 @@ function ContactDialog({ id, preview, tz, onClose }: { id: string; preview: Cont
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
             <a href={`https://wa.me/${c.phone}`} target="_blank" rel="noreferrer">
-              <ExternalLink aria-hidden /> Abrir no WhatsApp
+              <WhatsappIcon /> Abrir no WhatsApp
             </a>
           </Button>
           {c.member ? <Badge variant="active">Equipe · {ROLE_LABEL[c.member.role] ?? c.member.role}</Badge> : null}
@@ -395,7 +398,8 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     setError(null);
     if (!name.trim()) return setError('Informe o nome.');
-    if (phone.replace(/\D/g, '').length < 10) return setError('Informe o WhatsApp com DDD.');
+    const phoneError = phoneInputError(phone);
+    if (phoneError) return setError(phoneError);
     save.mutate();
   }
   return (
@@ -417,7 +421,9 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
     >
       <form id="new-contact" onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <Field label="Nome">{(id) => <Input id={id} value={name} maxLength={120} placeholder="Ex.: Marina (patrocínio)" onChange={(e) => setName(e.target.value)} />}</Field>
-        <Field label="WhatsApp">{(id) => <Input id={id} inputMode="tel" value={phone} placeholder="11 98765-4321" onChange={(e) => setPhone(e.target.value)} />}</Field>
+        <Field label="WhatsApp" hint={PHONE_HINT}>
+          {(id, describedBy) => <Input id={id} type="tel" inputMode="tel" autoComplete="tel" value={phone} placeholder="11 98765-4321" aria-describedby={describedBy} onChange={(e) => setPhone(e.target.value)} />}
+        </Field>
         <Field label="Tipo (opcional)">{(id) => <ContactTypeSelect id={id} value={typeId} onChange={setTypeId} />}</Field>
         <Field label="Observações (opcional)">{(id) => <Textarea id={id} rows={2} value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} />}</Field>
         {error ? (

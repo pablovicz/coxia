@@ -30,3 +30,17 @@ describe('normalizeBrPhone', () => {
     expect(normalizeBrPhone('')).toBeNull();
   });
 });
+
+describe('parsePanelPhone', () => {
+  it('padrão BR sem "+"; qualquer país com "+"', async () => {
+    const { parsePanelPhone } = await import('./phone');
+    expect(parsePanelPhone('11 98765-4321')).toBe('5511987654321');
+    expect(parsePanelPhone('98765-4321')).toBeNull();
+    expect(parsePanelPhone('+1 415 555 1234')).toBe('14155551234');
+    expect(parsePanelPhone('+351 912 345 678')).toBe('351912345678');
+    expect(parsePanelPhone('+44 20 7946 0958')).toBe('442079460958');
+    expect(parsePanelPhone('+123')).toBeNull();
+    expect(parsePanelPhone('+1234567890123456')).toBeNull();
+    expect(parsePanelPhone('')).toBeNull();
+  });
+});
