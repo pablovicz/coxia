@@ -4,13 +4,25 @@ import { Link, Navigate } from 'react-router';
 import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
 import { Button } from '@coxia/ui/components/ui/button';
 import { Input, Label } from '@coxia/ui/components/ui/input';
+import { PasswordInput } from '@coxia/ui/components/ui/password-input';
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
+
+/** Último e-mail que entrou neste navegador (só o e-mail; a senha nunca é guardada). */
+const LAST_EMAIL_KEY = 'coxia-last-email';
+function lastEmail(): string {
+  try {
+    return localStorage.getItem(LAST_EMAIL_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export function LoginPage() {
   const { session, login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [remembered] = useState(lastEmail);
 
   if (session) return <Navigate to="/" replace />;
 
@@ -20,7 +32,13 @@ export function LoginPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await login(String(form.get('email')), String(form.get('password')));
+      const email = String(form.get('email')).trim();
+      await login(email, String(form.get('password')));
+      try {
+        localStorage.setItem(LAST_EMAIL_KEY, email);
+      } catch {
+        /* sem storage: só não lembra */
+      }
     } catch (err) {
       setError(err instanceof ApiError && err.status === 401 ? 'E-mail ou senha incorretos.' : 'Não foi possível entrar agora. Tente de novo.');
     } finally {
@@ -42,11 +60,11 @@ export function LoginPage() {
         <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email">E-mail</Label>
-            <Input id="email" name="email" type="email" autoComplete="email" required aria-invalid={!!error} />
+            <Input id="email" name="email" type="email" autoComplete="username" defaultValue={remembered} autoFocus={!remembered} required aria-invalid={!!error} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="password">Senha</Label>
-            <Input id="password" name="password" type="password" autoComplete="current-password" required aria-invalid={!!error} />
+            <PasswordInput id="password" name="password" autoComplete="current-password" autoFocus={!!remembered} required aria-invalid={!!error} />
           </div>
           {error ? (
             <p role="alert" className="text-sm text-destructive">

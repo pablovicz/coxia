@@ -865,8 +865,8 @@ test.describe('golden visual', () => {
   test('login com erro', async ({ page }) => {
     await mockApi(page, { authed: false });
     await page.goto('/entrar');
-    await page.getByLabel('E-mail').fill('ana@casakaju.test');
-    await page.getByLabel('Senha').fill('errada');
+    await page.getByLabel('E-mail', { exact: true }).fill('ana@casakaju.test');
+    await page.getByLabel('Senha', { exact: true }).fill('errada');
     await page.getByRole('button', { name: 'Entrar' }).click();
     await expect(page.getByRole('alert')).toHaveText('E-mail ou senha incorretos.');
     await snap(page, 'login-error.png');

@@ -2,6 +2,7 @@ import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
 import { Button } from '@coxia/ui/components/ui/button';
 import { Input, Label } from '@coxia/ui/components/ui/input';
+import { PasswordInput } from '@coxia/ui/components/ui/password-input';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -115,14 +116,14 @@ export function ResetPasswordPage() {
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="password">Senha nova</Label>
-          <Input id="password" name="password" type="password" autoComplete="new-password" required aria-describedby="password-hint" />
+          <PasswordInput id="password" name="password" autoComplete="new-password" required aria-describedby="password-hint" />
           <p id="password-hint" className="text-xs text-muted-foreground">
             Pelo menos 8 caracteres.
           </p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="confirm">Repita a senha</Label>
-          <Input id="confirm" name="confirm" type="password" autoComplete="new-password" required />
+          <PasswordInput id="confirm" name="confirm" autoComplete="new-password" required />
         </div>
         {error ? (
           <p role="alert" className="text-sm text-destructive">

@@ -15,6 +15,19 @@ server {
     return 200 '{"status":"ok","service":"web"}';
   }
 
+  # PWA: manifest e service worker sempre revalidados (deploy novo vale na hora).
+  location = /manifest.webmanifest {
+    default_type application/manifest+json;
+    add_header Cache-Control "no-cache";
+    add_header X-Content-Type-Options nosniff always;
+    try_files $uri =404;
+  }
+  location = /sw.js {
+    add_header Cache-Control "no-cache";
+    add_header X-Content-Type-Options nosniff always;
+    try_files $uri =404;
+  }
+
   # Arquivos com hash no nome: cache longo.
   location /assets/ {
     expires 1y;

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coxia · sem conexão</title>
+    <style>
+      body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #f7f4eb; color: #1f2a23; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; text-align: center; padding: 24px; }
+      @media (prefers-color-scheme: dark) { body { background: #161e19; color: #eef0e9; } }
+      img { width: 72px; height: 72px; }
+      h1 { font-family: Georgia, serif; font-size: 28px; margin: 16px 0 8px; }
+      p { margin: 0 0 20px; opacity: 0.75; }
+      button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 12px 20px; background: #42634a; color: #f7f4eb; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icon-192.png" alt="" />
+      <h1>Sem conexão</h1>
+      <p>A Coxia precisa de internet. Assim que a conexão voltar, é só tentar de novo.</p>
+      <button type="button" onclick="location.reload()">Tentar de novo</button>
+    </main>
+  </body>
+</html>
