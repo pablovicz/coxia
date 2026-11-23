@@ -11,12 +11,10 @@ import { Input, Skeleton } from '@coxia/ui/components/ui/input';
 import { cn } from '@coxia/ui/lib/utils';
 import { UserAvatar } from '@/components/user-avatar';
 import { useProjects } from '@/features/projects/project-picker';
-import { ResidentPhoto } from '@/features/residents/resident-shared';
 import {
   api,
   canBook,
   type Member,
-  type ResidentListItem,
   TASK_COMPLEXITIES,
   TASK_COMPLEXITY,
   TASK_STATE,
@@ -24,23 +22,47 @@ import {
   type Task,
   type TaskFilters,
   type TaskList,
+  type TaskStatus,
   tasksPath,
 } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import { dateBr, TaskDetailDialog, TaskFormDialog } from './task-dialogs';
 
+/** Aba de situação escolhida por último ("all" = Todas), guardada no navegador. */
+export const TASK_STATUS_STORAGE = { page: 'coxia:tarefas:situacao', project: 'coxia:tarefas:situacao:projeto' } as const;
+
+export function readStoredTaskStatus(key: string): TaskStatus | undefined {
+  try {
+    const v = localStorage.getItem(key);
+    return TASK_STATUSES.includes(v as TaskStatus) ? (v as TaskStatus) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function storeTaskStatus(key: string, status: TaskStatus | undefined) {
+  try {
+    localStorage.setItem(key, status ?? 'all');
+  } catch {
+    // navegador sem armazenamento: só não lembra a aba
+  }
+}
+
 /**
- * Abas de situação (com “Nova tarefa” ao lado), filtros numa linha e a tabela na largura toda. Na tela "Tarefas" os filtros ficam na URL;
- * na tela do projeto, `projectId` fixa o projeto (sem coluna nem filtro de projeto).
+ * Abas de situação, busca e "Nova tarefa" numa linha; os demais filtros embaixo; a tabela na largura
+ * toda. Na tela "Tarefas" os filtros ficam na URL; na tela do projeto, `projectId` fixa o projeto.
  */
 export function TaskBoard({
   filters,
   onFiltersChange,
   projectId,
+  statusStorageKey,
 }: {
   filters: TaskFilters;
   onFiltersChange: (f: TaskFilters) => void;
   projectId?: string;
+  /** Onde lembrar a aba escolhida (localStorage). */
+  statusStorageKey: string;
 }) {
   const { session } = useAuth();
   const canEdit = canBook(session?.user.role);
@@ -52,12 +74,15 @@ export function TaskBoard({
   const counts = list.data?.counts;
   const total = counts ? counts.pending + counts.in_progress + counts.done : 0;
   const tasks = (list.data?.tasks ?? []).filter((t) => !status || t.status === status);
-  const set = (patch: Partial<TaskFilters>) => onFiltersChange({ ...filters, ...patch });
+  const set = (patch: Partial<TaskFilters>) => {
+    if ('status' in patch) storeTaskStatus(statusStorageKey, patch.status);
+    onFiltersChange({ ...filters, ...patch });
+  };
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div role="tablist" aria-label="Situação das tarefas" className="flex gap-1 overflow-x-auto rounded-md border bg-card p-1 sm:self-start">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div role="tablist" aria-label="Situação das tarefas" className="flex shrink-0 gap-1 overflow-x-auto rounded-md border bg-card p-1 lg:self-start">
           {([undefined, ...TASK_STATUSES] as const).map((s) => (
             <button
               key={s ?? 'all'}
@@ -74,8 +99,16 @@ export function TaskBoard({
             </button>
           ))}
         </div>
+        <Input
+          type="search"
+          className="min-w-0 flex-1"
+          aria-label="Buscar tarefa"
+          placeholder="Buscar tarefa"
+          value={filters.q ?? ''}
+          onChange={(e) => set({ q: e.target.value || undefined })}
+        />
         {canEdit ? (
-          <Button className="shrink-0" onClick={() => setCreating(true)}>
+          <Button className="shrink-0 lg:self-center" onClick={() => setCreating(true)}>
             <Plus aria-hidden /> Nova tarefa
           </Button>
         ) : null}
@@ -112,7 +145,7 @@ export function useProjectTaskCounts(projectId: string) {
 
 /** Tarefas do projeto na tela do projeto: a mesma tabela da tela "Tarefas", com o projeto fixo. */
 export function ProjectTasksCard({ projectId }: { projectId: string }) {
-  const [filters, setFilters] = useState<TaskFilters>({});
+  const [filters, setFilters] = useState<TaskFilters>(() => ({ status: readStoredTaskStatus(TASK_STATUS_STORAGE.project) }));
   return (
     <Card className="mt-6">
       <CardHeader className="flex-row items-start justify-between gap-3">
@@ -127,7 +160,7 @@ export function ProjectTasksCard({ projectId }: { projectId: string }) {
         </div>
       </CardHeader>
       <CardContent>
-        <TaskBoard filters={filters} onFiltersChange={setFilters} projectId={projectId} />
+        <TaskBoard filters={filters} onFiltersChange={setFilters} projectId={projectId} statusStorageKey={TASK_STATUS_STORAGE.project} />
       </CardContent>
     </Card>
   );
@@ -138,7 +171,6 @@ const hasFilters = (f: Omit<TaskFilters, 'status'>) => Object.entries(f).some(([
 function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFilters; onChange: (p: Partial<TaskFilters>) => void; hideProject: boolean }) {
   const { session } = useAuth();
   const projects = useProjects();
-  const residents = useQuery({ queryKey: ['residents'], queryFn: () => api<ResidentListItem[]>('/residents'), enabled: canBook(session?.user.role) });
   const members = useQuery({ queryKey: ['organization', 'members'], queryFn: () => api<Member[]>('/organization/members') });
   const active = Object.entries(f).some(([k, v]) => k !== 'status' && !!v);
   const sortedProjects = [...(projects.data ?? [])].sort(
@@ -146,9 +178,8 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
   );
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtros">
-      <Input type="search" className="min-w-48 flex-1 basis-56" aria-label="Buscar tarefa" placeholder="Buscar tarefa" value={f.q ?? ''} onChange={(e) => onChange({ q: e.target.value || undefined })} />
       {hideProject ? null : (
-        <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Projeto" value={f.projectId ?? ''} onChange={(e) => onChange({ projectId: e.target.value || undefined })}>
+        <Select className="w-full sm:w-auto sm:min-w-0 sm:flex-1 sm:max-w-60" aria-label="Projeto" value={f.projectId ?? ''} onChange={(e) => onChange({ projectId: e.target.value || undefined })}>
           <option value="">Todos os projetos</option>
           <option value="none">Sem projeto</option>
           {sortedProjects.map((p) => (
@@ -159,15 +190,15 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
           ))}
         </Select>
       )}
-      <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Responsável" value={f.residentId ?? ''} onChange={(e) => onChange({ residentId: e.target.value || undefined })}>
+      <Select className="w-full sm:w-auto sm:min-w-0 sm:flex-1 sm:max-w-60" aria-label="Responsável" value={f.assigneeId ?? ''} onChange={(e) => onChange({ assigneeId: e.target.value || undefined })}>
         <option value="">Todos os responsáveis</option>
-        {(residents.data ?? []).map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.name}
+        {(members.data ?? []).map((m) => (
+          <option key={m.memberId} value={m.memberId}>
+            {m.name}
           </option>
         ))}
       </Select>
-      <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Complexidade" value={f.complexity ?? ''} onChange={(e) => onChange({ complexity: (e.target.value || undefined) as TaskFilters['complexity'] })}>
+      <Select className="w-full sm:w-auto sm:min-w-0 sm:flex-1 sm:max-w-60" aria-label="Complexidade" value={f.complexity ?? ''} onChange={(e) => onChange({ complexity: (e.target.value || undefined) as TaskFilters['complexity'] })}>
         <option value="">Toda complexidade</option>
         {TASK_COMPLEXITIES.map((c) => (
           <option key={c} value={c}>
@@ -175,7 +206,7 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
           </option>
         ))}
       </Select>
-      <Select className="w-full sm:w-auto sm:max-w-56" aria-label="Quem realizou" value={f.completedBy ?? ''} onChange={(e) => onChange({ completedBy: e.target.value || undefined })}>
+      <Select className="w-full sm:w-auto sm:min-w-0 sm:flex-1 sm:max-w-60" aria-label="Quem realizou" value={f.completedBy ?? ''} onChange={(e) => onChange({ completedBy: e.target.value || undefined })}>
         <option value="">Realizada por qualquer um</option>
         {(members.data ?? []).map((m) => (
           <option key={m.memberId} value={m.memberId}>
@@ -183,18 +214,16 @@ function TaskFiltersBar({ filters: f, onChange, hideProject }: { filters: TaskFi
           </option>
         ))}
       </Select>
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground" role="group" aria-label="Período">
         <span className="shrink-0">De</span>
         <Input type="date" className="w-auto" aria-label="Data inicial" value={f.from ?? ''} onChange={(e) => onChange({ from: e.target.value || undefined })} />
-      </label>
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="shrink-0">Até</span>
+        <span className="shrink-0">até</span>
         <Input type="date" className="w-auto" aria-label="Data final" value={f.to ?? ''} onChange={(e) => onChange({ to: e.target.value || undefined })} />
-      </label>
+      </div>
       {active ? (
         <Button
           variant="ghost"
-          onClick={() => onChange({ q: undefined, projectId: undefined, residentId: undefined, complexity: undefined, completedBy: undefined, from: undefined, to: undefined })}
+          onClick={() => onChange({ q: undefined, projectId: undefined, assigneeId: undefined, complexity: undefined, completedBy: undefined, from: undefined, to: undefined })}
         >
           <X aria-hidden /> Limpar filtros
         </Button>
@@ -208,9 +237,9 @@ function Assignees({ task: t }: { task: Task }) {
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {t.assignees.map((a) => (
-        <span key={a.id} className="flex items-center gap-1.5">
-          <ResidentPhoto resident={a} className="size-6 text-[10px]" />
-          <span className="whitespace-nowrap">{a.name}</span>
+        <span key={a.memberId} className="flex items-center gap-1.5">
+          <UserAvatar userId={a.userId} name={a.name} version={a.avatarUpdatedAt} className="size-6 text-[10px]" />
+          <span className="whitespace-nowrap">{a.name.split(' ')[0]}</span>
         </span>
       ))}
     </span>

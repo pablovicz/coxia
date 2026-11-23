@@ -1104,8 +1104,8 @@ export interface Task {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  /** Residentes responsáveis. */
-  assignees: Array<{ id: string; name: string; photoUpdatedAt: string | null; contact: { photoUrl: string | null } }>;
+  /** Responsáveis (equipe). */
+  assignees: TaskPerson[];
   /** Quem da equipe realizou. */
   completers: TaskPerson[];
   notesCount: number;
@@ -1130,7 +1130,7 @@ export interface TaskList {
 export interface TaskFilters {
   status?: TaskStatus;
   projectId?: string;
-  residentId?: string;
+  assigneeId?: string;
   complexity?: TaskComplexity;
   completedBy?: string;
   from?: string;

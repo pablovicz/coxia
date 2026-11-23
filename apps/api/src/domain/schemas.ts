@@ -248,13 +248,13 @@ export const teamTaskSchema = z.object({
   complexity: teamTaskComplexity,
   status: z.enum(['pending', 'in_progress']).optional(),
   projectId: z.string().nullish(),
-  residentIds: z.array(z.string().min(1)).max(50).optional(),
+  assigneeIds: z.array(z.string().min(1)).max(50).optional(),
 });
 
 export const teamTasksQuery = z.object({
   status: z.enum(['pending', 'in_progress', 'done']).optional(),
   projectId: z.string().min(1).optional(),
-  residentId: z.string().min(1).optional(),
+  assigneeId: z.string().min(1).optional(),
   complexity: teamTaskComplexity.optional(),
   completedBy: z.string().min(1).optional(),
   from: isoDate.optional(),

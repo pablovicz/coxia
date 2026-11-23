@@ -12,8 +12,8 @@ export interface TeamTaskFilters {
   status?: TaskStatus;
   /** Id do projeto, ou "none" para as tarefas sem projeto. */
   projectId?: string;
-  /** Residente responsável. */
-  residentId?: string;
+  /** Pessoa da equipe responsável (OrganizationMember.id). */
+  assigneeId?: string;
   complexity?: TaskComplexity;
   /** Pessoa da equipe (OrganizationMember.id) que realizou. */
   completedBy?: string;
@@ -31,7 +31,8 @@ export interface TeamTaskInput {
   /** Ao criar/editar só pendente ou em andamento; concluir é pelo encerramento. */
   status?: Exclude<TaskStatus, 'done'>;
   projectId?: string | null;
-  residentIds?: string[];
+  /** Responsáveis: pessoas da equipe (OrganizationMember.id). */
+  assigneeIds?: string[];
 }
 
 export interface TeamTaskCompletionInput {
@@ -43,7 +44,7 @@ export interface TeamTaskCompletionInput {
 
 const ROW_INCLUDE = {
   project: { select: { id: true, title: true } },
-  assignees: { include: { resident: { select: { id: true, name: true, photoUpdatedAt: true, contact: { select: { photoUrl: true } } } } } },
+  assignees: { include: { member: { select: { id: true, user: { select: { id: true, name: true, avatarUpdatedAt: true } } } } } },
   completers: { include: { member: { select: { id: true, user: { select: { id: true, name: true, avatarUpdatedAt: true } } } } } },
   _count: { select: { notes: true } },
 } satisfies Prisma.TaskInclude;
@@ -63,7 +64,7 @@ function toRow(t: TaskRow) {
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
     assignees: t.assignees
-      .map((a) => ({ id: a.resident.id, name: a.resident.name, photoUpdatedAt: a.resident.photoUpdatedAt, contact: { photoUrl: a.resident.contact.photoUrl } }))
+      .map((a) => ({ memberId: a.member.id, userId: a.member.user.id, name: a.member.user.name, avatarUpdatedAt: a.member.user.avatarUpdatedAt }))
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
     completers: t.completers
       .map((c) => ({ memberId: c.member.id, userId: c.member.user.id, name: c.member.user.name, avatarUpdatedAt: c.member.user.avatarUpdatedAt }))
@@ -86,7 +87,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Tarefas da equipe (módulo "Tarefas"). Independem das tarefas que a IA extrai do grupo do WhatsApp
- * (ProjectTask): têm complexidade, responsáveis residentes, observações e encerramento com quem realizou.
+ * (ProjectTask): têm complexidade, responsáveis da equipe, observações e encerramento com quem realizou.
  */
 export class TaskService {
   constructor(private readonly db: Db) {}
@@ -134,7 +135,7 @@ export class TaskService {
   async create(organizationId: string, input: TeamTaskInput, actor: Actor) {
     const { title, description } = normalizeTaskText(input);
     const projectId = await this.validProject(organizationId, input.projectId);
-    const residentIds = await this.validResidents(organizationId, input.residentIds);
+    const assigneeIds = await this.validMembers(organizationId, input.assigneeIds);
     const id = await this.db.$transaction(async (tx) => {
       const t = await tx.task.create({
         data: {
@@ -145,10 +146,10 @@ export class TaskService {
           status: input.status ?? 'pending',
           projectId,
           createdByUserId: actor.userId ?? null,
-          assignees: { create: residentIds.map((residentId) => ({ residentId })) },
+          assignees: { create: assigneeIds.map((memberId) => ({ memberId })) },
         },
       });
-      await audit(tx, organizationId, actor, 'task.create', 'task', t.id, { after: { title, complexity: t.complexity, status: t.status, projectId, residentIds } });
+      await audit(tx, organizationId, actor, 'task.create', 'task', t.id, { after: { title, complexity: t.complexity, status: t.status, projectId, assigneeIds } });
       return t.id;
     });
     return this.get(organizationId, id);
@@ -158,16 +159,16 @@ export class TaskService {
     const before = await this.get(organizationId, id);
     const { title, description } = normalizeTaskText(input);
     const projectId = await this.validProject(organizationId, input.projectId);
-    const residentIds = await this.validResidents(organizationId, input.residentIds);
+    const assigneeIds = await this.validMembers(organizationId, input.assigneeIds);
     // Concluída continua concluída ao editar; para reabrir há "Reabrir".
     const status = before.status === 'done' ? 'done' : (input.status ?? before.status);
     await this.db.$transaction(async (tx) => {
       await tx.task.update({ where: { id }, data: { title, description, complexity: input.complexity, status, projectId } });
       await tx.taskAssignee.deleteMany({ where: { taskId: id } });
-      if (residentIds.length) await tx.taskAssignee.createMany({ data: residentIds.map((residentId) => ({ taskId: id, residentId })) });
+      if (assigneeIds.length) await tx.taskAssignee.createMany({ data: assigneeIds.map((memberId) => ({ taskId: id, memberId })) });
       await audit(tx, organizationId, actor, 'task.update', 'task', id, {
-        before: { title: before.title, description: before.description, complexity: before.complexity, status: before.status, projectId: before.project?.id ?? null, residentIds: before.assignees.map((a) => a.id) },
-        after: { title, description, complexity: input.complexity, status, projectId, residentIds },
+        before: { title: before.title, description: before.description, complexity: before.complexity, status: before.status, projectId: before.project?.id ?? null, assigneeIds: before.assignees.map((a) => a.memberId) },
+        after: { title, description, complexity: input.complexity, status, projectId, assigneeIds },
       });
     });
     return this.get(organizationId, id);
@@ -179,11 +180,7 @@ export class TaskService {
     const org = await getOrganization(this.db, organizationId);
     const completedOn = input.completedOn || localDateOf(new Date(), org.timezone);
     if (!ISO_DATE.test(completedOn) || Number.isNaN(fromIsoDate(completedOn).getTime())) throw new DomainError('validation', 'Data de realização inválida');
-    const memberIds = [...new Set(input.memberIds ?? [])];
-    if (memberIds.length) {
-      const found = await this.db.organizationMember.count({ where: { organizationId, id: { in: memberIds } } });
-      if (found !== memberIds.length) throw new DomainError('not_found', 'Pessoa da equipe não encontrada');
-    }
+    const memberIds = await this.validMembers(organizationId, input.memberIds);
     await this.db.$transaction(async (tx) => {
       await tx.task.update({ where: { id }, data: { status: 'done', completedOn: fromIsoDate(completedOn), completedAt: before.completedAt ?? new Date() } });
       await tx.taskCompleter.deleteMany({ where: { taskId: id } });
@@ -249,7 +246,7 @@ export class TaskService {
     const and: Prisma.TaskWhereInput[] = [];
     if (f.projectId === 'none') and.push({ projectId: null });
     else if (f.projectId) and.push({ projectId: f.projectId });
-    if (f.residentId) and.push({ assignees: { some: { residentId: f.residentId } } });
+    if (f.assigneeId) and.push({ assignees: { some: { memberId: f.assigneeId } } });
     if (f.complexity) and.push({ complexity: f.complexity });
     if (f.completedBy) and.push({ completers: { some: { memberId: f.completedBy } } });
     const q = f.q?.trim();
@@ -278,11 +275,11 @@ export class TaskService {
     return p.id;
   }
 
-  private async validResidents(organizationId: string, ids?: string[]) {
-    const residentIds = [...new Set(ids ?? [])];
-    if (!residentIds.length) return [];
-    const found = await this.db.resident.count({ where: { organizationId, id: { in: residentIds } } });
-    if (found !== residentIds.length) throw new DomainError('not_found', 'Residente não encontrado');
-    return residentIds;
+  private async validMembers(organizationId: string, ids?: string[]) {
+    const memberIds = [...new Set(ids ?? [])];
+    if (!memberIds.length) return [];
+    const found = await this.db.organizationMember.count({ where: { organizationId, id: { in: memberIds } } });
+    if (found !== memberIds.length) throw new DomainError('not_found', 'Pessoa da equipe não encontrada');
+    return memberIds;
   }
 }

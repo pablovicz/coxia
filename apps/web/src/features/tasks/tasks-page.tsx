@@ -1,13 +1,13 @@
 import { useSearchParams } from 'react-router';
 import { PageHeader } from '@coxia/ui/components/empty-state';
 import { TASK_COMPLEXITIES, TASK_STATUSES, type TaskComplexity, type TaskFilters, type TaskStatus } from '@/lib/api';
-import { TaskBoard } from './task-board';
+import { readStoredTaskStatus, TASK_STATUS_STORAGE, TaskBoard } from './task-board';
 
 /** Nome do filtro na URL (em português, como o resto do painel). */
 const PARAM: Record<keyof TaskFilters, string> = {
   status: 'situacao',
   projectId: 'projeto',
-  residentId: 'responsavel',
+  assigneeId: 'responsavel',
   complexity: 'complexidade',
   completedBy: 'realizou',
   from: 'de',
@@ -22,6 +22,8 @@ function readFilters(params: URLSearchParams): TaskFilters {
     if (v) (f as Record<string, string>)[key] = v;
   }
   if (f.status && !TASK_STATUSES.includes(f.status as TaskStatus)) delete f.status;
+  // Sem aba na URL: a última escolhida neste navegador.
+  if (!params.has(PARAM.status)) f.status = readStoredTaskStatus(TASK_STATUS_STORAGE.page);
   if (f.complexity && !TASK_COMPLEXITIES.includes(f.complexity as TaskComplexity)) delete f.complexity;
   return f;
 }
@@ -38,7 +40,7 @@ export function TasksPage() {
   return (
     <>
       <PageHeader eyebrow="Equipe" title="Tarefas." description="O que precisa ser feito, por quem e em que pé está. Com ou sem projeto." />
-      <TaskBoard filters={filters} onFiltersChange={onChange} />
+      <TaskBoard filters={filters} onFiltersChange={onChange} statusStorageKey={TASK_STATUS_STORAGE.page} />
     </>
   );
 }

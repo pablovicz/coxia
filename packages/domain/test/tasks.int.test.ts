@@ -1,5 +1,5 @@
 /**
- * Módulo de Tarefas: criar com responsáveis (residentes) e projeto opcional, encerrar com data e
+ * Módulo de Tarefas: criar com responsáveis (equipe) e projeto opcional, encerrar com data e
  * quem realizou, reabrir, observações e filtros (com as contagens das abas).
  */
 import { randomUUID } from 'node:crypto';
@@ -13,7 +13,6 @@ const suffix = String(Date.now()).slice(-7);
 let orgId: string;
 let otherOrgId: string;
 let projectId: string;
-let residentId: string;
 let anaMember: string;
 let brunoMember: string;
 let ana: Actor;
@@ -40,8 +39,6 @@ beforeAll(async () => {
   ana = { channel: 'web', userId: a.userId };
   bruno = { channel: 'web', userId: b.userId };
   projectId = (await db.project.create({ data: { organizationId: orgId, title: 'Natal', status: 'active' } })).id;
-  const contact = await db.contact.create({ data: { organizationId: orgId, phone: `5541${suffix}01`, name: 'Nat' } });
-  residentId = (await db.resident.create({ data: { organizationId: orgId, contactId: contact.id, name: 'Nat' } })).id;
 });
 
 afterAll(async () => {
@@ -51,12 +48,12 @@ afterAll(async () => {
 });
 
 describe('tarefas', () => {
-  it('cria com projeto e responsáveis; título vazio, residente ou projeto de outra casa recusados', async () => {
-    const t = await tasks.create(orgId, { title: '  Fazer   bolinhas ', complexity: 'high', projectId, residentIds: [residentId] }, ana);
+  it('cria com projeto e responsáveis; título vazio, pessoa ou projeto de outra casa recusados', async () => {
+    const t = await tasks.create(orgId, { title: '  Fazer   bolinhas ', complexity: 'high', projectId, assigneeIds: [brunoMember] }, ana);
     expect(t).toMatchObject({ title: 'Fazer bolinhas', complexity: 'high', status: 'pending', project: { id: projectId, title: 'Natal' }, notesCount: 0 });
-    expect(t.assignees.map((a) => a.id)).toEqual([residentId]);
+    expect(t.assignees.map((a) => a.memberId)).toEqual([brunoMember]);
     await expectDomainError(tasks.create(orgId, { title: '  ', complexity: 'low' }, ana), 'validation');
-    await expectDomainError(tasks.create(otherOrgId, { title: 'X', complexity: 'low', residentIds: [residentId] }, ana), 'not_found');
+    await expectDomainError(tasks.create(otherOrgId, { title: 'X', complexity: 'low', assigneeIds: [brunoMember] }, ana), 'not_found');
     await expectDomainError(tasks.create(otherOrgId, { title: 'X', complexity: 'low', projectId }, ana), 'not_found');
   });
 
@@ -95,7 +92,7 @@ describe('tarefas', () => {
     expect(byProject.tasks.map((t) => t.title)).toEqual(['Fazer bolinhas']);
     const none = await tasks.list(orgId, { projectId: 'none' });
     expect(none.tasks.every((t) => t.project === null)).toBe(true);
-    expect((await tasks.list(orgId, { residentId })).tasks).toHaveLength(1);
+    expect((await tasks.list(orgId, { assigneeId: brunoMember })).tasks).toHaveLength(1);
     expect((await tasks.list(orgId, { complexity: 'high' })).tasks.map((t) => t.title).sort()).toEqual(['Fazer bolinhas', 'Montar a árvore']);
     expect((await tasks.list(orgId, { completedBy: anaMember })).tasks.map((t) => t.title)).toEqual(['Comprar EPIs e luvas']);
     expect((await tasks.list(orgId, { q: 'árvore' })).tasks).toHaveLength(1);

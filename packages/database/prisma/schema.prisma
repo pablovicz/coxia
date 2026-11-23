@@ -311,6 +311,7 @@ model OrganizationMember {
   organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   appointments   AppointmentParticipant[]
+  assignedTasks  TaskAssignee[]
   completedTasks TaskCompleter[]
   taskNotes      TaskNote[]
 
@@ -1300,7 +1301,6 @@ model Resident {
   contact      Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
   contracts    ResidentContract[]
   account      ResidentAccount?
-  tasks        TaskAssignee[]
 
   @@index([organizationId])
   @@map("residents")
@@ -1526,7 +1526,7 @@ enum TaskStatus {
   done
 }
 
-/// Tarefa da equipe, ligada (ou não) a um projeto. Responsáveis são residentes; quem realizou, a equipe.
+/// Tarefa da equipe, ligada (ou não) a um projeto. Responsáveis e quem realizou são da equipe.
 model Task {
   id              String         @id @default(cuid())
   organizationId  String         @map("organization_id")
@@ -1553,16 +1553,16 @@ model Task {
   @@map("tasks")
 }
 
-/// Residente responsável pela tarefa.
+/// Pessoa da equipe responsável pela tarefa.
 model TaskAssignee {
-  taskId     String @map("task_id")
-  residentId String @map("resident_id")
+  taskId   String @map("task_id")
+  memberId String @map("member_id")
 
-  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  resident Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+  task   Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member OrganizationMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
-  @@id([taskId, residentId])
-  @@index([residentId])
+  @@id([taskId, memberId])
+  @@index([memberId])
   @@map("task_assignees")
 }
 

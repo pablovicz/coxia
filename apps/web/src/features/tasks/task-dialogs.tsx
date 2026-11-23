@@ -13,14 +13,12 @@ import { local } from '@coxia/ui/lib/format';
 import { MemberCheckbox } from '@/components/member-checkbox';
 import { UserAvatar } from '@/components/user-avatar';
 import { ProjectPicker } from '@/features/projects/project-picker';
-import { ResidentPhoto } from '@/features/residents/resident-shared';
 import {
   api,
   apiSend,
   canBook,
   canManage,
   type Member,
-  type ResidentListItem,
   TASK_COMPLEXITIES,
   TASK_COMPLEXITY,
   TASK_STATE,
@@ -67,14 +65,13 @@ export function TaskFormDialog({
   const [complexity, setComplexity] = useState<TaskComplexity>(task?.complexity ?? 'medium');
   const [status, setStatus] = useState<FormStatus>(task && task.status !== 'done' ? task.status : 'pending');
   const [project, setProject] = useState<string | null>(task ? (task.project?.id ?? null) : (projectId ?? null));
-  const [residentIds, setResidentIds] = useState<string[]>(task?.assignees.map((a) => a.id) ?? []);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(task?.assignees.map((a) => a.memberId) ?? []);
   const [error, setError] = useState<string | null>(null);
-  const residents = useQuery({ queryKey: ['residents'], queryFn: () => api<ResidentListItem[]>('/residents') });
-  const choices = (residents.data ?? []).filter((r) => r.status === 'active' || residentIds.includes(r.id));
+  const members = useQuery({ queryKey: ['organization', 'members'], queryFn: () => api<Member[]>('/organization/members') });
 
   const save = useTaskMutation(
     () => {
-      const body = { title: title.trim(), description: description.trim() || null, complexity, projectId: project, residentIds, ...(task?.status === 'done' ? {} : { status }) };
+      const body = { title: title.trim(), description: description.trim() || null, complexity, projectId: project, assigneeIds, ...(task?.status === 'done' ? {} : { status }) };
       return task ? apiSend<TaskDetail>(`/tasks/${task.id}`, 'PATCH', body) : apiSend<TaskDetail>('/tasks', 'POST', body);
     },
     () => (task ? 'Tarefa atualizada.' : 'Tarefa criada.'),
@@ -143,24 +140,20 @@ export function TaskFormDialog({
           <ProjectPicker label="Projeto" value={project} onChange={setProject} />
         </div>
         <fieldset className="flex flex-col gap-1">
-          <legend className="mb-1 text-sm font-medium">Responsáveis (residentes)</legend>
-          {residents.isPending ? (
+          <legend className="mb-1 text-sm font-medium">Responsáveis</legend>
+          {members.isPending ? (
             <Skeleton className="h-24" />
-          ) : choices.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhum residente cadastrado.</p>
           ) : (
             <div className="grid max-h-80 gap-0.5 overflow-y-auto rounded-sm border p-2">
-              {choices.map((r) => (
-                <label key={r.id} className="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-5 accent-[var(--primary)]"
-                    checked={residentIds.includes(r.id)}
-                    onChange={(e) => setResidentIds((ids) => (e.target.checked ? [...ids, r.id] : ids.filter((x) => x !== r.id)))}
-                  />
-                  <ResidentPhoto resident={r} className="size-7 text-[11px]" />
-                  {r.name}
-                </label>
+              {(members.data ?? []).map((m) => (
+                <MemberCheckbox
+                  key={m.memberId}
+                  userId={m.userId}
+                  name={m.name}
+                  avatarUpdatedAt={m.avatarUpdatedAt}
+                  checked={assigneeIds.includes(m.memberId)}
+                  onChange={(v) => setAssigneeIds((ids) => (v ? [...ids, m.memberId] : ids.filter((x) => x !== m.memberId)))}
+                />
               ))}
             </div>
           )}
@@ -247,7 +240,7 @@ export function TaskDetailDialog({ taskId, onClose }: { taskId: string; onClose:
         description: task.description,
         complexity: task.complexity,
         projectId: task.project?.id ?? null,
-        residentIds: task.assignees.map((a) => a.id),
+        assigneeIds: task.assignees.map((a) => a.memberId),
         status: 'in_progress',
       }),
     (task) => `Em andamento: ${task.title}.`,
@@ -341,8 +334,8 @@ export function TaskDetailDialog({ taskId, onClose }: { taskId: string; onClose:
               <dd className="flex flex-col gap-1.5">
                 {t.assignees.length
                   ? t.assignees.map((a) => (
-                      <span key={a.id} className="flex items-center gap-2">
-                        <ResidentPhoto resident={a} className="size-6 text-[10px]" /> {a.name}
+                      <span key={a.memberId} className="flex items-center gap-2">
+                        <UserAvatar userId={a.userId} name={a.name} version={a.avatarUpdatedAt} className="size-6 text-[10px]" /> {a.name}
                       </span>
                     ))
                   : 'Ninguém definido'}
