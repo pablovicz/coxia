@@ -1,16 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, FileAudio, ListChecks, MessageCircle, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react';
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { ChevronLeft, FileAudio, MessageCircle, Paperclip, Pencil, Trash2 } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
-import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
+import { PageHeader } from '@coxia/ui/components/empty-state';
 import { Badge } from '@coxia/ui/components/ui/badge';
 import { Button } from '@coxia/ui/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@coxia/ui/components/ui/card';
 import { ProjectIncomesCard } from '@/features/finance/incomes';
 import { Dialog } from '@coxia/ui/components/ui/dialog';
-import { Checkbox, Field } from '@coxia/ui/components/ui/field';
-import { Input, Skeleton } from '@coxia/ui/components/ui/input';
+import { Checkbox } from '@coxia/ui/components/ui/field';
+import { Skeleton } from '@coxia/ui/components/ui/input';
 import {
   api,
   ApiError,
@@ -23,12 +23,13 @@ import {
   type ProjectSuggestion,
   type ProjectTask,
 } from '@/lib/api';
-import { formatBRL, formatPhone, local, todayIn } from '@coxia/ui/lib/format';
+import { formatBRL, formatPhone, local } from '@coxia/ui/lib/format';
 import { quoteServices, whatsappLink } from '@/features/quotes/quote-requests-page';
 import { useAuth } from '@/providers/auth-provider';
 import { CreateWhatsappGroupCard, EditProjectDialog } from './new-project-dialog';
 import { ProjectDocumentsCard } from './project-documents';
-import { EXPENSE_STATUS, PROJECT_STATUS, TASK_STATUS } from './status';
+import { ProjectTasksCard, useProjectTaskCounts } from '@/features/tasks/task-board';
+import { EXPENSE_STATUS, PROJECT_STATUS } from './status';
 
 const dayMonth = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 /** Textos da Coxia usam *negrito* do WhatsApp; no painel, só o texto. */
@@ -40,10 +41,10 @@ export function ProjectDetailPage() {
   const tz = session?.organization.timezone ?? 'America/Sao_Paulo';
   const role = session?.user.role;
   const project = useQuery({ queryKey: ['projects', id], queryFn: () => api<ProjectDetail>(`/projects/${id}`) });
+  const taskCounts = useProjectTaskCounts(id);
   const [closing, setClosing] = useState(false);
   const [editingProject, setEditingProject] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [newTask, setNewTask] = useState(false);
 
   if (project.isPending) {
     return (
@@ -74,8 +75,7 @@ export function ProjectDetailPage() {
   const closed = p.status === 'closed';
   const admin = canManage(role) && !closed;
   const staff = canBook(role) && !closed;
-  const today = todayIn(tz);
-  const openTasks = p.tasks.filter((t) => t.status === 'open');
+  const counts = taskCounts.data?.counts;
   const used = p.totals.paidCents + p.totals.committedCents;
   const report = p.summaries.find((s) => s.kind === 'closing');
   const status = PROJECT_STATUS[p.status];
@@ -127,7 +127,12 @@ export function ProjectDetailPage() {
       ) : null}
 
       <section aria-label="Resumo do projeto" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <MetricCard highlight title="Tarefas abertas" value={String(openTasks.length)} caption={overdueCaption(openTasks, today)} />
+        <MetricCard
+          highlight
+          title="Tarefas abertas"
+          value={counts ? String(counts.pending + counts.in_progress) : '—'}
+          caption={counts ? (counts.in_progress ? `${counts.in_progress} em andamento` : `${counts.done} concluída${counts.done === 1 ? '' : 's'}`) : ' '}
+        />
         <MetricCard title="Para revisar" value={String(p.pendingReview)} caption={p.pendingReview ? 'Sugestões da Coxia' : 'Nada pendente'} />
         <MetricCard
           compact
@@ -143,10 +148,11 @@ export function ProjectDetailPage() {
         />
       </section>
 
+      <ProjectTasksCard projectId={p.id} />
+
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] [&>*]:min-w-0">
         <div className="grid min-w-0 content-start gap-4 [&>*]:min-w-0">
           <ReviewCard project={p} tz={tz} canReviewTasks={staff} canReviewMoney={admin} />
-          <TasksCard project={p} today={today} canEdit={staff} closed={closed} onNew={() => setNewTask(true)} />
           <FinanceCard project={p} tz={tz} canEdit={admin} />
           <ProjectIncomesCard projectId={p.id} tz={tz} canEdit={admin} />
         </div>
@@ -185,7 +191,6 @@ export function ProjectDetailPage() {
       {closing ? <CloseDialog project={p} onClose={() => setClosing(false)} /> : null}
       {editingProject ? <EditProjectDialog project={p} onClose={() => setEditingProject(false)} /> : null}
       {deleting ? <DeleteProjectDialog project={p} onClose={() => setDeleting(false)} /> : null}
-      {newTask ? <TaskDialog projectId={p.id} onClose={() => setNewTask(false)} /> : null}
     </>
   );
 }
@@ -196,11 +201,6 @@ function BackLink() {
       <ChevronLeft size={18} aria-hidden /> Projetos
     </Link>
   );
-}
-
-function overdueCaption(open: ProjectTask[], today: string) {
-  const overdue = open.filter((t) => t.dueDate && t.dueDate < today).length;
-  return overdue ? `${overdue} atrasada${overdue > 1 ? 's' : ''}` : 'Nenhuma atrasada';
 }
 
 function useProjectMutation<V>(projectId: string, fn: (v: V) => Promise<unknown>, success: (v: V) => string) {
@@ -331,77 +331,6 @@ function ReviewCard({ project: p, tz, canReviewTasks, canReviewMoney }: { projec
             );
           })}
         </ul>
-      </CardContent>
-    </Card>
-  );
-}
-
-function TasksCard({ project: p, today, canEdit, closed, onNew }: { project: ProjectDetail; today: string; canEdit: boolean; closed: boolean; onNew: () => void }) {
-  const open = p.tasks.filter((t) => t.status === 'open');
-  const done = p.tasks.filter((t) => t.status === 'done');
-  const update = useProjectMutation(
-    p.id,
-    (v: { t: ProjectTask; status: 'done' | 'open' }) => apiSend(`/projects/${p.id}/tasks/${v.t.id}`, 'PATCH', { status: v.status }),
-    (v) => (v.status === 'done' ? `Concluída: ${v.t.title}.` : `Reaberta: ${v.t.title}.`),
-  );
-  return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3">
-        <div>
-          <CardTitle>Tarefas</CardTitle>
-          <CardDescription>Compromissos assumidos no grupo ou aprovados aqui</CardDescription>
-        </div>
-        {canEdit ? (
-          <Button variant="outline" size="sm" onClick={onNew}>
-            <Plus aria-hidden /> Nova
-          </Button>
-        ) : null}
-      </CardHeader>
-      <CardContent>
-        {open.length === 0 && closed ? (
-          <p className="text-sm text-muted-foreground">Nenhuma tarefa ficou em aberto.</p>
-        ) : open.length === 0 ? (
-          <EmptyState icon={ListChecks} title="Nenhuma tarefa em aberto">
-            Quando alguém disser no grupo “eu faço”, a tarefa aparece aqui.
-          </EmptyState>
-        ) : (
-          <ul className="divide-y">
-            {open.map((t) => {
-              const overdue = !!t.dueDate && t.dueDate < today;
-              return (
-                <li key={t.id} className="flex min-h-14 items-center gap-3 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{t.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {[t.assigneeName ?? 'Sem responsável', t.dueDate ? `até ${dayMonth(t.dueDate)}` : null].filter(Boolean).join(' · ')}
-                    </p>
-                  </div>
-                  {overdue ? <Badge variant="late">! Atrasada</Badge> : null}
-                  {canEdit ? (
-                    <Button variant="outline" loading={update.isPending && update.variables?.t.id === t.id} onClick={() => update.mutate({ t, status: 'done' })}>
-                      Concluir
-                    </Button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {done.length ? (
-          <details className="mt-3 text-sm">
-            <summary className="flex min-h-11 cursor-pointer items-center text-muted-foreground">
-              {done.length} concluída{done.length > 1 ? 's' : ''}
-            </summary>
-            <ul className="grid gap-1 pb-1">
-              {done.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground line-through">{t.title}</span>
-                  <Badge variant={TASK_STATUS.done.variant}>{TASK_STATUS.done.label}</Badge>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
       </CardContent>
     </Card>
   );
@@ -614,7 +543,8 @@ function DeleteProjectDialog({ project: p, onClose }: { project: ProjectDetail; 
 
 function CloseDialog({ project: p, onClose }: { project: ProjectDetail; onClose: () => void }) {
   const qc = useQueryClient();
-  const open = p.tasks.filter((t) => t.status === 'open' || t.status === 'proposed').length;
+  const counts = useProjectTaskCounts(p.id).data?.counts;
+  const open = counts ? counts.pending + counts.in_progress : 0;
   const unsettled = p.expenses.filter((e) => e.status === 'proposed' || e.status === 'confirmed').length;
   const close = useMutation({
     mutationFn: () => apiSend<{ report: string }>(`/projects/${p.id}/close`, 'POST'),
@@ -660,48 +590,6 @@ function CloseDialog({ project: p, onClose }: { project: ProjectDetail; onClose:
       ) : (
         <p className="text-sm text-muted-foreground">Nenhuma pendência em aberto.</p>
       )}
-    </Dialog>
-  );
-}
-
-function TaskDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
-  const [title, setTitle] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [due, setDue] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const create = useProjectMutation(
-    projectId,
-    (body: unknown) => apiSend(`/projects/${projectId}/tasks`, 'POST', body),
-    () => 'Tarefa criada.',
-  );
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!title.trim()) return setError('Informe a tarefa.');
-    create.mutate({ title, assigneeName: assignee || null, dueDate: due || null }, { onSuccess: onClose });
-  }
-  return (
-    <Dialog
-      open
-      onOpenChange={(v) => !v && onClose()}
-      title="Nova tarefa"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button type="submit" form="task-form" loading={create.isPending}>
-            Criar
-          </Button>
-        </>
-      }
-    >
-      <form id="task-form" onSubmit={submit} className="grid gap-4 sm:grid-cols-2" noValidate>
-        <Field label="Tarefa" error={error} className="sm:col-span-2">
-          {(id, describedBy) => <Input id={id} value={title} aria-invalid={!!error} aria-describedby={describedBy} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Fechar o cartaz" />}
-        </Field>
-        <Field label="Responsável">{(id) => <Input id={id} value={assignee} onChange={(e) => setAssignee(e.target.value)} />}</Field>
-        <Field label="Prazo">{(id) => <Input id={id} type="date" value={due} onChange={(e) => setDue(e.target.value)} />}</Field>
-      </form>
     </Dialog>
   );
 }

@@ -17,6 +17,7 @@ import { WhatsappPage } from '@/features/settings/ops-panel';
 import { QuoteRequestsPage } from '@/features/quotes/quote-requests-page';
 import { AgendaPage } from '@/features/rooms/agenda-page';
 import { RoomsPage } from '@/features/rooms/rooms-page';
+import { TasksPage } from '@/features/tasks/tasks-page';
 import { useAuth } from '@/providers/auth-provider';
 
 function RequireAuth() {
@@ -43,6 +44,7 @@ export function App() {
           <Route index element={<HomePage />} />
           <Route path="projetos" element={<ProjectsPage />} />
           <Route path="projetos/:id" element={<ProjectDetailPage />} />
+          <Route path="tarefas" element={<TasksPage />} />
           <Route path="agenda" element={<AgendaPage />} />
           <Route path="salas" element={<RoomsPage />} />
           <Route path="contas" element={<FinanceOverviewPage />} />

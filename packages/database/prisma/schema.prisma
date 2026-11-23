@@ -256,6 +256,7 @@ model Organization {
   aiExecutions           AiExecution[]
   auditEvents            AuditEvent[]
   pendingActions         PendingAction[]
+  tasks                  Task[]
 
   @@map("organizations")
 }
@@ -307,9 +308,11 @@ model OrganizationMember {
   receivesMorningBriefing Boolean    @default(false) @map("receives_morning_briefing")
   createdAt               DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  appointments AppointmentParticipant[]
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments   AppointmentParticipant[]
+  completedTasks TaskCompleter[]
+  taskNotes      TaskNote[]
 
   @@unique([organizationId, userId])
   @@map("organization_members")
@@ -547,6 +550,7 @@ model Project {
   documents    ProjectDocument[]
   quoteRequest QuoteRequest?
   reminders    Reminder[]
+  teamTasks    Task[]
 
   @@index([organizationId, status])
   @@map("projects")
@@ -1296,6 +1300,7 @@ model Resident {
   contact      Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
   contracts    ResidentContract[]
   account      ResidentAccount?
+  tasks        TaskAssignee[]
 
   @@index([organizationId])
   @@map("residents")
@@ -1504,4 +1509,87 @@ model QuoteRequest {
 
   @@index([organizationId, status, createdAt])
   @@map("quote_requests")
+}
+
+// ───────────── Tarefas (módulo da equipe; independe das tarefas do grupo do WhatsApp) ─────────────
+
+enum TaskComplexity {
+  low
+  medium
+  high
+}
+
+/// pendente → em andamento → concluída (pode ser reaberta)
+enum TaskStatus {
+  pending
+  in_progress
+  done
+}
+
+/// Tarefa da equipe, ligada (ou não) a um projeto. Responsáveis são residentes; quem realizou, a equipe.
+model Task {
+  id              String         @id @default(cuid())
+  organizationId  String         @map("organization_id")
+  projectId       String?        @map("project_id")
+  title           String
+  description     String?
+  complexity      TaskComplexity @default(medium)
+  status          TaskStatus     @default(pending)
+  /// Data de realização (informada no encerramento).
+  completedOn     DateTime?      @map("completed_on") @db.Date
+  completedAt     DateTime?      @map("completed_at") @db.Timestamptz(6)
+  createdByUserId String?        @map("created_by_user_id")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assignees    TaskAssignee[]
+  completers   TaskCompleter[]
+  notes        TaskNote[]
+
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@map("tasks")
+}
+
+/// Residente responsável pela tarefa.
+model TaskAssignee {
+  taskId     String @map("task_id")
+  residentId String @map("resident_id")
+
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  resident Resident @relation(fields: [residentId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, residentId])
+  @@index([residentId])
+  @@map("task_assignees")
+}
+
+/// Pessoa da equipe que realizou a tarefa (marcada no encerramento).
+model TaskCompleter {
+  taskId   String @map("task_id")
+  memberId String @map("member_id")
+
+  task   Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  member OrganizationMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, memberId])
+  @@index([memberId])
+  @@map("task_completers")
+}
+
+/// Observação da equipe sobre a tarefa (como um comentário).
+model TaskNote {
+  id             String   @id @default(cuid())
+  taskId         String   @map("task_id")
+  authorMemberId String?  @map("author_member_id")
+  body           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  task   Task                @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author OrganizationMember? @relation(fields: [authorMemberId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@map("task_notes")
 }

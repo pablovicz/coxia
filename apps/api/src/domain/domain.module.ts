@@ -27,6 +27,7 @@ import {
   QuoteRequestService,
   ReminderService,
   SpaceService,
+  TaskService,
 } from '@coxia/domain';
 import bcrypt from 'bcryptjs';
 import { API_ENV, type ApiEnv } from '../config/env';
@@ -35,6 +36,7 @@ import { ResidentController } from '../resident/resident.controller';
 import { ContactTypesController } from './contact-types.controller';
 import { ContractsController } from './contracts.controller';
 import { IncomeProofController } from './income-proof.controller';
+import { TasksController } from './tasks.controller';
 import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -99,13 +101,14 @@ export class DomainErrorFilter implements ExceptionFilter {
     { provide: IncomeService, inject: [PrismaService], useFactory: (db: PrismaService) => new IncomeService(db) },
     { provide: ExpenseCategoryService, inject: [PrismaService], useFactory: (db: PrismaService) => new ExpenseCategoryService(db) },
     { provide: QuoteRequestService, inject: [PrismaService], useFactory: (db: PrismaService) => new QuoteRequestService(db) },
+    { provide: TaskService, inject: [PrismaService], useFactory: (db: PrismaService) => new TaskService(db) },
     { provide: APP_FILTER, useClass: DomainErrorFilter },
   ],
-  exports: [ContactTypeService, ResidentContractService, ResidentBookingService, ResidentAccountService, SpaceService, BookingService, BillingService, ReminderService, AppointmentService, CalendarService, FinanceService, ResidentService, ProjectService, ContactService, IncomeService, ExpenseCategoryService, QuoteRequestService],
+  exports: [ContactTypeService, ResidentContractService, ResidentBookingService, ResidentAccountService, SpaceService, BookingService, BillingService, ReminderService, AppointmentService, CalendarService, FinanceService, ResidentService, ProjectService, ContactService, IncomeService, ExpenseCategoryService, QuoteRequestService, TaskService],
 })
 export class DomainModule {}
 
 @Module({
-  controllers: [ContactTypesController, ContractsController, IncomeProofController, ResidentController, SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController, PublicSpacesController],
+  controllers: [ContactTypesController, ContractsController, IncomeProofController, ResidentController, SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController, PublicSpacesController, TasksController],
 })
 export class DomainHttpModule {}

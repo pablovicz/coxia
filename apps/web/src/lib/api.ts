@@ -465,7 +465,7 @@ export interface Overview {
 // ───────────── Etapa 3: projetos ─────────────
 
 export type ProjectStatus = 'draft' | 'active' | 'closing' | 'closed';
-export type TaskStatus = 'proposed' | 'open' | 'done' | 'cancelled';
+export type ProjectTaskStatus = 'proposed' | 'open' | 'done' | 'cancelled';
 export type ExpenseStatus = 'proposed' | 'confirmed' | 'paid' | 'rejected';
 
 export interface ProjectListItem {
@@ -499,7 +499,7 @@ export interface ProjectTask {
   title: string;
   assigneeName: string | null;
   dueDate: string | null;
-  status: TaskStatus;
+  status: ProjectTaskStatus;
   completedAt: string | null;
   source: Evidence | null;
 }
@@ -1065,4 +1065,80 @@ export async function fetchIncomeProof(incomeId: string): Promise<Blob> {
   const res = await fetch(`${API_URL}/incomes/${incomeId}/proof`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
+}
+
+// ───────────── Tarefas ─────────────
+
+export type TaskStatus = 'pending' | 'in_progress' | 'done';
+export type TaskComplexity = 'low' | 'medium' | 'high';
+
+export const TASK_STATUSES: TaskStatus[] = ['pending', 'in_progress', 'done'];
+export const TASK_STATE: Record<TaskStatus, { label: string; tab: string; variant: 'pending' | 'info' | 'active' }> = {
+  pending: { label: 'Pendente', tab: 'Pendentes', variant: 'pending' },
+  in_progress: { label: 'Em andamento', tab: 'Em andamento', variant: 'info' },
+  done: { label: 'Concluída', tab: 'Concluídas', variant: 'active' },
+};
+export const TASK_COMPLEXITIES: TaskComplexity[] = ['low', 'medium', 'high'];
+export const TASK_COMPLEXITY: Record<TaskComplexity, { label: string; variant: 'neutral' | 'pending' | 'late' }> = {
+  low: { label: 'Baixa', variant: 'neutral' },
+  medium: { label: 'Média', variant: 'pending' },
+  high: { label: 'Alta', variant: 'late' },
+};
+
+export interface TaskPerson {
+  memberId: string;
+  userId: string;
+  name: string;
+  avatarUpdatedAt: string | null;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  complexity: TaskComplexity;
+  status: TaskStatus;
+  project: { id: string; title: string } | null;
+  /** Data de realização (YYYY-MM-DD). */
+  completedOn: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /** Residentes responsáveis. */
+  assignees: Array<{ id: string; name: string; photoUpdatedAt: string | null; contact: { photoUrl: string | null } }>;
+  /** Quem da equipe realizou. */
+  completers: TaskPerson[];
+  notesCount: number;
+}
+
+export interface TaskNote {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: TaskPerson | null;
+}
+
+export interface TaskDetail extends Task {
+  notes: TaskNote[];
+}
+
+export interface TaskList {
+  tasks: Task[];
+  counts: Record<TaskStatus, number>;
+}
+
+export interface TaskFilters {
+  status?: TaskStatus;
+  projectId?: string;
+  residentId?: string;
+  complexity?: TaskComplexity;
+  completedBy?: string;
+  from?: string;
+  to?: string;
+  q?: string;
+}
+
+export function tasksPath(f: TaskFilters): string {
+  const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => !!v) as Array<[string, string]>).toString();
+  return qs ? `/tasks?${qs}` : '/tasks';
 }
