@@ -1,0 +1,46 @@
+/* react-international-phone com os tokens da Coxia (claro e escuro vêm das variáveis). */
+.coxia-phone {
+  --react-international-phone-height: 2.75rem;
+  --react-international-phone-font-size: 1rem;
+  --react-international-phone-border-radius: var(--radius-sm);
+  --react-international-phone-border-color: var(--input);
+  --react-international-phone-background-color: var(--card);
+  --react-international-phone-text-color: var(--foreground);
+  --react-international-phone-country-selector-background-color: var(--card);
+  --react-international-phone-country-selector-background-color-hover: var(--muted);
+  --react-international-phone-country-selector-arrow-color: var(--muted-foreground);
+  --react-international-phone-dropdown-item-background-color: var(--popover);
+  --react-international-phone-dropdown-item-text-color: var(--foreground);
+  --react-international-phone-dropdown-item-dial-code-color: var(--muted-foreground);
+  --react-international-phone-selected-dropdown-item-background-color: var(--muted);
+  --react-international-phone-selected-dropdown-item-text-color: var(--foreground);
+  --react-international-phone-selected-dropdown-item-dial-code-color: var(--muted-foreground);
+  --react-international-phone-dropdown-preferred-list-divider-color: var(--border);
+  --react-international-phone-dropdown-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  --react-international-phone-disabled-background-color: var(--muted);
+  --react-international-phone-disabled-text-color: var(--muted-foreground);
+  width: 100%;
+}
+.coxia-phone .react-international-phone-input {
+  flex: 1;
+  min-width: 0;
+}
+.coxia-phone .react-international-phone-input:focus-visible,
+.coxia-phone .react-international-phone-country-selector-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 0;
+  position: relative;
+  z-index: 1;
+}
+.coxia-phone .react-international-phone-input[aria-invalid='true'] {
+  border-color: var(--destructive);
+}
+.coxia-phone .react-international-phone-country-selector-dropdown {
+  z-index: 60;
+  max-height: 16rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.coxia-phone-flag {
+  padding: 0 0.5rem;
+}

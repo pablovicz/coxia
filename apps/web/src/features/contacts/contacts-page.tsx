@@ -13,7 +13,8 @@ import { Link } from 'react-router';
 import { api, apiSend, canManage, type Contact, type ContactGroupOption } from '@/lib/api';
 import { formatPhone, local } from '@coxia/ui/lib/format';
 import { WhatsappButton, WhatsappIcon } from '@/components/whatsapp-button';
-import { PHONE_HINT, phoneInputError } from '@/lib/phone';
+import { PhoneField } from '@/components/phone-field';
+import { phoneInputError } from '@/lib/phone';
 import { UserAvatar } from '@/components/user-avatar';
 import { ContactAvatar } from './contact-avatar';
 import { ContactTypeSelect, ContactTypesDialog, useContactTypes } from './contact-types';
@@ -421,9 +422,7 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
     >
       <form id="new-contact" onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <Field label="Nome">{(id) => <Input id={id} value={name} maxLength={120} placeholder="Ex.: Marina (patrocínio)" onChange={(e) => setName(e.target.value)} />}</Field>
-        <Field label="WhatsApp" hint={PHONE_HINT}>
-          {(id, describedBy) => <Input id={id} type="tel" inputMode="tel" autoComplete="tel" value={phone} placeholder="11 98765-4321" aria-describedby={describedBy} onChange={(e) => setPhone(e.target.value)} />}
-        </Field>
+        <Field label="WhatsApp">{(id, describedBy) => <PhoneField id={id} value={phone} describedBy={describedBy} onChange={setPhone} />}</Field>
         <Field label="Tipo (opcional)">{(id) => <ContactTypeSelect id={id} value={typeId} onChange={setTypeId} />}</Field>
         <Field label="Observações (opcional)">{(id) => <Textarea id={id} rows={2} value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} />}</Field>
         {error ? (
