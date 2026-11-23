@@ -209,7 +209,7 @@ export class ContactsController {
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query(v(contactsQuery)) q: z.infer<typeof contactsQuery>) {
-    return this.contacts.list(user.organizationId, { q: q.q, groupId: q.groupId, kind: q.kind, take: q.limit, skip: q.offset });
+    return this.contacts.list(user.organizationId, { q: q.q, groupId: q.groupId, kind: q.kind, typeId: q.typeId, take: q.limit, skip: q.offset });
   }
 
   @Get('groups')

@@ -24,6 +24,7 @@ const contactInclude = {
     orderBy: { joinedAt: 'asc' },
     select: { isAdmin: true, joinedAt: true, group: { select: { id: true, name: true } } },
   },
+  type: { select: { id: true, name: true } },
 } satisfies Prisma.ContactInclude;
 
 /**
@@ -92,7 +93,8 @@ export class ContactService {
   }
 
   /** Busca por nome (sem acento), nome no WhatsApp ou trecho do telefone; filtro por grupo. */
-  async list(organizationId: string, opts: { q?: string; groupId?: string; kind?: 'contact' | 'resident'; take?: number; skip?: number } = {}) {
+  /** `typeId`: um tipo cadastrado, ou "none" para quem não tem tipo. `kind`: residente, lead ou contato comum. */
+  async list(organizationId: string, opts: { q?: string; groupId?: string; kind?: 'contact' | 'resident' | 'lead'; typeId?: string; take?: number; skip?: number } = {}) {
     const q = opts.q?.trim() ?? '';
     const digits = q.replace(/\D/g, '');
     // Só letras, números e espaço: % e _ seriam curingas no LIKE do banco.
@@ -101,6 +103,7 @@ export class ContactService {
       organizationId,
       ...(opts.groupId ? { groups: { some: { groupId: opts.groupId, leftAt: null } } } : {}),
       ...(opts.kind ? { kind: opts.kind } : {}),
+      ...(opts.typeId ? { typeId: opts.typeId === 'none' ? null : opts.typeId } : {}),
       ...(q
         ? {
             OR: [
@@ -133,6 +136,7 @@ export class ContactService {
           orderBy: [{ leftAt: { sort: 'desc', nulls: 'first' } }, { joinedAt: 'asc' }],
           select: { isAdmin: true, joinedAt: true, leftAt: true, group: { select: { id: true, name: true } } },
         },
+        type: { select: { id: true, name: true } },
       },
     });
     if (!contact) throw new DomainError('not_found', 'Contato não encontrado');
@@ -172,16 +176,17 @@ export class ContactService {
   }
 
   /** Cadastro manual de um contato (nome e WhatsApp). Número já cadastrado: conflito com o id dele. */
-  async create(organizationId: string, input: { name: string; phone: string; notes?: string | null }, actor: Actor) {
+  async create(organizationId: string, input: { name: string; phone: string; notes?: string | null; typeId?: string | null }, actor: Actor) {
     const name = input.name?.trim();
     if (!name) throw new DomainError('validation', 'Informe o nome do contato');
     const phone = normalizeBrPhone(input.phone);
     if (!phone || phone.length < 12 || phone.length > 15) throw new DomainError('validation', 'WhatsApp inválido');
     const existing = await this.db.contact.findUnique({ where: { organizationId_phone: { organizationId, phone } } });
     if (existing) throw new DomainError('conflict', 'Este número já está nos contatos', { code: 'contact_exists', contactId: existing.id });
+    const typeId = await this.validType(organizationId, input.typeId);
     try {
       const created = await this.db.$transaction(async (tx) => {
-        const c = await tx.contact.create({ data: { organizationId, phone, name, notes: input.notes?.trim() || null, searchName: searchOf(name, null) } });
+        const c = await tx.contact.create({ data: { organizationId, phone, name, notes: input.notes?.trim() || null, typeId, searchName: searchOf(name, null) } });
         await audit(tx, organizationId, actor, 'contact.create', 'contact', c.id, { after: { phone, name } });
         return c;
       });
@@ -193,15 +198,16 @@ export class ContactService {
   }
 
   /** A equipe corrige o nome (o do WhatsApp pode ser apelido) e anota observações. */
-  async update(organizationId: string, contactId: string, patch: { name?: string | null; notes?: string | null }, actor: Actor) {
+  async update(organizationId: string, contactId: string, patch: { name?: string | null; notes?: string | null; typeId?: string | null }, actor: Actor) {
     const before = await this.get(organizationId, contactId);
     const name = patch.name !== undefined ? patch.name?.trim() || null : before.name;
     const notes = patch.notes !== undefined ? patch.notes?.trim() || null : before.notes;
+    const typeId = patch.typeId !== undefined ? await this.validType(organizationId, patch.typeId) : before.typeId;
     await this.db.$transaction(async (tx) => {
-      await tx.contact.update({ where: { id: contactId }, data: { name, notes, searchName: searchOf(name, before.whatsappName) } });
+      await tx.contact.update({ where: { id: contactId }, data: { name, notes, typeId, searchName: searchOf(name, before.whatsappName) } });
       await audit(tx, organizationId, actor, 'contact.update', 'contact', contactId, {
-        before: { name: before.name, notes: before.notes },
-        after: { name, notes },
+        before: { name: before.name, notes: before.notes, typeId: before.typeId },
+        after: { name, notes, typeId },
       });
     });
     return this.get(organizationId, contactId);
@@ -219,6 +225,13 @@ export class ContactService {
       where: { id: contactId },
       data: { whatsappName, photoUrl: profile.photoUrl, profileFetchedAt: at, searchName: searchOf(c.name, whatsappName) },
     });
+  }
+
+  private async validType(organizationId: string, typeId: string | null | undefined) {
+    if (!typeId) return null;
+    const t = await this.db.contactType.findFirst({ where: { id: typeId, organizationId } });
+    if (!t) throw new DomainError('not_found', 'Tipo de contato não encontrado');
+    return t.id;
   }
 
   /** Grupos para o filtro, com quantas pessoas estão em cada um agora. */

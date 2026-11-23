@@ -2,6 +2,7 @@ export * from './common';
 export * from './availability';
 export * from './spaces';
 export * from './contacts';
+export * from './contact-types';
 export * from './incomes';
 export * from './expense-categories';
 export * from './bookings';

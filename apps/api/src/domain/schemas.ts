@@ -187,7 +187,9 @@ export const eventReviewSchema = z.object({ decision: z.enum(['confirm', 'reject
 export const contactsQuery = z.object({
   q: z.string().max(80).optional(),
   groupId: z.string().optional(),
-  kind: z.enum(['contact', 'resident']).optional(),
+  kind: z.enum(['contact', 'resident', 'lead']).optional(),
+  /** Tipo cadastrado; "none" = sem tipo. */
+  typeId: z.string().max(40).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
@@ -196,7 +198,10 @@ export const contactCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   phone: z.string().min(8).max(30),
   notes: z.string().max(2000).nullish(),
+  typeId: z.string().max(40).nullish(),
 });
+
+export const contactTypeSchema = z.object({ name: z.string().trim().min(1).max(60) });
 
 export const residentSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -211,6 +216,7 @@ export const residentSchema = z.object({
 export const contactPatchSchema = z.object({
   name: z.string().max(120).nullish(),
   notes: z.string().max(2000).nullish(),
+  typeId: z.string().max(40).nullish(),
 });
 
 export const incomeSchema = z.object({

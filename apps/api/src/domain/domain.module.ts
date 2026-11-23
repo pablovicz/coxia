@@ -13,6 +13,7 @@ import {
   BookingService,
   CalendarService,
   ContactService,
+  ContactTypeService,
   type DomainEventPublisher,
   FinanceService,
   ResidentAccountService,
@@ -31,6 +32,7 @@ import bcrypt from 'bcryptjs';
 import { API_ENV, type ApiEnv } from '../config/env';
 import { DOMAIN_EVENTS } from '../events/events.module';
 import { ResidentController } from '../resident/resident.controller';
+import { ContactTypesController } from './contact-types.controller';
 import { ContractsController } from './contracts.controller';
 import { IncomeProofController } from './income-proof.controller';
 import type { Response } from 'express';
@@ -93,16 +95,17 @@ export class DomainErrorFilter implements ExceptionFilter {
     { provide: ResidentService, inject: [PrismaService], useFactory: (db: PrismaService) => new ResidentService(db) },
     { provide: ProjectService, inject: [PrismaService], useFactory: (db: PrismaService) => new ProjectService(db) },
     { provide: ContactService, inject: [PrismaService], useFactory: (db: PrismaService) => new ContactService(db) },
+    { provide: ContactTypeService, inject: [PrismaService], useFactory: (db: PrismaService) => new ContactTypeService(db) },
     { provide: IncomeService, inject: [PrismaService], useFactory: (db: PrismaService) => new IncomeService(db) },
     { provide: ExpenseCategoryService, inject: [PrismaService], useFactory: (db: PrismaService) => new ExpenseCategoryService(db) },
     { provide: QuoteRequestService, inject: [PrismaService], useFactory: (db: PrismaService) => new QuoteRequestService(db) },
     { provide: APP_FILTER, useClass: DomainErrorFilter },
   ],
-  exports: [ResidentContractService, ResidentBookingService, ResidentAccountService, SpaceService, BookingService, BillingService, ReminderService, AppointmentService, CalendarService, FinanceService, ResidentService, ProjectService, ContactService, IncomeService, ExpenseCategoryService, QuoteRequestService],
+  exports: [ContactTypeService, ResidentContractService, ResidentBookingService, ResidentAccountService, SpaceService, BookingService, BillingService, ReminderService, AppointmentService, CalendarService, FinanceService, ResidentService, ProjectService, ContactService, IncomeService, ExpenseCategoryService, QuoteRequestService],
 })
 export class DomainModule {}
 
 @Module({
-  controllers: [ContractsController, IncomeProofController, ResidentController, SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController, PublicSpacesController],
+  controllers: [ContactTypesController, ContractsController, IncomeProofController, ResidentController, SpacesController, BookingsController, BillsController, RemindersController, AppointmentsController, CalendarController, FinanceController, ResidentsController, OverviewController, ProjectsController, ContactsController, IncomesController, ExpenseCategoriesController, QuoteRequestsController, PublicQuoteController, PublicSpacesController],
 })
 export class DomainHttpModule {}

@@ -54,6 +54,11 @@ function CycleLine({ b, label }: { b: CycleBalance; label: string }) {
         <div className="room-fill h-full" style={{ width: pct(b.usedMinutes) }} />
         <div className="room-soft h-full" style={{ width: pct(b.reservedMinutes) }} />
       </div>
+      {b.payment?.status === 'pending' && b.grantedMinutes === 0 ? (
+        <p className="mt-1 text-xs font-medium text-warning dark:text-warning">Horas liberadas quando a mensalidade (vence {brDayMonth(b.payment.dueOn)}) for marcada como paga.</p>
+      ) : b.payment?.status === 'none' && b.grantedMinutes === 0 ? (
+        <p className="mt-1 text-xs text-muted-foreground">Sem mensalidade neste ciclo: sem horas (começam no próximo ciclo pago).</p>
+      ) : null}
       <p className="tabular mt-1 text-xs text-muted-foreground">
         {formatHours(b.grantedMinutes)} do ciclo{b.adjustedMinutes ? ` ${b.adjustedMinutes > 0 ? '+' : ''}${formatHours(b.adjustedMinutes)} ajuste` : ''} · {formatHours(b.usedMinutes)} usadas · {formatHours(b.reservedMinutes)} reservadas · renova {brDayMonth(b.renewsOn)}
       </p>

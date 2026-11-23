@@ -1,13 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, FolderKanban, MessageCircle } from 'lucide-react';
+import { FolderKanban, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router';
 import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
 import { Badge } from '@coxia/ui/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, MetricCard } from '@coxia/ui/components/ui/card';
 import { Skeleton } from '@coxia/ui/components/ui/input';
 import { api, canManage, type Overview, type WhatsappConnection } from '@/lib/api';
-import { formatBRL, formatDueDate, formatRange } from '@coxia/ui/lib/format';
+import { formatBRL, formatDueDate } from '@coxia/ui/lib/format';
 import { useAuth } from '@/providers/auth-provider';
+import { TodayAgenda } from './today-agenda';
 
 function greeting(date: Date, timezone: string): string {
   const hour = Number(new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hourCycle: 'h23', timeZone: timezone }).format(date));
@@ -60,41 +61,19 @@ export function HomePage() {
           <CardHeader className="flex-row items-start justify-between">
             <div>
               <CardTitle>Agenda de hoje</CardTitle>
-              <CardDescription>Reservas confirmadas nas salas</CardDescription>
+              <CardDescription>Contas, reservas, compromissos e lembretes do dia</CardDescription>
             </div>
-            <Link to="/agenda" className="-my-3 inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
-              Ver agenda
+            <Link to="/calendario" className="-my-3 inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
+              Ver calendário
             </Link>
           </CardHeader>
           <CardContent>
-            {overview.isPending ? (
-              <div className="flex flex-col gap-3">
-                <Skeleton className="h-14" />
-                <Skeleton className="h-14" />
-              </div>
-            ) : overview.isError ? (
+            {overview.isError ? (
               <p role="alert" className="text-sm text-destructive">
                 Não foi possível carregar a visão geral.
               </p>
-            ) : o!.todayBookings.length === 0 ? (
-              <EmptyState icon={CalendarDays} title="Nenhuma reserva hoje">
-                As salas estão livres. Reserve pelo WhatsApp ou pela agenda.
-              </EmptyState>
             ) : (
-              <ul className="divide-y">
-                {o!.todayBookings.map((b) => (
-                  <li key={b.id} className="flex min-h-14 items-center gap-4 py-3">
-                    <span className="tabular w-20 shrink-0 text-sm font-semibold">{formatRange(b.startAt, b.endAt, timezone)}</span>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{b.booking.title ?? 'Reserva'}</p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {b.space.name}
-                        {b.booking.responsibleName ? ` · ${b.booking.responsibleName}` : ''}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <TodayAgenda bookings={o?.todayBookings} timezone={timezone} loadingBookings={overview.isPending} />
             )}
           </CardContent>
         </Card>

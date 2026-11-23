@@ -10,21 +10,22 @@ import { useLiveUpdates } from '@/lib/use-live-updates';
 import { useAuth } from '@/providers/auth-provider';
 
 export const NAV_ITEMS = [
-  { to: '/', label: 'Visão geral', short: 'Início', icon: House, mobile: true },
-  { to: '/projetos', label: 'Projetos', short: 'Projetos', icon: FolderKanban, mobile: true },
-  { to: '/agenda', label: 'Agenda das salas', short: 'Agenda', icon: CalendarDays, mobile: true },
-  // No celular, Salas abre pelo botão no topo da Agenda (a barra inferior tem 4 itens).
-  { to: '/salas', label: 'Salas', short: 'Salas', icon: DoorOpen, mobile: false },
-  { to: '/contas', label: 'Financeiro', short: 'Finanças', icon: ReceiptText, mobile: true },
+  // Ordem de uso da casa: o dia (calendário e reservas), as pessoas, e depois o resto.
   { to: '/calendario', label: 'Calendário', short: 'Calendário', icon: CalendarClock, mobile: true },
-  // No celular, Lembretes (com as contas) fica pelo menu do computador; o Calendário ocupa o lugar.
-  { to: '/lembretes', label: 'Lembretes', short: 'Lembretes', icon: Bell, mobile: false },
+  { to: '/agenda', label: 'Reservas', short: 'Reservas', icon: CalendarDays, mobile: true },
   // Telefones são dado pessoal: perfil leitura não vê Contatos.
   { to: '/contatos', label: 'Contatos', short: 'Contatos', icon: Users, mobile: true, team: true },
-  // Residentes: no celular, pelo botão no topo de Contatos.
-  { to: '/residentes', label: 'Residentes', short: 'Residentes', icon: UserCheck, mobile: false, team: true },
   // Orçamentos pedidos no site casakaju.com (dado pessoal, como Contatos). No celular, pelo topo de Contatos.
   { to: '/orcamentos', label: 'Orçamentos', short: 'Orçamentos', icon: Inbox, mobile: false, team: true },
+  { to: '/projetos', label: 'Projetos', short: 'Projetos', icon: FolderKanban, mobile: true },
+  { to: '/', label: 'Visão geral', short: 'Início', icon: House, mobile: true },
+  // No celular, Salas abre pelo botão no topo das Reservas.
+  { to: '/salas', label: 'Salas', short: 'Salas', icon: DoorOpen, mobile: false },
+  { to: '/contas', label: 'Financeiro', short: 'Finanças', icon: ReceiptText, mobile: true },
+  // No celular, Lembretes (com as contas) fica pelo menu do computador; o Calendário mostra tudo.
+  { to: '/lembretes', label: 'Lembretes', short: 'Lembretes', icon: Bell, mobile: false },
+  // Residentes: no celular, pelo botão no topo de Contatos.
+  { to: '/residentes', label: 'Residentes', short: 'Residentes', icon: UserCheck, mobile: false, team: true },
   // Conexão e operação do WhatsApp: só administração; no celular, pelo atalho em Configurações.
   { to: '/whatsapp', label: 'WhatsApp', short: 'WhatsApp', icon: MessageCircle, mobile: false, admin: true },
   { to: '/configuracoes', label: 'Configurações', short: 'Ajustes', icon: Settings, mobile: false },

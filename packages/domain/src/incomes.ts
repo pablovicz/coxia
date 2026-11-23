@@ -2,6 +2,7 @@ import type { IncomeSource, Prisma } from '@coxia/database';
 import { dueDateForCompetence, localDateOf } from '@coxia/shared';
 import { competenceOf } from './bills';
 import { type Actor, audit, type Db, DomainError, fromIsoDate, getOrganization, toIsoDate } from './common';
+import { ResidentContractService } from './resident-contracts';
 
 export interface IncomeInput {
   source: IncomeSource;
@@ -117,7 +118,7 @@ export class IncomeService {
     if (input.amountCents !== undefined && (!Number.isInteger(input.amountCents) || input.amountCents <= 0)) {
       throw new DomainError('validation', 'Valor recebido inválido');
     }
-    return this.db.$transaction(async (tx) => {
+    const received = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM incomes WHERE id = ${incomeId} AND organization_id = ${organizationId} FOR UPDATE`;
       const income = await tx.income.findFirst({ where: { id: incomeId, organizationId } });
       if (!income) throw new DomainError('not_found', 'Entrada não encontrada');
@@ -138,6 +139,12 @@ export class IncomeService {
       });
       return updated;
     });
+    // Mensalidade de contrato paga: o saldo de horas daquele ciclo é liberado na hora.
+    if (received.contractId) {
+      const contract = await this.db.residentContract.findUnique({ where: { id: received.contractId } });
+      if (contract) await new ResidentContractService(this.db).ensureGrants(contract, org.timezone, now);
+    }
+    return received;
   }
 
   /** Comprovante do recebimento: a api guarda o arquivo; aqui só a referência (devolve a anterior para apagar). */

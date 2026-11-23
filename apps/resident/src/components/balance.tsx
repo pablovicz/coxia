@@ -17,10 +17,24 @@ function BalanceBar({ b }: { b: CycleBalance }) {
   );
 }
 
+/** Saldo zerado porque o mês ainda não foi pago: explica em vez de parecer erro. */
+export function PaymentNotice({ b }: { b: CycleBalance }) {
+  const p = b.payment;
+  if (!p || p.status === 'paid' || p.status === 'not_required' || b.grantedMinutes > 0) return null;
+  return (
+    <p className="rounded-md bg-accent/30 px-3 py-2 text-sm">
+      {p.status === 'pending'
+        ? `As horas deste ciclo são liberadas quando a mensalidade (vence ${brDayMonth(p.dueOn)}) for confirmada pela equipe da Casa Kaju.`
+        : 'Este ciclo não tem mensalidade: as horas começam no próximo ciclo pago.'}
+    </p>
+  );
+}
+
 export function BalanceSummary({ b, compact }: { b: CycleBalance; compact?: boolean }) {
   const negative = b.availableMinutes < 0;
   return (
     <div className="flex flex-col gap-3">
+      <PaymentNotice b={b} />
       <div className="flex items-end justify-between gap-3">
         <div>
           <p className={cn('tabular font-semibold leading-none tracking-tight', compact ? 'text-2xl' : 'text-[40px]', negative && 'text-destructive')}>{hours(b.availableMinutes)}</p>

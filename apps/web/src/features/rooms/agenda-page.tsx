@@ -105,8 +105,8 @@ export function AgendaPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Espaços da casa"
-        title="Agenda das salas."
+        eyebrow="Agenda das salas"
+        title="Reservas."
         description="Horários, disponibilidade e reservas sem conflitos."
         action={
           <div className="flex flex-wrap gap-2">

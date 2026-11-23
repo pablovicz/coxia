@@ -1232,7 +1232,7 @@ test.describe('golden visual', () => {
 
   for (const [path, heading, name] of [
     ['/projetos', 'Projetos em movimento.', 'projects'],
-    ['/agenda', 'Agenda das salas.', 'agenda'],
+    ['/agenda', 'Reservas.', 'agenda'],
     ['/salas', 'Salas.', 'rooms'],
     ['/contatos', 'Contatos.', 'contacts'],
     ['/contas/2026-11', 'Novembro de 2026.', 'bills'],

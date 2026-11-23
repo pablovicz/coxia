@@ -733,8 +733,11 @@ export type ConnectCode = { kind: 'qr'; image: string } | { kind: 'code'; code: 
 export interface Contact {
   id: string;
   phone: string;
-  /** contato (padrão) ou residente (tem reserva recorrente). */
-  kind: 'contact' | 'resident';
+  /** Automático: contato comum, residente ou lead (pediu orçamento pelo site). */
+  kind: 'contact' | 'resident' | 'lead';
+  /** Tipo cadastrado pela equipe (Costureiras, Pintores…). */
+  typeId?: string | null;
+  type?: { id: string; name: string } | null;
   photoUrl: string | null;
   name: string | null;
   whatsappName: string | null;
@@ -743,6 +746,12 @@ export interface Contact {
   createdAt: string;
   member: { userId?: string; name: string; role: Role; avatarUpdatedAt?: string | null } | null;
   groups: Array<{ isAdmin: boolean; joinedAt: string; leftAt?: string | null; group: { id: string; name: string | null } }>;
+}
+
+export interface ContactType {
+  id: string;
+  name: string;
+  contacts: number;
 }
 
 export interface ContactGroupOption {
@@ -944,6 +953,8 @@ export interface CycleBalance {
   reservedMinutes: number;
   usedMinutes: number;
   availableMinutes: number;
+  /** Mensalidade do ciclo: o saldo só é liberado depois de paga (contratos com mensalidade). */
+  payment?: { status: 'not_required' | 'none' } | { status: 'paid' | 'pending'; incomeId: string; dueOn: string; amountCents: number };
 }
 
 export interface OpenCycle {

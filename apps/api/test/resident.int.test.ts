@@ -83,6 +83,19 @@ describe('acesso do residente', () => {
       .send({ spaceId, monthlyMinutes: 600, monthlyAmountCents: 90000, cycleDay: 1, bookingOpensDay: 15, startsOn: '2026-01-01' })
       .expect(201);
     contractId = res.body.id;
+    // Horas só saem com a mensalidade paga: marca o ciclo atual e o próximo como pagos.
+    const month = (offset: number) => {
+      const [y, m] = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' }).slice(0, 7).split('-').map(Number) as [number, number];
+      const d = new Date(Date.UTC(y, m - 1 + offset, 1));
+      return d.toISOString().slice(0, 7);
+    };
+    for (const competence of [month(0), month(1)]) {
+      await prisma.income.upsert({
+        where: { contractId_competence: { contractId, competence } },
+        update: { status: 'received', receivedOn: new Date(), receivedAmountCents: 90000 },
+        create: { organizationId: orgId, source: 'room_rental', description: 'Mensalidade Sala Média', amountCents: 90000, expectedOn: new Date(`${competence}-01T00:00:00Z`), contractId, competence, status: 'received', receivedOn: new Date(), receivedAmountCents: 90000 },
+      });
+    }
     await http().post(`/residents/${xpoId}/contracts`).set(auth(adminToken)).send({ spaceId, monthlyMinutes: 120, cycleDay: 1, bookingOpensDay: 15, startsOn: '2026-01-01' }).expect(201);
   });
 
@@ -257,9 +270,13 @@ describe('pagamentos do residente', () => {
   const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
 
   it('marca como pago com comprovante, abre o comprovante e remove uma cobrança errada', async () => {
-    const incomes = await prisma.income.findMany({ where: { contractId, status: 'expected' }, orderBy: { expectedOn: 'asc' } });
-    expect(incomes.length).toBeGreaterThan(0);
-    const [first, second] = incomes;
+    const resident = await prisma.resident.findUniqueOrThrow({ where: { id: lumeId } });
+    const mk = (competence: string) =>
+      prisma.income.create({
+        data: { organizationId: orgId, source: 'room_rental', description: 'Mensalidade Sala Média', amountCents: 90000, expectedOn: new Date(`${competence}-01T00:00:00Z`), contractId, contactId: resident.contactId, competence },
+      });
+    const first = await mk('2099-01');
+    const second = await mk('2099-02');
 
     await http().post(`/incomes/${first!.id}/receive`).set(auth(adminToken)).send({ amountCents: 85000, receivedOn: '2026-11-20' }).expect(200);
     await http().post(`/incomes/${first!.id}/proof`).set(auth(adminToken)).set('content-type', 'application/pdf').send(Buffer.from('não é pdf')).expect(422);

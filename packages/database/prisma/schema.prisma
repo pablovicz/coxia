@@ -77,6 +77,8 @@ enum BillKind {
 enum ContactKind {
   contact
   resident
+  /// Pediu orçamento pelo site (ainda não é residente).
+  lead
 }
 
 /// Origem de uma entrada de dinheiro.
@@ -234,6 +236,7 @@ model Organization {
   spaceBlocks            SpaceBlock[]
   spacePhotos            SpacePhoto[]
   contacts               Contact[]
+  contactTypes           ContactType[]
   incomes                Income[]
   expenseCategories      ExpenseCategory[]
   bookings               Booking[]
@@ -352,6 +355,8 @@ model Contact {
   whatsappName     String?     @map("whatsapp_name")
   notes            String?
   kind             ContactKind @default(contact)
+  /// Tipo cadastrado pela equipe (Costureiras, Pintores…). Residente e lead são automáticos (kind).
+  typeId           String?     @map("type_id")
   /// Foto do perfil no WhatsApp (URL temporária do provedor, renovada pelo worker).
   photoUrl         String?     @map("photo_url")
   /// Última leitura de nome/foto no WhatsApp.
@@ -371,10 +376,26 @@ model Contact {
   incomes       Income[]
   resident      Resident?
   quoteRequests QuoteRequest[]
+  type          ContactType?             @relation(fields: [typeId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, phone])
   @@index([organizationId, lastMessageAt])
   @@map("contacts")
+}
+
+/// Tipo de contato cadastrado pela equipe (ex.: Costureiras, Pintores, Encanadores).
+model ContactType {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  name           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts     Contact[]
+
+  @@unique([organizationId, name])
+  @@map("contact_types")
 }
 
 /// Participação de um contato num grupo. Saída do grupo marca leftAt (o histórico fica).

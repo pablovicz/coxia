@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Inbox, Plus, Search, UserCheck, Users } from 'lucide-react';
+import { ExternalLink, Inbox, Plus, Search, Tags, UserCheck, Users } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { EmptyState, PageHeader } from '@coxia/ui/components/empty-state';
@@ -10,10 +10,11 @@ import { Dialog } from '@coxia/ui/components/ui/dialog';
 import { Field, Select } from '@coxia/ui/components/ui/field';
 import { Input, Skeleton, Textarea } from '@coxia/ui/components/ui/input';
 import { Link } from 'react-router';
-import { api, apiSend, type Contact, type ContactGroupOption } from '@/lib/api';
+import { api, apiSend, canManage, type Contact, type ContactGroupOption } from '@/lib/api';
 import { formatPhone, local } from '@coxia/ui/lib/format';
 import { UserAvatar } from '@/components/user-avatar';
 import { ContactAvatar } from './contact-avatar';
+import { ContactTypeSelect, ContactTypesDialog, useContactTypes } from './contact-types';
 import { cn } from '@coxia/ui/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -40,14 +41,25 @@ export function ContactsPage() {
   const tz = session?.organization.timezone ?? 'America/Sao_Paulo';
   const [q, setQ] = useState('');
   const [groupId, setGroupId] = useState('');
-  const [kind, setKind] = useState<'' | 'contact' | 'resident'>('');
+  /** "" | "kind:resident" | "kind:lead" | "type:<id>" | "type:none" */
+  const [kind, setKind] = useState('');
+  const [managingTypes, setManagingTypes] = useState(false);
+  const types = useContactTypes();
+  const admin = canManage(session?.user.role);
+  const [filterBy, filterValue] = kind.split(':') as ['' | 'kind' | 'type', string | undefined];
   const [limit, setLimit] = useState(PAGE);
   const [open, setOpen] = useState<Contact | null>(null);
   const [creating, setCreating] = useState(false);
   const query = useDebounced(q.trim(), 250);
 
   const groups = useQuery({ queryKey: ['contacts', 'groups'], queryFn: () => api<ContactGroupOption[]>('/contacts/groups') });
-  const params = new URLSearchParams({ limit: String(limit), ...(query ? { q: query } : {}), ...(groupId ? { groupId } : {}), ...(kind ? { kind } : {}) });
+  const params = new URLSearchParams({
+    limit: String(limit),
+    ...(query ? { q: query } : {}),
+    ...(groupId ? { groupId } : {}),
+    ...(filterBy === 'kind' && filterValue ? { kind: filterValue } : {}),
+    ...(filterBy === 'type' && filterValue ? { typeId: filterValue } : {}),
+  });
   const contacts = useQuery({
     queryKey: ['contacts', 'list', query, groupId, kind, limit],
     queryFn: () => api<{ items: Contact[]; total: number }>(`/contacts?${params}`),
@@ -67,6 +79,9 @@ export function ContactsPage() {
         description="Quem está nos grupos do WhatsApp da casa. Entram sozinhos quando alguém é adicionado ou escreve; também dá para cadastrar."
         action={
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setManagingTypes(true)}>
+              <Tags aria-hidden /> Tipos
+            </Button>
             <Button variant="outline" asChild>
               <Link to="/residentes">
                 <UserCheck aria-hidden /> Residentes
@@ -99,14 +114,24 @@ export function ContactsPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <div className="sm:w-44">
+        <div className="sm:w-52">
           <label htmlFor="contacts-kind" className="sr-only">
             Tipo
           </label>
-          <Select id="contacts-kind" value={kind} onChange={(e) => setKind(e.target.value as '' | 'contact' | 'resident')}>
+          <Select id="contacts-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
             <option value="">Todos os tipos</option>
-            <option value="resident">Residentes</option>
-            <option value="contact">Contatos</option>
+            <option value="kind:resident">Residentes</option>
+            <option value="kind:lead">Leads (pediram orçamento)</option>
+            {(types.data ?? []).length ? (
+              <optgroup label="Tipos da casa">
+                {(types.data ?? []).map((t) => (
+                  <option key={t.id} value={`type:${t.id}`}>
+                    {t.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
+            <option value="type:none">Sem tipo cadastrado</option>
           </Select>
         </div>
         <div className="sm:w-72">
@@ -172,6 +197,7 @@ export function ContactsPage() {
 
       {open ? <ContactDialog id={open.id} preview={open} tz={tz} onClose={() => setOpen(null)} /> : null}
       {creating ? <NewContactDialog onClose={() => setCreating(false)} /> : null}
+      {managingTypes ? <ContactTypesDialog admin={admin} onClose={() => setManagingTypes(false)} /> : null}
     </>
   );
 }
@@ -193,6 +219,15 @@ function ContactRow({ contact: c, tz, onOpen }: { contact: Contact; tz: string; 
             {c.kind === 'resident' ? (
               <Badge variant="info" className="shrink-0">
                 Residente
+              </Badge>
+            ) : c.kind === 'lead' ? (
+              <Badge variant="pending" className="shrink-0">
+                Lead
+              </Badge>
+            ) : null}
+            {c.type ? (
+              <Badge variant="neutral" className="max-w-40 shrink-0 truncate">
+                {c.type.name}
               </Badge>
             ) : null}
             {c.member ? (
@@ -234,8 +269,9 @@ function ContactDialog({ id, preview, tz, onClose }: { id: string; preview: Cont
   const c = detail.data ?? preview;
   const [name, setName] = useState(preview.name ?? '');
   const [notes, setNotes] = useState(preview.notes ?? '');
+  const [typeId, setTypeId] = useState(preview.typeId ?? '');
   const save = useMutation({
-    mutationFn: () => apiSend<Contact>(`/contacts/${id}`, 'PATCH', { name: name.trim() || null, notes: notes.trim() || null }),
+    mutationFn: () => apiSend<Contact>(`/contacts/${id}`, 'PATCH', { name: name.trim() || null, notes: notes.trim() || null, typeId: typeId || null }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Contato atualizado.');
@@ -280,7 +316,7 @@ function ContactDialog({ id, preview, tz, onClose }: { id: string; preview: Cont
 
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
           <dt className="text-muted-foreground">Tipo</dt>
-          <dd>{c.kind === 'resident' ? 'Residente (tem reserva recorrente)' : 'Contato'}</dd>
+          <dd>{c.kind === 'resident' ? 'Residente' : c.kind === 'lead' ? 'Lead (pediu orçamento pelo site)' : 'Contato'}</dd>
           <dt className="text-muted-foreground">No WhatsApp</dt>
           <dd>{c.whatsappName ?? '—'}</dd>
           <dt className="text-muted-foreground">Última mensagem</dt>
@@ -322,6 +358,13 @@ function ContactDialog({ id, preview, tz, onClose }: { id: string; preview: Cont
               <Input id={fid} value={name} maxLength={120} placeholder={c.whatsappName ?? 'Nome'} aria-describedby={describedBy} onChange={(e) => setName(e.target.value)} />
             )}
           </Field>
+          <Field label="Tipo" hint="Tipos da casa, em “Tipos” na tela de contatos">
+            {(fid, d) => (
+              <div aria-describedby={d}>
+                <ContactTypeSelect id={fid} value={typeId} onChange={setTypeId} />
+              </div>
+            )}
+          </Field>
           <Field label="Observações">
             {(fid) => <Textarea id={fid} value={notes} maxLength={2000} rows={3} placeholder="Ex.: produtora da XPO, cuida da luz" onChange={(e) => setNotes(e.target.value)} />}
           </Field>
@@ -337,9 +380,10 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [typeId, setTypeId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const save = useMutation({
-    mutationFn: () => apiSend<Contact>('/contacts', 'POST', { name: name.trim(), phone: phone.trim(), notes: notes.trim() || null }),
+    mutationFn: () => apiSend<Contact>('/contacts', 'POST', { name: name.trim(), phone: phone.trim(), notes: notes.trim() || null, typeId: typeId || null }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['contacts'] });
       toast.success('Contato cadastrado.');
@@ -374,6 +418,7 @@ function NewContactDialog({ onClose }: { onClose: () => void }) {
       <form id="new-contact" onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <Field label="Nome">{(id) => <Input id={id} value={name} maxLength={120} placeholder="Ex.: Marina (patrocínio)" onChange={(e) => setName(e.target.value)} />}</Field>
         <Field label="WhatsApp">{(id) => <Input id={id} inputMode="tel" value={phone} placeholder="11 98765-4321" onChange={(e) => setPhone(e.target.value)} />}</Field>
+        <Field label="Tipo (opcional)">{(id) => <ContactTypeSelect id={id} value={typeId} onChange={setTypeId} />}</Field>
         <Field label="Observações (opcional)">{(id) => <Textarea id={id} rows={2} value={notes} maxLength={2000} onChange={(e) => setNotes(e.target.value)} />}</Field>
         {error ? (
           <p role="alert" className="text-sm text-destructive">

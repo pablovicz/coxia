@@ -29,14 +29,14 @@ describe('AppShell', () => {
     renderAt('/');
     const bottom = screen.getByRole('navigation', { name: 'Navegação' });
     const links = within(bottom).getAllByRole('link');
-    expect(links.map((l) => l.textContent)).toEqual(['Início', 'Projetos', 'Agenda', 'Finanças', 'Calendário']);
+    expect(links.map((l) => l.textContent)).toEqual(['Calendário', 'Reservas', 'Projetos', 'Início', 'Finanças']);
     for (const l of links) expect(l.className).toContain('min-h-16');
   });
 
   it('marca a rota atual como ativa', () => {
     renderAt('/agenda');
     const bottom = screen.getByRole('navigation', { name: 'Navegação' });
-    expect(within(bottom).getByRole('link', { name: 'Agenda' })).toHaveAttribute('aria-current', 'page');
+    expect(within(bottom).getByRole('link', { name: 'Reservas' })).toHaveAttribute('aria-current', 'page');
     expect(within(bottom).getByRole('link', { name: 'Início' })).not.toHaveAttribute('aria-current');
   });
 

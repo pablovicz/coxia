@@ -28,6 +28,8 @@ export interface CycleBalance {
   reservedMinutes: number;
   usedMinutes: number;
   availableMinutes: number;
+  /** Mensalidade do ciclo: o saldo só é liberado depois de paga (contratos com mensalidade). */
+  payment?: { status: 'not_required' | 'none' } | { status: 'paid' | 'pending'; incomeId: string; dueOn: string; amountCents: number };
 }
 
 export interface OpenCycle {

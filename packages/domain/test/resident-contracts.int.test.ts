@@ -11,6 +11,7 @@ import {
   BookingService,
   type DomainEvent,
   DomainError,
+  IncomeService,
   ResidentBookingService,
   ResidentContractService,
   ResidentService,
@@ -26,6 +27,7 @@ const bookings = new BookingService(db, publisher);
 const contracts = new ResidentContractService(db, publisher);
 const residentBookings = new ResidentBookingService(db, bookings, contracts, publisher);
 const residents = new ResidentService(db);
+const incomes_ = new IncomeService(db);
 const suffix = String(Date.now()).slice(-6);
 let orgId: string;
 let spaceId: string;
@@ -69,7 +71,7 @@ describe('contrato', () => {
     await expectDomainError(contracts.create(orgId, lumeId, { ...base, endsOn: '2026-10-01' }, staff, NOW), 'validation');
   });
 
-  it('criar concede as horas do ciclo atual e gera a mensalidade prevista', async () => {
+  it('criar gera a mensalidade prevista; as horas do ciclo só saem quando a mensalidade é paga', async () => {
     events.length = 0;
     const c = await contracts.create(
       orgId,
@@ -79,14 +81,22 @@ describe('contrato', () => {
       NOW,
     );
     contractId = c.id;
-    const grants = await db.hourGrant.findMany({ where: { contractId } });
-    expect(grants.map((g) => [g.cycle, g.minutes])).toEqual([['2026-11', 600]]);
+    expect(await db.hourGrant.count({ where: { contractId } })).toBe(0);
+    expect((await contracts.balance(orgId, contractId, NOW)).cycles[0]).toMatchObject({ cycle: '2026-11', availableMinutes: 0, payment: { status: 'pending' } });
     const incomes = await db.income.findMany({ where: { contractId }, orderBy: { competence: 'asc' } });
     expect(incomes.map((i) => [i.competence, i.amountCents, i.expectedOn.toISOString().slice(0, 10), i.status])).toEqual([
       ['2026-11', 90000, '2026-11-25', 'expected'],
       ['2026-12', 90000, '2026-12-25', 'expected'],
     ]);
     expect(events.some((e) => e.type === 'contract.changed' && e.residentId === lumeId)).toBe(true);
+
+    // A admin marca novembro como pago: o saldo do ciclo sai na hora.
+    await incomes_.receive(orgId, incomes[0]!.id, {}, staff, NOW);
+    const grants = await db.hourGrant.findMany({ where: { contractId } });
+    expect(grants.map((g) => [g.cycle, g.minutes])).toEqual([['2026-11', 600]]);
+    expect((await contracts.balance(orgId, contractId, NOW)).cycles[0]).toMatchObject({ availableMinutes: 600, payment: { status: 'paid' } });
+
+    // Contrato sem mensalidade: horas sem depender de pagamento.
     xpoContractId = (await contracts.create(orgId, xpoId, { spaceId, monthlyMinutes: 4 * 60, cycleDay: 1, bookingOpensDay: 25, startsOn: '2026-11-01' }, staff, NOW)).id;
   });
 
@@ -95,8 +105,8 @@ describe('contrato', () => {
     const late = await contracts.create(orgId, xpoId, { spaceId: otherSpaceId, monthlyMinutes: 600, monthlyAmountCents: 60000, cycleDay: 5, bookingOpensDay: 25, startsOn: '2026-11-21' }, staff, NOW);
     const incomes = await db.income.findMany({ where: { contractId: late.id }, orderBy: { competence: 'asc' } });
     expect(incomes.map((i) => [i.competence, i.expectedOn.toISOString().slice(0, 10)])).toEqual([['2026-12', '2026-12-05']]);
-    // As horas do ciclo atual valem desde já.
-    expect((await contracts.balance(orgId, late.id, NOW)).cycles[0]).toMatchObject({ cycle: '2026-11', availableMinutes: 600 });
+    // Sem mensalidade em novembro, não há saldo em novembro: as horas começam no ciclo pago.
+    expect((await contracts.balance(orgId, late.id, NOW)).cycles[0]).toMatchObject({ cycle: '2026-11', availableMinutes: 0, payment: { status: 'none' } });
 
     // Mensalidade retroativa gerada antes desta regra: o job cancela (as recebidas ficariam).
     const old = await db.income.create({
@@ -107,25 +117,32 @@ describe('contrato', () => {
     await contracts.end(orgId, late.id, null, staff, NOW);
   });
 
-  it('o job é idempotente e, na virada, concede o próximo ciclo', async () => {
+  it('o job é idempotente; na virada, o próximo ciclo só ganha horas depois de pago', async () => {
     await contracts.runMaintenance(NOW);
     await contracts.runMaintenance(NOW);
     expect(await db.hourGrant.count({ where: { contractId } })).toBe(1);
     await contracts.runMaintenance(at('2026-11-25T00:30'));
     const grants = await db.hourGrant.findMany({ where: { contractId }, orderBy: { cycle: 'asc' } });
-    expect(grants.map((g) => g.cycle)).toEqual(['2026-11', '2026-12']);
+    expect(grants.map((g) => g.cycle)).toEqual(['2026-11']);
     expect(await db.income.count({ where: { contractId } })).toBe(2);
+    expect((await contracts.balance(orgId, contractId, at('2026-11-25T09:00'))).cycles[1]).toMatchObject({ cycle: '2026-12', availableMinutes: 0, payment: { status: 'pending' } });
   });
 
   it('mudança de horas vale a partir do próximo ciclo; o atual fica', async () => {
     await contracts.update(orgId, contractId, { monthlyMinutes: 12 * 60, monthlyAmountCents: 100000 }, staff, at('2026-11-25T09:00'));
+    // dezembro pago depois da mudança: sai com as horas novas
+    const dec = await db.income.findFirstOrThrow({ where: { contractId, competence: '2026-12' } });
+    await incomes_.receive(orgId, dec.id, {}, staff, at('2026-11-25T09:00'));
     const grants = await db.hourGrant.findMany({ where: { contractId }, orderBy: { cycle: 'asc' } });
     expect(grants.map((g) => [g.cycle, g.minutes])).toEqual([
       ['2026-11', 600],
       ['2026-12', 720],
     ]);
     const incomes = await db.income.findMany({ where: { contractId }, orderBy: { competence: 'asc' } });
-    expect(incomes.map((i) => i.amountCents)).toEqual([90000, 100000]);
+    expect(incomes.map((i) => [i.amountCents, i.status])).toEqual([
+      [90000, 'received'],
+      [100000, 'received'],
+    ]);
     // volta ao original para os próximos testes
     await contracts.update(orgId, contractId, { monthlyMinutes: 600 }, staff, at('2026-11-25T09:00'));
   });
@@ -268,13 +285,14 @@ describe('check-in', () => {
 });
 
 describe('encerramento', () => {
-  it('encerrar cancela as reservas e mensalidades previstas depois do fim', async () => {
+  it('encerrar cancela as reservas depois do fim; mensalidade já paga fica', async () => {
     const r = await residentBookings.book(orgId, lumeId, { contractId, startAt: at('2026-11-28T15:00'), endAt: at('2026-11-28T16:00') }, lume, NOW);
     await contracts.end(orgId, contractId, '2026-11-27', staff, NOW);
     const occ = await db.bookingOccurrence.findUniqueOrThrow({ where: { id: r.occurrences[0]!.id } });
     expect(occ.status).toBe('cancelled');
+    // Dezembro já foi pago (teste acima): recebida não é cancelada pelo encerramento.
     const dec = await db.income.findFirstOrThrow({ where: { contractId, competence: '2026-12' } });
-    expect(dec.status).toBe('cancelled');
+    expect(dec.status).toBe('received');
     await expectDomainError(residentBookings.book(orgId, lumeId, { contractId, startAt: at('2026-11-28T17:00'), endAt: at('2026-11-28T18:00') }, lume, NOW), 'validation', 'cycle_closed');
   });
 });

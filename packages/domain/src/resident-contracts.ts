@@ -38,6 +38,12 @@ export interface ContractInput {
   notes?: string | null;
 }
 
+/** Mensalidade do ciclo: o saldo só é liberado com ela paga (contratos com mensalidade). */
+export type CyclePayment =
+  | { status: 'not_required' }
+  | { status: 'none' }
+  | { status: 'paid' | 'pending'; incomeId: string; dueOn: string; amountCents: number };
+
 export const contractInclude = {
   space: { select: { id: true, name: true, color: true, icon: true, slug: true } },
   resident: { select: { id: true, name: true, contactId: true, email: true } },
@@ -99,11 +105,13 @@ export class ResidentContractService {
     const current = cycleForDate(today, contract.cycleDay).key;
     const open = openCycles(contractTerms(contract), today);
     const keys = [...new Set([current, ...open.map((c) => c.key)])].sort();
+    const payment = await this.paymentsOf(contract, keys);
     return {
       contract,
       open,
       cycles: keys.map((key) => ({
         ...cycleBalance(key, grants, occurrences, terms, now),
+        payment: payment(key),
         ledger: cycleLedger(key, grants, occurrences, terms, now),
       })),
     };
@@ -111,15 +119,17 @@ export class ResidentContractService {
 
   /** Resumo para listas: ciclo atual e o próximo (se aberto). */
   async summary(contract: ResidentContract, timezone: string, now = new Date()) {
+    await this.ensureGrants(contract, timezone, now);
     const { grants, occurrences } = await this.ledgerData(this.db, contract.id);
     const terms = { cycleDay: contract.cycleDay, timezone };
     const today = localDateOf(now, timezone);
     const current = cycleForDate(today, contract.cycleDay).key;
     const open = openCycles(contractTerms(contract), today);
     const next = open.find((c) => c.key > current);
+    const payment = await this.paymentsOf(contract, [current, ...(next ? [next.key] : [])]);
     return {
-      current: cycleBalance(current, grants, occurrences, terms, now),
-      next: next ? cycleBalance(next.key, grants, occurrences, terms, now) : null,
+      current: { ...cycleBalance(current, grants, occurrences, terms, now), payment: payment(current) },
+      next: next ? { ...cycleBalance(next.key, grants, occurrences, terms, now), payment: payment(next.key) } : null,
       open,
     };
   }
@@ -273,13 +283,39 @@ export class ResidentContractService {
   async ensureGrants(contract: ResidentContract, timezone: string, now = new Date(), db: Tx = this.db): Promise<number> {
     if (contract.status !== 'active') return 0;
     const today = localDateOf(now, timezone);
-    const cycles = openCycles(contractTerms(contract), today);
+    let cycles = openCycles(contractTerms(contract), today);
+    // Com mensalidade, o saldo do ciclo só é liberado depois que a equipe marca o mês como pago.
+    if (contract.monthlyAmountCents && cycles.length) {
+      const paid = await db.income.findMany({ where: { contractId: contract.id, status: 'received', competence: { in: cycles.map((c) => c.key) } }, select: { competence: true } });
+      const paidKeys = new Set(paid.map((i) => i.competence));
+      cycles = cycles.filter((c) => paidKeys.has(c.key));
+    }
     if (!cycles.length) return 0;
     const { count } = await db.hourGrant.createMany({
       data: cycles.map((c) => ({ contractId: contract.id, cycle: c.key, kind: 'monthly' as const, minutes: contract.monthlyMinutes, monthlyKey: `${contract.id}:${c.key}` })),
       skipDuplicates: true,
     });
     return count;
+  }
+
+  /**
+   * Situação da mensalidade de cada ciclo (para explicar um saldo zerado): paga, prevista,
+   * ou nenhuma (contrato sem mensalidade ou mês sem cobrança).
+   */
+  async paymentsOf(contract: ResidentContract, keys: string[]) {
+    const rows = contract.monthlyAmountCents
+      ? await this.db.income.findMany({
+          where: { contractId: contract.id, competence: { in: keys }, status: { not: 'cancelled' } },
+          select: { id: true, competence: true, status: true, expectedOn: true, amountCents: true },
+        })
+      : [];
+    const byKey = new Map(rows.map((r) => [r.competence!, r]));
+    return (key: string): CyclePayment =>
+      !contract.monthlyAmountCents
+        ? { status: 'not_required' }
+        : byKey.get(key)
+          ? { status: byKey.get(key)!.status === 'received' ? 'paid' : 'pending', incomeId: byKey.get(key)!.id, dueOn: toIsoDate(byKey.get(key)!.expectedOn), amountCents: byKey.get(key)!.amountCents }
+          : { status: 'none' };
   }
 
   /** Mensalidade prevista do ciclo atual e do próximo, dentro da vigência. Idempotente (contrato, competência). */

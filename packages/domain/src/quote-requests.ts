@@ -178,8 +178,10 @@ export class QuoteRequestService {
       const contact =
         existing ??
         (await tx.contact.create({
-          data: { organizationId, phone: r.phone, name: r.name, notes: `Pedido de orçamento pelo site (${r.email})`, searchName: normalizeText(r.name) },
+          data: { organizationId, phone: r.phone, name: r.name, kind: 'lead', notes: `Pedido de orçamento pelo site (${r.email})`, searchName: normalizeText(r.name) },
         }));
+      // Quem pede orçamento vira "lead" (residente continua residente).
+      if (existing && existing.kind === 'contact') await tx.contact.update({ where: { id: existing.id }, data: { kind: 'lead' } });
       const q = await tx.quoteRequest.create({
         data: {
           organizationId,

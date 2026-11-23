@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, CalendarClock, ChevronLeft, ChevronRight, MapPin, Plus, ReceiptText, Repeat, Users } from 'lucide-react';
+import { Bell, CalendarClock, ChevronLeft, ChevronRight, DoorOpen, MapPin, Plus, ReceiptText, Repeat, Users } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
@@ -13,7 +13,7 @@ import { Skeleton } from '@coxia/ui/components/ui/input';
 import { CategoryBadge } from '@/features/finance/expense-categories';
 import { REMINDER_TYPES, ReminderForm, repeatLabel } from '@/features/reminders/reminder-form';
 import { AGENDA_VIEWS, type AgendaView, isAgendaView, monthGrid, monthsOf, periodOf, shiftPeriod, WEEKDAY_HEADERS } from '@coxia/ui/calendar/calendar';
-import { api, apiSend, type Appointment, type CalendarBill, type CalendarReminder, canBook, PAYMENT_METHODS, type TeamCalendar } from '@/lib/api';
+import { api, apiSend, type Appointment, type CalendarBill, type CalendarReminder, canBook, type Occurrence, PAYMENT_METHODS, type TeamCalendar } from '@/lib/api';
 import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, formatTime, local, todayIn } from '@coxia/ui/lib/format';
 import { roomStyle } from '@coxia/ui/lib/rooms';
 import { cn } from '@coxia/ui/lib/utils';
@@ -26,25 +26,29 @@ export const ITEM_KINDS = {
   appointment: { label: 'Compromissos', color: 'azul', Icon: CalendarClock },
   reminder: { label: 'Lembretes', color: 'mostarda', Icon: Bell },
   bill: { label: 'Contas', color: 'terracota', Icon: ReceiptText },
+  booking: { label: 'Reservas', color: 'floresta', Icon: DoorOpen },
 } as const;
 type ItemKind = keyof typeof ITEM_KINDS;
 /** 'meeting' = só as reuniões (compromissos do tipo reunião). */
 type Filter = 'all' | ItemKind | 'meeting';
 
-/** Filtros de tipo por tela: Lembretes mostra também as contas; Calendário separa as reuniões. */
+/** Filtros de tipo por tela: Lembretes (com as contas); Calendário mostra tudo, inclusive as reservas das salas. */
 const FILTERS: Record<'lembretes' | 'calendario', Array<{ id: Exclude<Filter, 'all'>; label: string; color: string; Icon: typeof Bell }>> = {
-  lembretes: (Object.keys(ITEM_KINDS) as ItemKind[]).map((k) => ({ id: k, ...ITEM_KINDS[k] })),
+  lembretes: (['appointment', 'reminder', 'bill'] as ItemKind[]).map((k) => ({ id: k, ...ITEM_KINDS[k] })),
   calendario: [
     { id: 'appointment', ...ITEM_KINDS.appointment },
     { id: 'meeting', label: 'Reuniões', color: 'azul', Icon: Users },
     { id: 'reminder', ...ITEM_KINDS.reminder },
+    { id: 'bill', ...ITEM_KINDS.bill },
+    { id: 'booking', ...ITEM_KINDS.booking },
   ],
 };
 
 type Item =
   | { key: string; kind: 'appointment'; date: string; sort: string; time: string; title: string; done: boolean; appointment: Appointment }
   | { key: string; kind: 'reminder'; date: string; sort: string; time: string; title: string; done: boolean; reminder: CalendarReminder }
-  | { key: string; kind: 'bill'; date: string; sort: string; time: string; title: string; done: boolean; bill: CalendarBill };
+  | { key: string; kind: 'bill'; date: string; sort: string; time: string; title: string; done: boolean; bill: CalendarBill }
+  | { key: string; kind: 'booking'; date: string; sort: string; time: string; title: string; done: boolean; booking: Occurrence };
 
 const PREV: Record<AgendaView, string> = { semana: 'Semana anterior', mes: 'Mês anterior', trimestre: 'Trimestre anterior', semestre: 'Semestre anterior', ano: 'Ano anterior' };
 const NEXT: Record<AgendaView, string> = { semana: 'Próxima semana', mes: 'Próximo mês', trimestre: 'Próximo trimestre', semestre: 'Próximo semestre', ano: 'Próximo ano' };
@@ -64,7 +68,7 @@ function useIsDesktop() {
 /**
  * Calendário da equipe, separado da agenda das salas.
  * - `lembretes`: compromissos, lembretes e as contas (que entram sozinhas), da semana ao ano.
- * - `calendario`: só compromissos e lembretes, semana ou mês, com filtro de reuniões e de projeto.
+ * - `calendario`: tudo (compromissos, lembretes, contas e reservas das salas), semana ou mês, com filtros.
  */
 export function TeamCalendarPage({ mode = 'lembretes' }: { mode?: 'lembretes' | 'calendario' }) {
   const calendarMode = mode === 'calendario';
@@ -96,6 +100,12 @@ export function TeamCalendarPage({ mode = 'lembretes' }: { mode?: 'lembretes' | 
   const calendar = useQuery({
     queryKey: ['calendar', range.from, range.to],
     queryFn: () => api<TeamCalendar>(`/calendar?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`),
+  });
+  // Calendário: as reservas das salas entram junto (mesma fonte da agenda das salas).
+  const bookings = useQuery({
+    queryKey: ['bookings', range.from, range.to],
+    queryFn: () => api<Occurrence[]>(`/bookings?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`),
+    enabled: calendarMode,
   });
 
   const items = useMemo<Item[]>(() => {
@@ -133,9 +143,18 @@ export function TeamCalendarPage({ mode = 'lembretes' }: { mode?: 'lembretes' | 
         done: b.status === 'paid',
         bill: b,
       })),
+      ...(calendarMode ? (bookings.data ?? []) : []).map<Item>((o) => ({
+        key: `o-${o.id}`,
+        kind: 'booking',
+        date: local(o.startAt, tz).toISODate()!,
+        sort: o.startAt,
+        time: formatRange(o.startAt, o.endAt, tz),
+        title: o.booking.title ?? 'Reserva',
+        done: false,
+        booking: o,
+      })),
     ];
     return out
-      .filter((i) => !calendarMode || i.kind !== 'bill')
       .filter((i) => filter === 'all' || (filter === 'meeting' ? i.kind === 'appointment' && i.appointment.kind === 'meeting' : i.kind === filter))
       .filter((i) => {
         if (!projectFilter) return true;
@@ -150,7 +169,7 @@ export function TeamCalendarPage({ mode = 'lembretes' }: { mode?: 'lembretes' | 
         return true;
       })
       .sort((a, b) => a.sort.localeCompare(b.sort));
-  }, [calendar.data, filter, onlyMine, projectFilter, calendarMode, session?.user, tz]);
+  }, [calendar.data, bookings.data, filter, onlyMine, projectFilter, calendarMode, session?.user, tz]);
 
   const byDay = useMemo(() => {
     const map = new Map<string, Item[]>();
@@ -172,7 +191,7 @@ export function TeamCalendarPage({ mode = 'lembretes' }: { mode?: 'lembretes' | 
         title={calendarMode ? 'Calendário.' : 'Lembretes.'}
         description={
           calendarMode
-            ? 'Compromissos e lembretes da equipe. Filtre pelas reuniões, pelo que é seu ou por projeto.'
+            ? 'Tudo da casa num lugar: compromissos, lembretes, contas e reservas das salas. Filtre por tipo, pelo que é seu ou por projeto.'
             : 'Compromissos, lembretes e contas da casa, separados da agenda das salas.'
         }
         action={
@@ -330,7 +349,7 @@ export function TeamCalendarPage({ mode = 'lembretes' }: { mode?: 'lembretes' | 
 // ───────────── item ─────────────
 
 function ItemIcon({ item, size = 14 }: { item: Item; size?: number }) {
-  const Icon = item.kind === 'appointment' ? APPOINTMENT_KINDS[item.appointment.kind].Icon : item.kind === 'reminder' ? REMINDER_TYPES[item.reminder.type].Icon : ReceiptText;
+  const Icon = item.kind === 'appointment' ? APPOINTMENT_KINDS[item.appointment.kind].Icon : item.kind === 'reminder' ? REMINDER_TYPES[item.reminder.type].Icon : item.kind === 'booking' ? DoorOpen : ReceiptText;
   return <Icon size={size} className="room-text shrink-0" aria-hidden />;
 }
 
@@ -344,6 +363,7 @@ function itemSubtitle(item: Item): string | null {
     const r = item.reminder;
     return [r.project?.title, r.person.name ?? (r.recurrenceRule ? repeatLabel(r.recurrenceRule) : null)].filter(Boolean).join(' · ') || null;
   }
+  if (item.kind === 'booking') return [item.booking.space.name, item.booking.booking.responsibleName].filter(Boolean).join(' · ');
   const b = item.bill;
   if (b.expectedAmountCents === null) return 'valor a confirmar';
   if (b.status === 'paid') return formatBRL(b.paidAmountCents);
@@ -638,6 +658,40 @@ function ItemDialog({ item, tz, mayEdit, onClose, onEdit }: { item: Item; tz: st
     onError: (e) => toast.error(e.message),
   });
   const when = `${formatDayTitle(item.date)} · ${item.time}`;
+
+  if (item.kind === 'booking') {
+    const o = item.booking;
+    return (
+      <Dialog
+        open
+        onOpenChange={(v) => !v && onClose()}
+        title={item.title}
+        description={`Reserva · ${when}`}
+        footer={
+          <>
+            <Button variant="outline" onClick={onClose}>
+              Fechar
+            </Button>
+            <Button asChild>
+              <Link to="/agenda">Abrir na agenda das salas</Link>
+            </Button>
+          </>
+        }
+      >
+        <dl className="flex flex-col gap-2 text-sm">
+          <Row label="Sala">{o.space.name}</Row>
+          {o.booking.responsibleName ? <Row label="Quem">{o.booking.responsibleName}</Row> : null}
+          {o.booking.responsiblePhone ? (
+            <Row label="WhatsApp">
+              <PhoneLink phone={o.booking.responsiblePhone} />
+            </Row>
+          ) : null}
+          {o.booking.recurrenceRule ? <Row label="Repete">toda semana</Row> : null}
+          {o.status === 'tentative' ? <Row label="Situação">Provisória</Row> : null}
+        </dl>
+      </Dialog>
+    );
+  }
 
   if (item.kind === 'appointment') {
     const a = item.appointment;
