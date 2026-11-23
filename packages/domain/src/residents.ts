@@ -103,7 +103,7 @@ export class ResidentService {
     ]);
 
     // Locações: uma por sala; a programação junta as séries (um horário por série).
-    const rentals = new Map<string, { space: { id: string; name: string; color: string; icon: string }; schedule: Array<{ bookingId: string; title: string | null; weekdays: string[]; start: string; end: string; since: string | null; until: string | null; hourlyRateCents: number | null }> }>();
+    const rentals = new Map<string, { space: { id: string; name: string; color: string; icon: string }; schedule: Array<{ bookingId: string; title: string | null; weekdays: string[]; start: string; end: string; since: string | null; until: string | null; hourlyRateCents: number | null; periodRateCents: number | null }> }>();
     for (const b of series) {
       const days = /BYDAY=([A-Z,]+)/.exec(b.recurrenceRule ?? '')?.[1]?.split(',') ?? [];
       const entry = rentals.get(b.space.id) ?? { space: b.space, schedule: [] };
@@ -116,6 +116,7 @@ export class ResidentService {
         since: b.seriesStartsOn ? toIsoDate(b.seriesStartsOn) : null,
         until: b.seriesUntil ? toIsoDate(b.seriesUntil) : null,
         hourlyRateCents: b.hourlyRateCents,
+        periodRateCents: b.periodRateCents,
       });
       rentals.set(b.space.id, entry);
     }

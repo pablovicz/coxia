@@ -756,6 +756,8 @@ model Space {
   /// Aluguel mensal (status monthly_rental): valor, dia de pagamento e quem aluga.
   /// Preço da hora de locação (reserva avulsa).
   hourlyRateCents Int?        @map("hourly_rate_cents")
+  /// Preço do período (4h) de locação; horas que sobram vão pelo valor da hora.
+  periodRateCents Int?        @map("period_rate_cents")
   rentAmountCents Int?        @map("rent_amount_cents")
   rentDueDay      Int?        @map("rent_due_day")
   tenantName      String?     @map("tenant_name")
@@ -851,6 +853,8 @@ model Booking {
   contactId           String?       @map("contact_id")
   /// Valor da hora desta reserva (o da sala ou um desconto pontual).
   hourlyRateCents     Int?          @map("hourly_rate_cents")
+  /// Valor do período (4h) desta reserva (o da sala ou um desconto pontual).
+  periodRateCents     Int?          @map("period_rate_cents")
   /// Reserva semanal com horários diferentes por dia: uma série por horário, mesmo grupo.
   groupId             String?       @map("group_id")
   /// Reserva de residente: consome as horas deste contrato (do ciclo em que acontece).

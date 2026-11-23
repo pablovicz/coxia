@@ -15,6 +15,22 @@ export function parseBRL(input: string): number | null {
 
 export const centsToInput = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
 
+/** Duração de um período de locação (tabela de preços: período = 4h). */
+export const PERIOD_MINUTES = 240;
+
+/**
+ * Preço de uma locação: cada período (4h) completo pelo valor do período e o que sobra pelo
+ * valor da hora, sem passar do valor de um período. Sem valor de período, tudo vai por hora.
+ */
+export function rentalPriceCents(minutes: number, hourlyCents: number | null | undefined, periodCents?: number | null): number | null {
+  if (minutes <= 0) return null;
+  if (!periodCents) return hourlyCents ? Math.round((minutes / 60) * hourlyCents) : null;
+  const periods = Math.floor(minutes / PERIOD_MINUTES);
+  const rest = minutes - periods * PERIOD_MINUTES;
+  const restCents = rest === 0 ? 0 : hourlyCents ? Math.min(Math.round((rest / 60) * hourlyCents), periodCents) : periodCents;
+  return periods * periodCents + restCents;
+}
+
 export const local = (iso: string | Date, tz: string) =>
   (typeof iso === 'string' ? DateTime.fromISO(iso) : DateTime.fromJSDate(iso)).setZone(tz).setLocale('pt-BR');
 

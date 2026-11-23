@@ -23,6 +23,7 @@ const room = (id: string, name: string, color: string, icon: string, extra: Reco
   icon,
   sortOrder: Number(id.slice(1)),
   hourlyRateCents: null as number | null,
+  periodRateCents: null as number | null,
   rentAmountCents: null as number | null,
   rentDueDay: null as number | null,
   tenantName: null as string | null,

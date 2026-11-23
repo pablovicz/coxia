@@ -75,6 +75,8 @@ export interface Space {
   color: string;
   icon: string;
   hourlyRateCents: number | null;
+  /** Preço do período (4h). */
+  periodRateCents: number | null;
   rentAmountCents: number | null;
   rentDueDay: number | null;
   tenantName: string | null;
@@ -115,6 +117,7 @@ export interface Occurrence {
     responsiblePhone: string | null;
     contactId?: string | null;
     hourlyRateCents?: number | null;
+    periodRateCents?: number | null;
     groupId?: string | null;
     notes: string | null;
     recurrenceRule: string | null;
@@ -816,7 +819,7 @@ export interface ResidentDetails {
   situation: ResidentSituation;
   rentals: Array<{
     space: { id: string; name: string; color: string; icon: string };
-    schedule: Array<{ bookingId: string; title: string | null; weekdays: string[]; start: string; end: string; since: string | null; until: string | null; hourlyRateCents: number | null }>;
+    schedule: Array<{ bookingId: string; title: string | null; weekdays: string[]; start: string; end: string; since: string | null; until: string | null; hourlyRateCents: number | null; periodRateCents: number | null }>;
   }>;
   payments: Array<{
     id: string;

@@ -80,6 +80,8 @@ export interface CreateBookingInput {
   responsiblePhone?: string | null;
   /** Valor da hora desta reserva; ausente = o da sala (desconto pontual = valor menor). */
   hourlyRateCents?: number | null;
+  /** Valor do período (4h) desta reserva; ausente = o da sala. */
+  periodRateCents?: number | null;
   notes?: string | null;
   status?: 'confirmed' | 'tentative';
   /** RRULE semanal/mensal em datas locais; a primeira ocorrência é startAt/endAt. */
@@ -119,6 +121,7 @@ const occurrenceInclude = {
       responsiblePhone: true,
       contactId: true,
       hourlyRateCents: true,
+      periodRateCents: true,
       groupId: true,
       notes: true,
       recurrenceRule: true,
@@ -234,6 +237,9 @@ export class BookingService {
     if (input.hourlyRateCents != null && (!Number.isInteger(input.hourlyRateCents) || input.hourlyRateCents <= 0)) {
       throw new DomainError('validation', 'Valor da hora inválido');
     }
+    if (input.periodRateCents != null && (!Number.isInteger(input.periodRateCents) || input.periodRateCents <= 0)) {
+      throw new DomainError('validation', 'Valor do período inválido');
+    }
 
     const plans = input.weekly ? this.planWeekly(input.weekly, tz, now) : [this.planSingle(input, tz, now)];
     const intervals = plans.flatMap((p) => p.intervals);
@@ -248,6 +254,7 @@ export class BookingService {
 
     const person = await this.resolvePerson(organizationId, input);
     const rate = input.hourlyRateCents !== undefined ? input.hourlyRateCents : space.hourlyRateCents;
+    const periodRate = input.periodRateCents !== undefined ? input.periodRateCents : space.periodRateCents;
     const groupId = plans.length > 1 ? randomUUID() : null;
 
     try {
@@ -266,6 +273,7 @@ export class BookingService {
               responsibleName: person.name,
               responsiblePhone: person.phone,
               hourlyRateCents: rate ?? null,
+              periodRateCents: periodRate ?? null,
               groupId,
               notes: input.notes?.trim() || null,
               status: input.status ?? 'confirmed',

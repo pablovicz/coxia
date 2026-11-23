@@ -115,10 +115,12 @@ function RoomCard({ room, onEdit, onQr }: { room: Space; onEdit?: () => void; on
           </Badge>
         </div>
         {room.description ? <p className="line-clamp-3 text-sm text-muted-foreground">{room.description}</p> : null}
-        {room.hourlyRateCents ? (
+        {room.hourlyRateCents || room.periodRateCents ? (
           <p className="flex items-center gap-2 text-sm font-medium">
             <Tag size={16} aria-hidden className="shrink-0 text-muted-foreground" />
-            {formatBRL(room.hourlyRateCents)}/hora
+            {[room.hourlyRateCents ? `${formatBRL(room.hourlyRateCents)}/hora` : null, room.periodRateCents ? `${formatBRL(room.periodRateCents)}/período (4h)` : null]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
         ) : null}
         {room.status === 'monthly_rental' && room.rentAmountCents ? (

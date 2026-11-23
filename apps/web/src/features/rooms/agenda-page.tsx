@@ -11,7 +11,7 @@ import { Card } from '@coxia/ui/components/ui/card';
 import { Dialog } from '@coxia/ui/components/ui/dialog';
 import { Skeleton } from '@coxia/ui/components/ui/input';
 import { ApiBodyError, api, apiSend, canBook, isBookable, type Occurrence, type Space } from '@/lib/api';
-import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, local, todayIn } from '@coxia/ui/lib/format';
+import { formatBRL, formatDayTitle, formatPhone, formatRange, formatShortDay, local, rentalPriceCents, todayIn } from '@coxia/ui/lib/format';
 import { ROOM_STATUS, RoomIcon, roomStyle } from '@coxia/ui/lib/rooms';
 import { cn } from '@coxia/ui/lib/utils';
 import { useAuth, useCheckInEnabled } from '@/providers/auth-provider';
@@ -530,6 +530,8 @@ function RoomUsage({ spaces, occurrences }: { spaces: Space[]; occurrences: Occu
 // ───────────── reserva ─────────────
 
 function ReservationCard({ occ, tz, onCancel }: { occ: Occurrence; tz: string; onCancel?: () => void }) {
+  const minutes = Math.round((new Date(occ.endAt).getTime() - new Date(occ.startAt).getTime()) / 60_000);
+  const price = rentalPriceCents(minutes, occ.booking.hourlyRateCents, occ.booking.periodRateCents);
   return (
     <Card style={roomStyle(occ.space.color)} className="room-bar flex items-center gap-4 p-4">
       <div className="tabular w-20 shrink-0 text-sm font-semibold">{formatRange(occ.startAt, occ.endAt, tz)}</div>
@@ -543,10 +545,11 @@ function ReservationCard({ occ, tz, onCancel }: { occ: Occurrence; tz: string; o
             {occ.booking.responsiblePhone ? ` · ${formatPhone(occ.booking.responsiblePhone)}` : ''}
           </span>
         </p>
-        {occ.booking.hourlyRateCents ? (
+        {price != null ? (
           <p className="tabular text-sm text-muted-foreground">
-            {formatBRL(Math.round(((new Date(occ.endAt).getTime() - new Date(occ.startAt).getTime()) / 3_600_000) * occ.booking.hourlyRateCents))} ·{' '}
-            {formatBRL(occ.booking.hourlyRateCents)}/h
+            {formatBRL(price)}
+            {occ.booking.hourlyRateCents ? ` · ${formatBRL(occ.booking.hourlyRateCents)}/h` : ''}
+            {occ.booking.periodRateCents ? ` · ${formatBRL(occ.booking.periodRateCents)}/período` : ''}
           </p>
         ) : null}
         <div className="mt-1.5 flex flex-wrap gap-1.5 empty:hidden">

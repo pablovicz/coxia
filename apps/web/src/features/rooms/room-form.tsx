@@ -29,6 +29,7 @@ export function RoomForm({ room, onClose }: { room: Space | null; onClose: () =>
   const [color, setColor] = useState(room?.color ?? 'floresta');
   const [icon, setIcon] = useState(room?.icon ?? 'porta');
   const [hourly, setHourly] = useState(room?.hourlyRateCents != null ? centsToInput(room.hourlyRateCents) : '');
+  const [period, setPeriod] = useState(room?.periodRateCents != null ? centsToInput(room.periodRateCents) : '');
   const [rent, setRent] = useState(room?.rentAmountCents != null ? centsToInput(room.rentAmountCents) : '');
   const [rentDay, setRentDay] = useState(room?.rentDueDay != null ? String(room.rentDueDay) : '10');
   const [tenant, setTenant] = useState(room?.tenantName ?? '');
@@ -85,6 +86,7 @@ export function RoomForm({ room, onClose }: { room: Space | null; onClose: () =>
         color,
         icon,
         hourlyRateCents: hourly.trim() ? parseBRL(hourly) : null,
+        periodRateCents: period.trim() ? parseBRL(period) : null,
         showOnSite,
         ...rental,
       };
@@ -135,6 +137,7 @@ export function RoomForm({ room, onClose }: { room: Space | null; onClose: () =>
     if (hours.days.length === 0) return setError('Marque pelo menos um dia de funcionamento.');
     if (hours.opensAt >= hours.closesAt) return setError('O horário de abertura deve ser antes do fechamento.');
     if (hourly.trim() && !(parseBRL(hourly) ?? 0)) return setError('Valor da hora inválido. Use, por exemplo, 80,00.');
+    if (period.trim() && !(parseBRL(period) ?? 0)) return setError('Valor do período inválido. Use, por exemplo, 300,00.');
     if (status === 'monthly_rental') {
       const cents = parseBRL(rent);
       const day = Number(rentDay);
@@ -267,11 +270,18 @@ export function RoomForm({ room, onClose }: { room: Space | null; onClose: () =>
             </div>
           </fieldset>
 
-          <Field label="Valor da hora (R$)" hint="Preço da hora de locação da sala (reserva avulsa)">
-            {(id, describedBy) => (
-              <Input id={id} inputMode="decimal" className="tabular" value={hourly} placeholder="0,00" aria-describedby={describedBy} onChange={(e) => setHourly(e.target.value)} />
-            )}
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Valor da hora (R$)" hint="Preço da hora de locação (reserva avulsa)">
+              {(id, describedBy) => (
+                <Input id={id} inputMode="decimal" className="tabular" value={hourly} placeholder="0,00" aria-describedby={describedBy} onChange={(e) => setHourly(e.target.value)} />
+              )}
+            </Field>
+            <Field label="Valor do período (R$)" hint="Período = 4h. As horas que sobram vão pelo valor da hora">
+              {(id, describedBy) => (
+                <Input id={id} inputMode="decimal" className="tabular" value={period} placeholder="0,00" aria-describedby={describedBy} onChange={(e) => setPeriod(e.target.value)} />
+              )}
+            </Field>
+          </div>
         </div>
         <div className="flex min-w-0 flex-col gap-5">
           {status === 'monthly_rental' ? (

@@ -9,7 +9,7 @@ import { Input } from '@coxia/ui/components/ui/input';
 import { ContactPicker } from '@/features/contacts/contact-picker';
 import { ContactAvatar } from '@/features/contacts/contact-avatar';
 import { ApiBodyError, apiSend, type Conflict, type Contact, type Space } from '@/lib/api';
-import { centsToInput, formatBRL, formatPhone, formatRange, local, parseBRL, todayIn, toZonedIso } from '@coxia/ui/lib/format';
+import { centsToInput, formatBRL, formatPhone, formatRange, local, parseBRL, PERIOD_MINUTES, rentalPriceCents, todayIn, toZonedIso } from '@coxia/ui/lib/format';
 import { cn } from '@coxia/ui/lib/utils';
 import { WEEKDAYS } from './hours';
 
@@ -77,15 +77,17 @@ export function BookingForm({
   const [personPhone, setPersonPhone] = useState('');
   const space = spaces.find((s) => s.id === spaceId);
   const [rate, setRate] = useState(space?.hourlyRateCents != null ? centsToInput(space.hourlyRateCents) : '');
+  const [periodRate, setPeriodRate] = useState(space?.periodRateCents != null ? centsToInput(space.periodRateCents) : '');
   const [notifyHour, setNotifyHour] = useState(false);
   const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Trocar de sala traz o valor da hora dela.
+  // Trocar de sala traz os valores dela (hora e período).
   function pickSpace(id: string) {
     setSpaceId(id);
     const s = spaces.find((x) => x.id === id);
     setRate(s?.hourlyRateCents != null ? centsToInput(s.hourlyRateCents) : '');
+    setPeriodRate(s?.periodRateCents != null ? centsToInput(s.periodRateCents) : '');
   }
 
   const end = addMinutes(start, duration);
@@ -101,13 +103,14 @@ export function BookingForm({
     setDayTimes((t) => ({ ...t, [weekday]: { start: t[weekday]?.start ?? start, duration: t[weekday]?.duration ?? duration, ...patch } }));
   }
   const rateCents = rate.trim() ? parseBRL(rate) : null;
+  const periodCents = periodRate.trim() ? parseBRL(periodRate) : null;
 
   const mutation = useMutation({
     mutationFn: (onConflict: 'fail' | 'skip') => {
       const person = contact
         ? { contactId: contact.id }
         : { responsibleName: personName.trim(), responsiblePhone: personPhone.trim() };
-      const common = { spaceId, title: title.trim() || null, hourlyRateCents: rateCents, notifyOneHourBefore: notifyHour, onConflict, ...person };
+      const common = { spaceId, title: title.trim() || null, hourlyRateCents: rateCents, periodRateCents: periodCents, notifyOneHourBefore: notifyHour, onConflict, ...person };
       return apiSend<{ occurrences: unknown[]; skipped: Conflict[] }>(
         '/bookings',
         'POST',
@@ -151,13 +154,25 @@ export function BookingForm({
       return setError('Informe o responsável: escolha um contato ou cadastre nome e telefone (com DDD).');
     }
     if (rate.trim() && !rateCents) return setError('Valor da hora inválido. Use, por exemplo, 80,00.');
+    if (periodRate.trim() && !periodCents) return setError('Valor do período inválido. Use, por exemplo, 300,00.');
     mutation.mutate('fail');
   }
 
-  const hours = duration / 60;
-  const total = rateCents ? Math.round(hours * rateCents) : null;
-  const weekTotal = rateCents ? daySlots.reduce((sum, d) => sum + Math.round((d.duration / 60) * rateCents), 0) : null;
+  const total = rentalPriceCents(duration, rateCents, periodCents);
+  const weekTotal = total != null ? daySlots.reduce((sum, d) => sum + (rentalPriceCents(d.duration, rateCents, periodCents) ?? 0), 0) : null;
   const discount = space?.hourlyRateCents && rateCents && rateCents < space.hourlyRateCents ? Math.round((1 - rateCents / space.hourlyRateCents) * 100) : null;
+  const periodDiscount =
+    space?.periodRateCents && periodCents && periodCents < space.periodRateCents ? Math.round((1 - periodCents / space.periodRateCents) * 100) : null;
+  /** "2h × R$ 35,00" ou, com período, "5h (1 período + 1h × R$ 35,00)". */
+  const breakdown = (() => {
+    if (!periodCents) return rateCents ? `${durationLabel(duration)} × ${formatBRL(rateCents)}` : durationLabel(duration);
+    const periods = Math.floor(duration / PERIOD_MINUTES);
+    const rest = duration - periods * PERIOD_MINUTES;
+    const restAsPeriod = rest > 0 && (!rateCents || (rest / 60) * rateCents >= periodCents);
+    const n = periods + (restAsPeriod ? 1 : 0);
+    const parts = [n ? `${n} ${n === 1 ? 'período' : 'períodos'}` : null, rest && !restAsPeriod ? `${durationLabel(rest)} × ${formatBRL(rateCents!)}` : null];
+    return `${durationLabel(duration)} (${parts.filter(Boolean).join(' + ')})`;
+  })();
 
   const formId = 'booking-form';
   return (
@@ -236,24 +251,39 @@ export function BookingForm({
             )}
           </fieldset>
 
-          <Field
-            label="Valor da hora (R$)"
-            hint={space?.hourlyRateCents ? `Valor da sala: ${formatBRL(space.hourlyRateCents)}/h${discount ? ` · desconto de ${discount}%` : ''}` : 'Sala sem preço cadastrado'}
-          >
-            {(id, describedBy) => (
-              <Input id={id} inputMode="decimal" className="tabular" value={rate} placeholder="0,00" aria-describedby={describedBy} onChange={(e) => setRate(e.target.value)} />
-            )}
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Valor da hora (R$)"
+              hint={space?.hourlyRateCents ? `Valor da sala: ${formatBRL(space.hourlyRateCents)}/h${discount ? ` · desconto de ${discount}%` : ''}` : 'Sala sem preço por hora'}
+            >
+              {(id, describedBy) => (
+                <Input id={id} inputMode="decimal" className="tabular" value={rate} placeholder="0,00" aria-describedby={describedBy} onChange={(e) => setRate(e.target.value)} />
+              )}
+            </Field>
+            <Field
+              label="Valor do período (R$)"
+              hint={
+                space?.periodRateCents
+                  ? `Período = 4h. Valor da sala: ${formatBRL(space.periodRateCents)}${periodDiscount ? ` · desconto de ${periodDiscount}%` : ''}`
+                  : 'Período = 4h. Sala sem preço por período'
+              }
+            >
+              {(id, describedBy) => (
+                <Input id={id} inputMode="decimal" className="tabular" value={periodRate} placeholder="0,00" aria-describedby={describedBy} onChange={(e) => setPeriodRate(e.target.value)} />
+              )}
+            </Field>
+          </div>
           {total ? (
             <p className="rounded-md bg-muted/60 px-3 py-2 text-sm" aria-live="polite">
               {recurring && perDay ? (
                 <>
-                  Por semana: <strong className="tabular">{formatBRL(weekTotal ?? 0)}</strong> ({formatBRL(rateCents!)}/h)
+                  Por semana: <strong className="tabular">{formatBRL(weekTotal ?? 0)}</strong>
+                  {rateCents ? ` (${formatBRL(rateCents)}/h${periodCents ? ` · ${formatBRL(periodCents)}/período` : ''})` : ''}
                 </>
               ) : (
                 <>
                   {recurring ? 'Por dia: ' : 'Locação: '}
-                  {durationLabel(duration)} × {formatBRL(rateCents!)} = <strong className="tabular">{formatBRL(total)}</strong>
+                  {breakdown} = <strong className="tabular">{formatBRL(total)}</strong>
                   {recurring && days.length > 1 ? (
                     <>
                       {' '}

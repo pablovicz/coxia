@@ -41,6 +41,8 @@ export interface SpaceInput {
   icon?: SpaceIcon;
   /** Preço da hora de locação (reserva avulsa). */
   hourlyRateCents?: number | null;
+  /** Preço do período (4h) de locação. */
+  periodRateCents?: number | null;
   /** Aluguel mensal (sala alugada): vira entrada prevista todo mês. */
   rentAmountCents?: number | null;
   rentDueDay?: number | null;
@@ -82,9 +84,12 @@ export function assertBookable(space: { name: string; status: SpaceStatus }) {
   }
 }
 
-function validateRent(input: { rentAmountCents?: number | null; rentDueDay?: number | null; hourlyRateCents?: number | null }) {
+function validateRent(input: { rentAmountCents?: number | null; rentDueDay?: number | null; hourlyRateCents?: number | null; periodRateCents?: number | null }) {
   if (input.hourlyRateCents != null && (!Number.isInteger(input.hourlyRateCents) || input.hourlyRateCents <= 0)) {
     throw new DomainError('validation', 'Valor da hora inválido');
+  }
+  if (input.periodRateCents != null && (!Number.isInteger(input.periodRateCents) || input.periodRateCents <= 0)) {
+    throw new DomainError('validation', 'Valor do período inválido');
   }
   if (input.rentAmountCents != null && (!Number.isInteger(input.rentAmountCents) || input.rentAmountCents <= 0)) {
     throw new DomainError('validation', 'Valor do aluguel inválido');
@@ -174,6 +179,7 @@ export class SpaceService {
           ...(input.color ? { color: input.color } : {}),
           ...(input.icon ? { icon: input.icon } : {}),
           hourlyRateCents: input.hourlyRateCents ?? null,
+          periodRateCents: input.periodRateCents ?? null,
           rentAmountCents: input.rentAmountCents ?? null,
           rentDueDay: input.rentDueDay ?? null,
           tenantName: input.tenantName?.trim() || null,
@@ -212,6 +218,7 @@ export class SpaceService {
           ...(patch.color !== undefined ? { color: patch.color } : {}),
           ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
           ...(patch.hourlyRateCents !== undefined ? { hourlyRateCents: patch.hourlyRateCents } : {}),
+          ...(patch.periodRateCents !== undefined ? { periodRateCents: patch.periodRateCents } : {}),
           ...(patch.rentAmountCents !== undefined ? { rentAmountCents: patch.rentAmountCents } : {}),
           ...(patch.rentDueDay !== undefined ? { rentDueDay: patch.rentDueDay } : {}),
           ...(patch.tenantName !== undefined ? { tenantName: patch.tenantName?.trim() || null } : {}),

@@ -151,6 +151,7 @@ export function ResidentDetailPage() {
                                   {s.since ? `desde ${date(s.since)}` : ''}
                                   {s.until ? ` até ${date(s.until)}` : s.since ? ', sem fim' : ''}
                                   {s.hourlyRateCents ? ` · ${formatBRL(s.hourlyRateCents)}/h` : ''}
+                                  {s.periodRateCents ? ` · ${formatBRL(s.periodRateCents)}/período` : ''}
                                 </span>
                               </li>
                             ))}
