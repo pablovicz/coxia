@@ -30,7 +30,7 @@ describe('renovação da sessão', () => {
     expect(client.tokenStore.get()).toBe('new-access');
     expect(client.tokenStore.getRefresh()).toBe('sess.new-refresh');
     const refreshCall = fetchMock.mock.calls.find(([url]) => url.endsWith('/auth/refresh'))!;
-    expect(JSON.parse(refreshCall[1].body as string)).toEqual({ refreshToken: 'sess.old-refresh' });
+    expect(JSON.parse(refreshCall[1]!.body as string)).toEqual({ refreshToken: 'sess.old-refresh' });
     expect(ended).not.toHaveBeenCalled();
   });
 
@@ -66,6 +66,6 @@ describe('renovação da sessão', () => {
     client.logout();
     expect(client.tokenStore.get()).toBeNull();
     const call = fetchMock.mock.calls.find(([url]) => url.endsWith('/auth/logout'))!;
-    expect(JSON.parse(call[1].body as string)).toEqual({ refreshToken: 'sess.old-refresh' });
+    expect(JSON.parse(call[1]!.body as string)).toEqual({ refreshToken: 'sess.old-refresh' });
   });
 });
