@@ -179,7 +179,8 @@ function MemberDialog({ member, onClose }: { member: TeamMember | null; onClose:
   const [role, setRole] = useState<Role>(member?.role ?? 'admin');
   const [projects, setProjects] = useState(member?.canManageProjects ?? true);
   const [briefing, setBriefing] = useState(member?.receivesMorningBriefing ?? false);
-  const [password, setPassword] = useState(() => (member ? '' : generatePassword()));
+  // Opcional: sem senha inicial, a pessoa cria a sua pelo link do e-mail de boas-vindas.
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
 
@@ -198,7 +199,7 @@ function MemberDialog({ member, onClose }: { member: TeamMember | null; onClose:
             email: email.trim(),
             phone: phone.trim() || null,
             role,
-            password,
+            password: password || null,
             canManageProjects: projects,
             receivesMorningBriefing: briefing,
           }),
@@ -221,7 +222,7 @@ function MemberDialog({ member, onClose }: { member: TeamMember | null; onClose:
     if (!name.trim()) return setError('Informe o nome.');
     if (!member && !/^\S+@\S+\.\S+$/.test(email.trim())) return setError('Informe um e-mail válido.');
     if (phone.trim() && phone.replace(/\D/g, '').length < 10) return setError('Telefone com DDD, ex.: 11 98765-4321.');
-    if (!member && password.length < 8) return setError('A senha inicial precisa de pelo menos 8 caracteres.');
+    if (!member && password && password.length < 8) return setError('A senha inicial precisa de pelo menos 8 caracteres.');
     save.mutate();
   }
 
@@ -231,15 +232,22 @@ function MemberDialog({ member, onClose }: { member: TeamMember | null; onClose:
         open
         onOpenChange={(v) => !v && onClose()}
         title="Pessoa cadastrada"
-        description="Repasse o acesso por um canal seguro. A senha não aparece de novo."
+        description={`Enviamos um e-mail de boas-vindas para ${created.email} com o link para criar a senha (vale 7 dias).`}
         footer={<Button onClick={onClose}>Pronto</Button>}
       >
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-muted-foreground">E-mail</dt>
-          <dd>{created.email}</dd>
-          <dt className="text-muted-foreground">Senha inicial</dt>
-          <dd className="font-mono text-base">{created.password}</dd>
-        </dl>
+        {created.password ? (
+          <>
+            <p className="mb-3 text-sm text-muted-foreground">A senha inicial também vale. Repasse por um canal seguro: ela não aparece de novo.</p>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">E-mail</dt>
+              <dd>{created.email}</dd>
+              <dt className="text-muted-foreground">Senha inicial</dt>
+              <dd className="font-mono text-base">{created.password}</dd>
+            </dl>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Se o e-mail não chegar, a pessoa pode usar “Esqueci a senha” no login.</p>
+        )}
       </Dialog>
     );
   }
@@ -287,10 +295,10 @@ function MemberDialog({ member, onClose }: { member: TeamMember | null; onClose:
           )}
         </Field>
         {member ? null : (
-          <Field label="Senha inicial" hint="Gerada automaticamente; pode trocar" className="sm:col-span-2">
+          <Field label="Senha inicial (opcional)" hint="Sem senha, a pessoa cria a sua pelo e-mail de boas-vindas" className="sm:col-span-2">
             {(id, describedBy) => (
               <div className="flex gap-2">
-                <Input id={id} className="font-mono" value={password} aria-describedby={describedBy} onChange={(e) => setPassword(e.target.value)} />
+                <Input id={id} className="font-mono" value={password} autoComplete="off" placeholder="Deixe vazio para a pessoa criar" aria-describedby={describedBy} onChange={(e) => setPassword(e.target.value)} />
                 <Button variant="outline" onClick={() => setPassword(generatePassword())}>
                   Gerar
                 </Button>

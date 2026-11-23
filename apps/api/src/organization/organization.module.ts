@@ -1,3 +1,4 @@
+import { StaffPasswordService } from '@coxia/domain';
 import {
   Body,
   ConflictException,
@@ -51,7 +52,8 @@ const newMemberSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(200),
   phone: phoneField,
   role: role.default('admin'),
-  password: z.string().min(8, 'A senha inicial precisa de pelo menos 8 caracteres').max(200),
+  /** Opcional: sem senha inicial, a pessoa cria a sua pelo link do e-mail de boas-vindas. */
+  password: z.string().min(8, 'A senha inicial precisa de pelo menos 8 caracteres').max(200).nullish(),
   canManageProjects: z.boolean().optional(),
   receivesMorningBriefing: z.boolean().optional(),
 });
@@ -82,6 +84,11 @@ export class OrganizationController {
     private readonly audit: AuditService,
     private readonly storage: StorageService,
   ) {}
+
+  /** Boas-vindas (e-mail com link para criar a senha). */
+  private get passwords() {
+    return new StaffPasswordService(this.prisma, { hash: (p) => bcrypt.hash(p, 12), compare: (p, h) => bcrypt.compare(p, h) });
+  }
 
   // ───────────── Avatar (cada pessoa cuida da própria foto) ─────────────
 
@@ -166,12 +173,15 @@ export class OrganizationController {
     });
   }
 
-  /** Nova pessoa da equipe com senha inicial (a administração repassa). Só o responsável cria outro responsável. */
+  /**
+   * Nova pessoa da equipe. Recebe o e-mail de boas-vindas com o link para criar a senha; a senha
+   * inicial é opcional (se houver, a administração repassa). Só o responsável cria outro responsável.
+   */
   @Roles('owner', 'admin')
   @Post('organization/team')
   async addMember(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(newMemberSchema)) body: z.infer<typeof newMemberSchema>) {
     if (body.role === 'owner' && user.role !== 'owner') throw new ForbiddenException('Só o responsável pode cadastrar outro responsável');
-    const passwordHash = await bcrypt.hash(body.password, 12);
+    const passwordHash = body.password ? await bcrypt.hash(body.password, 12) : null;
     try {
       const member = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({ data: { name: body.name, email: body.email, phone: body.phone, passwordHash } });
@@ -187,6 +197,7 @@ export class OrganizationController {
         });
       });
       await this.record(user, 'member.create', member.id, { after: { name: body.name, email: body.email, phone: body.phone, role: body.role } });
+      await this.passwords.sendWelcome(member.user.id, user.organizationId);
       return member;
     } catch (err) {
       if (isUniqueViolation(err)) throw new ConflictException('Já existe alguém com esse e-mail ou telefone');

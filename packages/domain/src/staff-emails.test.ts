@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planNotifications, type PlannerInput } from './notifications';
 import { renderResidentEmail } from './resident-emails';
-import { renderStaffEmail } from './staff-emails';
+import { renderStaffAccessEmail, renderStaffEmail } from './staff-emails';
 
 const at = (local: string) => new Date(`${local}-03:00`);
 const base: PlannerInput = {
@@ -87,5 +87,17 @@ describe('avisos por e-mail para as administradoras', () => {
     );
     expect(invite.html).toContain('src="https://residente.casakaju.com/email/kaju-mark.png"');
     expect(invite.html.indexOf('>Casa Kaju</td>')).toBeLessThan(invite.html.indexOf('<h1'));
+  });
+
+  it('boas-vindas da equipe: papel, e-mail de login e link para criar a senha', () => {
+    const ctx = { staffUrl: 'https://coxia.casakaju.com' };
+    const base = { template: 'staff_access' as const, purpose: 'welcome' as const, userName: 'Julia Herculano', token: 'tk', roleLabel: 'Administração', loginEmail: 'julia@exemplo.com' };
+    const sem = renderStaffAccessEmail({ ...base, hasInitialPassword: false }, ctx);
+    expect(sem.subject).toBe('Boas-vindas à Coxia');
+    expect(sem.html).toContain('Olá, Julia!');
+    expect(sem.html).toContain('<strong>Administração</strong>');
+    expect(sem.html).toContain('https://coxia.casakaju.com/redefinir-senha?token=tk');
+    expect(sem.html).toContain('Para começar, crie a sua senha');
+    expect(renderStaffAccessEmail({ ...base, hasInitialPassword: true }, ctx).html).toContain('a senha inicial que te passaram');
   });
 });

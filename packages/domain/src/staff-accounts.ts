@@ -3,8 +3,11 @@ import { audit, type Db, DomainError } from './common';
 import { hashAuthToken, MIN_PASSWORD_LENGTH, type PasswordHasher } from './resident-accounts';
 import { enqueueStaffEmail } from './staff-emails';
 
-/** O link de redefinição vale 1 hora. */
+/** O link de redefinição vale 1 hora; o de boas-vindas, 7 dias. */
 export const STAFF_RESET_TTL_MS = 60 * 60 * 1000;
+export const STAFF_WELCOME_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const ROLE_LABEL: Record<string, string> = { owner: 'Responsável', admin: 'Administração', staff: 'Equipe', viewer: 'Leitura' };
 
 /** Redefinição de senha de quem é da equipe (login do painel Coxia). */
 export class StaffPasswordService {
@@ -26,6 +29,27 @@ export class StaffPasswordService {
     await this.db.$transaction(async (tx) => {
       const t = await tx.userAuthToken.create({ data: { userId: user.id, tokenHash: hashAuthToken(token), expiresAt: new Date(now.getTime() + STAFF_RESET_TTL_MS) } });
       await enqueueStaffEmail(tx, membership.organizationId, email, { template: 'staff_access', purpose: 'reset', userName: user.name, token }, `staff_password_reset:${t.id}`);
+    });
+  }
+
+  /**
+   * Boas-vindas a quem acabou de entrar na equipe: e-mail com o link para criar a senha (7 dias).
+   * Com senha inicial, ela continua valendo; o link é só para quem preferir criar a própria.
+   */
+  async sendWelcome(userId: string, organizationId: string, now = new Date()) {
+    const member = await this.db.organizationMember.findFirst({ where: { userId, organizationId }, include: { user: true } });
+    const email = member?.user.email;
+    if (!member || !email) return;
+    const token = randomBytes(32).toString('base64url');
+    await this.db.$transaction(async (tx) => {
+      const t = await tx.userAuthToken.create({ data: { userId, tokenHash: hashAuthToken(token), expiresAt: new Date(now.getTime() + STAFF_WELCOME_TTL_MS) } });
+      await enqueueStaffEmail(
+        tx,
+        organizationId,
+        email,
+        { template: 'staff_access', purpose: 'welcome', userName: member.user.name, token, roleLabel: ROLE_LABEL[member.role], loginEmail: email, hasInitialPassword: !!member.user.passwordHash },
+        `staff_welcome:${t.id}`,
+      );
     });
   }
 

@@ -36,7 +36,7 @@ export function senderFor(
   env: Pick<WorkerEnv, 'EMAIL_FROM' | 'EMAIL_FROM_NOTICES' | 'EMAIL_FROM_RECOVERY' | 'EMAIL_FROM_WELCOME'>,
 ): string {
   if (payload.template === 'staff_notice') return env.EMAIL_FROM_NOTICES;
-  if (payload.template === 'staff_access') return env.EMAIL_FROM_RECOVERY;
+  if (payload.template === 'staff_access') return payload.purpose === 'welcome' ? env.EMAIL_FROM_WELCOME : env.EMAIL_FROM_RECOVERY;
   if (payload.template === 'access') return payload.purpose === 'reset' ? env.EMAIL_FROM_RECOVERY : env.EMAIL_FROM_WELCOME;
   return env.EMAIL_FROM;
 }

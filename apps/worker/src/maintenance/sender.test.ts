@@ -18,6 +18,7 @@ describe('remetente por tipo de e-mail', () => {
     expect(senderFor({ ...access, purpose: 'reset' }, env)).toBe('Casa Kaju <recovery@casakaju.com>');
     expect(senderFor({ ...access, purpose: 'invite' }, env)).toBe('Casa Kaju <contato@casakaju.com>');
     expect(senderFor({ template: 'staff_access', purpose: 'reset', userName: 'Kao', token: 't' }, env)).toBe('Casa Kaju <recovery@casakaju.com>');
+    expect(senderFor({ template: 'staff_access', purpose: 'welcome', userName: 'Kao', token: 't' }, env)).toBe('Casa Kaju <contato@casakaju.com>');
   });
 
   it('convites de reserva continuam em reservas@', () => {

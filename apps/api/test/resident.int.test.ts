@@ -368,3 +368,26 @@ describe('redefinir senha da equipe', () => {
     await http().get('/auth/me').set(auth(login.body.accessToken)).expect(200);
   });
 });
+
+describe('boas-vindas da equipe', () => {
+  it('nova pessoa sem senha recebe o e-mail de boas-vindas e cria a senha pelo link', async () => {
+    const admin = (await http().post('/auth/login').send({ email: adminEmail, password: 'senha-nova-da-admin' }).expect(200)).body.accessToken as string;
+    const email = `nova-${run}@coxia.test`;
+    await http().post('/organization/team').set(auth(admin)).send({ name: 'Bia Nova', email, role: 'staff' }).expect(201);
+    await http().post('/auth/login').send({ email, password: 'qualquer-coisa' }).expect(401);
+
+    const delivery = await prisma.notificationDelivery.findFirstOrThrow({ where: { recipient: email, idempotencyKey: { startsWith: 'staff_welcome:' } } });
+    expect(delivery.payload).toMatchObject({ template: 'staff_access', purpose: 'welcome', roleLabel: 'Equipe', loginEmail: email, hasInitialPassword: false });
+    const token = (delivery.payload as { token: string }).token;
+    await http().post('/auth/password').send({ token, password: 'senha-da-bia-123' }).expect(204);
+    await http().post('/auth/login').send({ email, password: 'senha-da-bia-123' }).expect(200);
+
+    // com senha inicial: ela vale, e o e-mail avisa
+    const other = `outra-${run}@coxia.test`;
+    await http().post('/organization/team').set(auth(admin)).send({ name: 'Caio', email: other, role: 'admin', password: 'inicial-caio-1' }).expect(201);
+    await http().post('/auth/login').send({ email: other, password: 'inicial-caio-1' }).expect(200);
+    const d2 = await prisma.notificationDelivery.findFirstOrThrow({ where: { recipient: other, idempotencyKey: { startsWith: 'staff_welcome:' } } });
+    expect(d2.payload).toMatchObject({ purpose: 'welcome', roleLabel: 'Administração', hasInitialPassword: true });
+    await prisma.user.deleteMany({ where: { email: { in: [email, other] } } });
+  });
+});

@@ -21,8 +21,13 @@ export interface StaffNoticePayload {
 /** Redefinição de senha de quem é da equipe (painel Coxia). */
 export interface StaffAccessPayload {
   template: 'staff_access';
-  purpose: 'reset';
+  /** reset: "esqueci a senha"; welcome: boas-vindas a quem acabou de entrar na equipe. */
+  purpose: 'reset' | 'welcome';
   userName: string;
+  /** Boas-vindas: o papel (Responsável, Administração…), o e-mail de login e se já há senha inicial. */
+  roleLabel?: string;
+  loginEmail?: string;
+  hasInitialPassword?: boolean;
   /** Token bruto do link (o banco guarda só o hash). O worker apaga daqui depois de enviar. */
   token: string;
 }
@@ -62,7 +67,25 @@ export function renderStaffEmail(payload: StaffNoticePayload, ctx: { staffUrl: s
 }
 
 export function renderStaffAccessEmail(payload: StaffAccessPayload, ctx: { staffUrl: string; logoUrl?: string | null }): RenderedEmail {
-  const url = `${ctx.staffUrl.replace(/\/$/, '')}/redefinir-senha?token=${encodeURIComponent(payload.token)}`;
+  const base = ctx.staffUrl.replace(/\/$/, '');
+  const url = `${base}/redefinir-senha?token=${encodeURIComponent(payload.token)}`;
+  const first = escapeHtml(payload.userName.split(' ')[0] ?? payload.userName);
+  if (payload.purpose === 'welcome') {
+    const subject = 'Boas-vindas à Coxia';
+    const lines = [
+      `Olá, ${first}!`,
+      `Você agora faz parte da equipe da Casa Kaju na Coxia${payload.roleLabel ? `, como <strong>${escapeHtml(payload.roleLabel)}</strong>` : ''}. É por lá que a casa organiza o calendário, as reservas das salas, os contatos, os orçamentos, os projetos e o financeiro.`,
+      payload.hasInitialPassword
+        ? `Para entrar, use o seu e-mail (<strong>${escapeHtml(payload.loginEmail ?? '')}</strong>) e a senha inicial que te passaram. Se preferir, crie a sua própria senha pelo botão abaixo (o link vale por 7 dias).`
+        : `Para começar, crie a sua senha pelo botão abaixo (o link vale por 7 dias). Depois é só entrar com o seu e-mail (<strong>${escapeHtml(payload.loginEmail ?? '')}</strong>).`,
+      `O painel fica em <a href="${escapeHtml(base)}" style="color:#2f5d50">${escapeHtml(base.replace(/^https?:\/\//, ''))}</a> e pode ser instalado como app no celular.`,
+    ];
+    return {
+      subject,
+      html: layout(subject, lines, { label: 'Criar minha senha', url }, 'Coxia · Casa Kaju', ctx.logoUrl),
+      text: `${lines.join('\n\n').replace(/<[^>]+>/g, '')}\n\nCriar minha senha: ${url}`,
+    };
+  }
   const subject = 'Redefinir a senha da Coxia';
   const lines = [
     `Olá, ${escapeHtml(payload.userName.split(' ')[0] ?? payload.userName)}!`,
