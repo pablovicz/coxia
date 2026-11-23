@@ -4,6 +4,7 @@ import { Button } from '@coxia/ui/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@coxia/ui/components/ui/card';
 import { Field } from '@coxia/ui/components/ui/field';
 import { Input } from '@coxia/ui/components/ui/input';
+import { PasswordInput } from '@coxia/ui/components/ui/password-input';
 import { useQueryClient } from '@tanstack/react-query';
 import { Camera, LogOut, Trash2 } from 'lucide-react';
 import { type FormEvent, useRef, useState } from 'react';
@@ -117,7 +118,7 @@ export function SettingsPage() {
             <form className="grid gap-4 sm:grid-cols-2" onSubmit={changeEmail} noValidate>
               <Field label="Novo e-mail">{(id) => <Input id={id} name="email" type="email" autoComplete="email" required />}</Field>
               <Field label="Senha atual" hint="Para confirmar que é você.">
-                {(id, d) => <Input id={id} name="password" type="password" autoComplete="current-password" aria-describedby={d} required />}
+                {(id, d) => <PasswordInput id={id} name="password" autoComplete="current-password" aria-describedby={d} required />}
               </Field>
               {emailError ? (
                 <p role="alert" className="text-sm text-destructive sm:col-span-2">

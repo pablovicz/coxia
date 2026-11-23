@@ -1,3 +1,4 @@
+import { InstallAppButton } from '@coxia/ui/components/install-app-button';
 import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { type FormEvent, useState } from 'react';
 import { Link, Navigate } from 'react-router';
@@ -78,6 +79,7 @@ export function LoginPage() {
             Esqueci a senha
           </Link>
         </form>
+        <InstallAppButton appName="Coxia" className="mt-6" />
         <p className="mt-8 text-center text-xs text-muted-foreground">Coxia · by Casa Kaju</p>
       </div>
     </div>

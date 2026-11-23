@@ -1,8 +1,10 @@
+import { InstallAppButton } from '@coxia/ui/components/install-app-button';
 import { BrandMark } from '@coxia/ui/components/brand-mark';
 import { Button } from '@coxia/ui/components/ui/button';
 import { Card } from '@coxia/ui/components/ui/card';
 import { Field } from '@coxia/ui/components/ui/field';
 import { Input } from '@coxia/ui/components/ui/input';
+import { PasswordInput } from '@coxia/ui/components/ui/password-input';
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
@@ -31,12 +33,23 @@ function AuthLayout({ title, description, children }: { title: string; descripti
   );
 }
 
+/** Último e-mail que entrou neste aparelho (só o e-mail; a senha nunca é guardada). */
+const LAST_EMAIL_KEY = 'kaju-resident-last-email';
+function lastEmail(): string {
+  try {
+    return localStorage.getItem(LAST_EMAIL_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 /** Só caminhos internos (evita redirecionar para fora pelo ?next=). */
 function safeNext(next: string | null) {
   return next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
 }
 
 export function LoginPage() {
+  const [remembered] = useState(lastEmail);
   const { me, login } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -51,7 +64,13 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await login(String(data.get('email')), String(data.get('password')));
+      const email = String(data.get('email')).trim();
+      await login(email, String(data.get('password')));
+      try {
+        localStorage.setItem(LAST_EMAIL_KEY, email);
+      } catch {
+        /* sem storage: só não lembra */
+      }
       navigate(next, { replace: true });
     } catch (err) {
       setError(err instanceof ApiError && err.status === 401 ? 'E-mail ou senha incorretos.' : err instanceof ApiError && err.status === 429 ? 'Muitas tentativas. Aguarde alguns minutos.' : 'Não foi possível entrar agora. Tente de novo.');
@@ -63,8 +82,8 @@ export function LoginPage() {
   return (
     <AuthLayout title="Entrar" description={next.startsWith('/sala/') || next.includes('/check-in') ? 'Entre para fazer o check-in na sala.' : 'Reservas, saldo de horas e pagamentos.'}>
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
-        <Field label="E-mail">{(id) => <Input id={id} name="email" type="email" autoComplete="email" required />}</Field>
-        <Field label="Senha">{(id) => <Input id={id} name="password" type="password" autoComplete="current-password" required />}</Field>
+        <Field label="E-mail">{(id) => <Input id={id} name="email" type="email" autoComplete="username" defaultValue={remembered} autoFocus={!remembered} required />}</Field>
+        <Field label="Senha">{(id) => <PasswordInput id={id} name="password" autoComplete="current-password" autoFocus={!!remembered} required />}</Field>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -77,6 +96,7 @@ export function LoginPage() {
           Esqueci a senha
         </Link>
       </form>
+      <InstallAppButton appName="Casa Kaju" className="mt-6" />
     </AuthLayout>
   );
 }
@@ -162,11 +182,11 @@ export function ChangePasswordPage() {
   return (
     <AuthLayout title="Crie a sua senha" description={`Olá, ${me?.resident.name.split(' ')[0] ?? ''}! Você entrou com uma senha provisória. Para continuar, crie uma senha só sua.`}>
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
-        <Field label="Senha provisória">{(id) => <Input id={id} name="current" type="password" autoComplete="current-password" required />}</Field>
+        <Field label="Senha provisória">{(id) => <PasswordInput id={id} name="current" autoComplete="current-password" required />}</Field>
         <Field label="Nova senha" hint="Pelo menos 8 caracteres.">
-          {(id, describedBy) => <Input id={id} name="password" type="password" autoComplete="new-password" aria-describedby={describedBy} required />}
+          {(id, describedBy) => <PasswordInput id={id} name="password" autoComplete="new-password" aria-describedby={describedBy} required />}
         </Field>
-        <Field label="Repita a nova senha">{(id) => <Input id={id} name="confirm" type="password" autoComplete="new-password" required />}</Field>
+        <Field label="Repita a nova senha">{(id) => <PasswordInput id={id} name="confirm" autoComplete="new-password" required />}</Field>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -213,9 +233,9 @@ export function SetPasswordPage() {
     <AuthLayout title="Criar senha" description="Defina a senha do seu acesso ao workspace.">
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <Field label="Senha" hint="Pelo menos 8 caracteres.">
-          {(id, describedBy) => <Input id={id} name="password" type="password" autoComplete="new-password" aria-describedby={describedBy} required />}
+          {(id, describedBy) => <PasswordInput id={id} name="password" autoComplete="new-password" aria-describedby={describedBy} required />}
         </Field>
-        <Field label="Repita a senha">{(id) => <Input id={id} name="confirm" type="password" autoComplete="new-password" required />}</Field>
+        <Field label="Repita a senha">{(id) => <PasswordInput id={id} name="confirm" autoComplete="new-password" required />}</Field>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
