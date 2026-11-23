@@ -101,7 +101,7 @@ export default defineRailway((ctx) => {
       ...whatsappEnv,
       ...storageEnv,
       JWT_SECRET: preserve(),
-      JWT_EXPIRES_IN: '12h',
+      JWT_EXPIRES_IN: '15m',
       // Domínios do painel (web), do site público (site) e do workspace do residente (resident).
       CORS_ORIGINS:
         'https://coxia.casakaju.com,https://coxia.up.railway.app,https://${{web.RAILWAY_PUBLIC_DOMAIN}},https://casakaju.com,https://www.casakaju.com,https://${{site.RAILWAY_PUBLIC_DOMAIN}},https://residente.casakaju.com,https://${{resident.RAILWAY_PUBLIC_DOMAIN}}',

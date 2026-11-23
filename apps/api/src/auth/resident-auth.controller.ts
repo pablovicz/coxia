@@ -1,5 +1,4 @@
 import { Body, Controller, HttpCode, Post, Req, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ResidentAccountService } from '@coxia/domain';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -7,6 +6,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { AllowPendingPassword, type AuthResident, CurrentResident, Public, ResidentRoute } from './decorators';
 import type { ResidentPayload } from './guards';
 import { LoginThrottle } from './login-throttle';
+import { AuthSessionService } from './sessions.service';
 
 const loginSchema = z.object({ email: z.string().email().transform((e) => e.toLowerCase()), password: z.string().min(1).max(200) });
 const forgotSchema = z.object({ email: z.string().email().transform((e) => e.toLowerCase()) });
@@ -16,9 +16,6 @@ const changeSchema = z.object({ currentPassword: z.string().min(1).max(200), new
 // Mesmo custo do hash real: e-mail inexistente responde no mesmo tempo.
 const DUMMY_HASH = bcrypt.hashSync('coxia-resident-dummy', 12);
 
-/** O residente fica logado no celular (escaneia o QR da sala): sessão de 30 dias. */
-const RESIDENT_SESSION = '30d';
-
 /** Login do workspace do residente (residente.casakaju.com). Separado do login da equipe. */
 @Controller('resident-auth')
 export class ResidentAuthController {
@@ -27,7 +24,7 @@ export class ResidentAuthController {
 
   constructor(
     private readonly accounts: ResidentAccountService,
-    private readonly jwt: JwtService,
+    private readonly sessions: AuthSessionService,
   ) {}
 
   @Public()
@@ -45,9 +42,9 @@ export class ResidentAuthController {
     this.throttle.succeed(ip, body.email);
     await this.accounts.touchLogin(account.id);
     const payload: ResidentPayload = { sub: account.id, org: account.organizationId, res: account.residentId, kind: 'resident' };
-    const accessToken = await this.jwt.signAsync(payload, { expiresIn: RESIDENT_SESSION });
+    const tokens = await this.sessions.start({ kind: 'resident', residentAccountId: account.id }, payload);
     return {
-      accessToken,
+      ...tokens,
       mustChangePassword: account.mustChangePassword,
       resident: { id: account.residentId, name: account.resident.name, email: account.email },
       organization: { id: account.organization.id, name: account.organization.name, timezone: account.organization.timezone },
@@ -67,7 +64,7 @@ export class ResidentAuthController {
 
   /**
    * O residente troca a própria senha (obrigatório depois da senha provisória). As outras sessões
-   * caem; esta recebe um token novo.
+   * caem; esta recebe uma sessão nova (access + refresh token).
    */
   @ResidentRoute()
   @AllowPendingPassword()
@@ -75,10 +72,10 @@ export class ResidentAuthController {
   @HttpCode(200)
   async changePassword(@CurrentResident() r: AuthResident, @Body(new ZodValidationPipe(changeSchema)) body: z.infer<typeof changeSchema>) {
     const account = await this.accounts.changePassword(r.accountId, body.currentPassword, body.newPassword);
-    // iat no segundo seguinte: o token novo sempre vale depois de sessions_valid_from.
+    // iat no segundo seguinte: o token novo sempre vale depois de sessions_valid_from (a sessão nova também).
     await new Promise((resolve) => setTimeout(resolve, 1000 - (Date.now() % 1000)));
     const payload: ResidentPayload = { sub: account.id, org: account.organizationId, res: account.residentId, kind: 'resident' };
-    return { accessToken: await this.jwt.signAsync(payload, { expiresIn: RESIDENT_SESSION }) };
+    return this.sessions.start({ kind: 'resident', residentAccountId: account.id }, payload);
   }
 
   /** Define a senha pelo link do e-mail (convite ou redefinição). */

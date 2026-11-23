@@ -9,7 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
-import { ApiBodyError, ApiError, apiSend } from '@/lib/api';
+import { ApiBodyError, ApiError, apiSend, type SessionTokens } from '@/lib/api';
 import { useAuth } from '@/providers/auth';
 
 function AuthLayout({ title, description, children }: { title: string; description: string; children: ReactNode }) {
@@ -168,8 +168,8 @@ export function ChangePasswordPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await apiSend<{ accessToken: string }>('/resident-auth/change-password', 'POST', { currentPassword, newPassword });
-      replaceToken(res.accessToken);
+      const res = await apiSend<SessionTokens>('/resident-auth/change-password', 'POST', { currentPassword, newPassword });
+      replaceToken(res);
       await qc.invalidateQueries();
       toast.success('Senha criada. Bem-vindo ao workspace!');
     } catch (err) {

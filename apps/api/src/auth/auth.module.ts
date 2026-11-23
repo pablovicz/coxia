@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Inject, Injectable, Module, Post, Req,
 import { LoginThrottle } from './login-throttle';
 import { StaffPasswordService } from '@coxia/domain';
 import { APP_GUARD } from '@nestjs/core';
-import { JwtModule, JwtService, type JwtSignOptions } from '@nestjs/jwt';
+import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { API_ENV, type ApiEnv } from '../config/env';
@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { type AuthUser, CurrentUser, Public } from './decorators';
 import { JwtAuthGuard, RolesGuard } from './guards';
 import { ResidentAuthController } from './resident-auth.controller';
+import { AuthSessionService } from './sessions.service';
 
 const loginSchema = z.object({
   email: z.string().email().transform((e) => e.toLowerCase()),
@@ -19,6 +20,7 @@ const loginSchema = z.object({
 type LoginInput = z.infer<typeof loginSchema>;
 const forgotSchema = z.object({ email: z.string().email().transform((e) => e.toLowerCase()) });
 const passwordSchema = z.object({ token: z.string().min(20).max(200), password: z.string().min(1).max(200) });
+const refreshSchema = z.object({ refreshToken: z.string().min(1).max(200) });
 
 // Hash real com o mesmo custo, para igualar o tempo de resposta quando o e-mail não existe.
 const DUMMY_HASH = bcrypt.hashSync('coxia-dummy-password', 12);
@@ -27,7 +29,7 @@ const DUMMY_HASH = bcrypt.hashSync('coxia-dummy-password', 12);
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwt: JwtService,
+    private readonly sessions: AuthSessionService,
     @Inject(API_ENV) private readonly env: ApiEnv,
   ) {}
 
@@ -40,14 +42,12 @@ export class AuthService {
     const membership = user?.memberships[0];
     if (!user || !ok || !membership) throw new UnauthorizedException('E-mail ou senha incorretos');
 
-    const accessToken = await this.jwt.signAsync({
-      sub: user.id,
-      org: membership.organizationId,
-      mid: membership.id,
-      role: membership.role,
-    });
+    const tokens = await this.sessions.start(
+      { kind: 'staff', userId: user.id, memberId: membership.id },
+      { sub: user.id, org: membership.organizationId, mid: membership.id, role: membership.role },
+    );
     return {
-      accessToken,
+      ...tokens,
       user: { id: user.id, name: user.name, email: user.email, role: membership.role },
       organization: {
         id: membership.organization.id,
@@ -87,6 +87,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly passwords: StaffPasswordService,
+    private readonly sessions: AuthSessionService,
   ) {}
 
   @Public()
@@ -103,6 +104,25 @@ export class AuthController {
       if (err instanceof UnauthorizedException) this.throttle.fail(ip, body.email);
       throw err;
     }
+  }
+
+  /**
+   * Troca o refresh token (equipe ou residente) por um par novo. Público: o access token já
+   * pode ter vencido. A sessão continua acabando 7 dias depois do login.
+   */
+  @Public()
+  @Post('refresh')
+  @HttpCode(200)
+  refresh(@Body(new ZodValidationPipe(refreshSchema)) body: z.infer<typeof refreshSchema>) {
+    return this.sessions.refresh(body.refreshToken);
+  }
+
+  /** Sai: revoga a sessão do refresh token. Sempre 204. */
+  @Public()
+  @Post('logout')
+  @HttpCode(204)
+  async logout(@Body(new ZodValidationPipe(refreshSchema)) body: z.infer<typeof refreshSchema>) {
+    await this.sessions.revoke(body.refreshToken);
   }
 
   @Get('me')
@@ -144,6 +164,7 @@ export class AuthController {
   controllers: [AuthController, ResidentAuthController],
   providers: [
     AuthService,
+    AuthSessionService,
     {
       provide: StaffPasswordService,
       inject: [PrismaService],
@@ -152,6 +173,6 @@ export class AuthController {
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, AuthSessionService, JwtModule],
 })
 export class AuthModule {}

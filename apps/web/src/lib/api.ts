@@ -1,5 +1,16 @@
+import { createApiClient } from '@coxia/ui/lib/api-client';
+
 export const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3000';
-const TOKEN_KEY = 'coxia-token';
+const UNAUTHORIZED_EVENT = 'coxia:unauthorized';
+
+/**
+ * Sessão da equipe no localStorage: access token curto, renovado sozinho pelo refresh token;
+ * a sessão acaba 7 dias depois do login.
+ */
+const client = createApiClient({ baseUrl: API_URL, tokenKey: 'coxia-token', storage: 'local', unauthorizedEvent: UNAUTHORIZED_EVENT, refreshPath: '/auth/refresh' });
+export const { tokenStore, authFetch } = client;
+export const logoutSession = client.logout;
+export type { SessionTokens } from '@coxia/ui/lib/api-client';
 
 export class ApiError extends Error {
   constructor(
@@ -11,39 +22,16 @@ export class ApiError extends Error {
   }
 }
 
-export const tokenStore = {
-  get(): string | null {
-    try {
-      return sessionStorage.getItem(TOKEN_KEY);
-    } catch {
-      return null;
-    }
-  },
-  set(token: string | null) {
-    try {
-      if (token) sessionStorage.setItem(TOKEN_KEY, token);
-      else sessionStorage.removeItem(TOKEN_KEY);
-    } catch {
-      /* sem storage: sessão só em memória */
-    }
-  },
-};
-
 export async function api<T>(path: string, init: RequestInit & { idempotencyKey?: string } = {}): Promise<T> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}${path}`, {
-    ...init,
+  const { idempotencyKey, ...rest } = init;
+  const res = await authFetch(path, {
+    ...rest,
     headers: {
       'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(init.idempotencyKey ? { 'idempotency-key': init.idempotencyKey } : {}),
-      ...init.headers,
+      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
+      ...rest.headers,
     },
   });
-  if (res.status === 401) {
-    tokenStore.set(null);
-    window.dispatchEvent(new Event('coxia:unauthorized'));
-  }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { message?: string } | null;
     throw new ApiError(res.status, body?.message ?? `Erro ${res.status}`);
@@ -250,24 +238,18 @@ export interface ProjectDocument {
 }
 
 export async function uploadProjectDocument(projectId: string, kind: ProjectDocumentKind, file: File): Promise<ProjectDocument> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/projects/${projectId}/documents?kind=${kind}`, {
+  const res = await authFetch(`/projects/${projectId}/documents?kind=${kind}`, {
     method: 'POST',
-    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name) },
     body: file,
   });
-  if (res.status === 401) {
-    tokenStore.set(null);
-    window.dispatchEvent(new Event('coxia:unauthorized'));
-  }
   const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
   if (!res.ok) throw new ApiBodyError(res.status, json);
   return json as unknown as ProjectDocument;
 }
 
 export async function fetchProjectDocument(projectId: string, documentId: string): Promise<Blob> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/projects/${projectId}/documents/${documentId}/file`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await authFetch(`/projects/${projectId}/documents/${documentId}/file`);
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
 }
@@ -576,21 +558,15 @@ export class ApiBodyError extends ApiError {
 }
 
 export async function apiSend<T>(path: string, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown): Promise<T> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await authFetch(path, {
     method,
     headers: {
       'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
       // Clique duplo/reenvio não cria duas reservas ou dois pagamentos.
       'idempotency-key': crypto.randomUUID(),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (res.status === 401) {
-    tokenStore.set(null);
-    window.dispatchEvent(new Event('coxia:unauthorized'));
-  }
   if (res.status === 204) return undefined as T;
   const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
   if (!res.ok) throw new ApiBodyError(res.status, json);
@@ -639,16 +615,11 @@ export interface DeadDelivery {
 
 /** Envia a foto como corpo bruto (a api confere o tipo pelos bytes). */
 export async function uploadSpacePhoto(spaceId: string, file: File): Promise<{ id: string }> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/spaces/${spaceId}/photos`, {
+  const res = await authFetch(`/spaces/${spaceId}/photos`, {
     method: 'POST',
-    headers: { 'content-type': file.type, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': file.type },
     body: file,
   });
-  if (res.status === 401) {
-    tokenStore.set(null);
-    window.dispatchEvent(new Event('coxia:unauthorized'));
-  }
   const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
   if (!res.ok) throw new ApiBodyError(res.status, json);
   return json as unknown as { id: string };
@@ -660,26 +631,18 @@ export const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
 export async function uploadAvatar(file: File): Promise<{ avatarUpdatedAt: string }> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/organization/me/avatar`, {
+  const res = await authFetch(`/organization/me/avatar`, {
     method: 'POST',
-    headers: { 'content-type': file.type, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': file.type },
     body: file,
   });
-  if (res.status === 401) {
-    tokenStore.set(null);
-    window.dispatchEvent(new Event('coxia:unauthorized'));
-  }
   const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
   if (!res.ok) throw new ApiBodyError(res.status, json);
   return json as unknown as { avatarUpdatedAt: string };
 }
 
 export async function fetchAvatar(userId: string, version: string): Promise<Blob> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/organization/users/${userId}/avatar?v=${encodeURIComponent(version)}`, {
-    headers: token ? { authorization: `Bearer ${token}` } : {},
-  });
+  const res = await authFetch(`/organization/users/${userId}/avatar?v=${encodeURIComponent(version)}`);
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
 }
@@ -693,36 +656,27 @@ export const MAX_PROOF_BYTES = 10 * 1024 * 1024;
  * pagamento (sem valor, quita o restante) e a conta fica paga. Conta já paga: só anexa.
  */
 export async function payWithProof(occurrenceId: string, file: File, opts: { amountCents?: number | null; paidOn?: string | null } = {}) {
-  const token = tokenStore.get();
   const q = new URLSearchParams();
   if (opts.amountCents) q.set('amountCents', String(opts.amountCents));
   if (opts.paidOn) q.set('paidOn', opts.paidOn);
-  const res = await fetch(`${API_URL}/bills/occurrences/${occurrenceId}/payments/with-proof${q.size ? `?${q}` : ''}`, {
+  const res = await authFetch(`/bills/occurrences/${occurrenceId}/payments/with-proof${q.size ? `?${q}` : ''}`, {
     method: 'POST',
-    headers: { 'content-type': file.type, ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': file.type },
     body: file,
   });
-  if (res.status === 401) {
-    tokenStore.set(null);
-    window.dispatchEvent(new Event('coxia:unauthorized'));
-  }
   const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
   if (!res.ok) throw new ApiBodyError(res.status, json);
   return json;
 }
 
 export async function fetchPaymentProof(paymentId: string): Promise<Blob> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/bills/payments/${paymentId}/proof`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await authFetch(`/bills/payments/${paymentId}/proof`);
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
 }
 
 export async function fetchSpacePhoto(spaceId: string, photoId: string): Promise<Blob> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/spaces/${spaceId}/photos/${photoId}`, {
-    headers: token ? { authorization: `Bearer ${token}` } : {},
-  });
+  const res = await authFetch(`/spaces/${spaceId}/photos/${photoId}`);
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
 }
@@ -844,24 +798,18 @@ export const RESIDENT_FILE_TYPES = { photo: ['image/jpeg', 'image/png', 'image/w
 export const MAX_RESIDENT_FILE_BYTES = 10 * 1024 * 1024;
 
 export async function uploadResidentFile(residentId: string, kind: 'photo' | 'contract', file: File): Promise<Resident> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/residents/${residentId}/${kind}`, {
+  const res = await authFetch(`/residents/${residentId}/${kind}`, {
     method: 'POST',
-    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name) },
     body: file,
   });
-  if (res.status === 401) {
-    tokenStore.set(null);
-    window.dispatchEvent(new Event('coxia:unauthorized'));
-  }
   const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
   if (!res.ok) throw new ApiBodyError(res.status, json);
   return json as unknown as Resident;
 }
 
 export async function fetchResidentFile(residentId: string, kind: 'photo' | 'contract', version: string): Promise<Blob> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/residents/${residentId}/${kind}?v=${encodeURIComponent(version)}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await authFetch(`/residents/${residentId}/${kind}?v=${encodeURIComponent(version)}`);
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
 }
@@ -1017,10 +965,9 @@ export interface ResidentAccess {
 export const RESIDENT_APP_URL = ((import.meta.env.VITE_RESIDENT_APP_URL as string | undefined) ?? 'https://residente.casakaju.com').replace(/\/$/, '');
 
 export async function uploadContractFile(contractId: string, file: File): Promise<ResidentContract> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/contracts/${contractId}/file`, {
+  const res = await authFetch(`/contracts/${contractId}/file`, {
     method: 'POST',
-    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name) },
     body: file,
   });
   const json = (await res.json().catch(() => ({ message: `Erro ${res.status}` }))) as ApiErrorBody;
@@ -1029,8 +976,7 @@ export async function uploadContractFile(contractId: string, file: File): Promis
 }
 
 export async function fetchContractFile(contractId: string): Promise<Blob> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/contracts/${contractId}/file`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await authFetch(`/contracts/${contractId}/file`);
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
 }
@@ -1048,10 +994,9 @@ export function formatHours(minutes: number): string {
 // ───────────── Comprovante de entrada (mensalidade recebida) ─────────────
 
 export async function uploadIncomeProof(incomeId: string, file: File): Promise<void> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/incomes/${incomeId}/proof`, {
+  const res = await authFetch(`/incomes/${incomeId}/proof`, {
     method: 'POST',
-    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name), ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name) },
     body: file,
   });
   if (!res.ok) {
@@ -1061,8 +1006,7 @@ export async function uploadIncomeProof(incomeId: string, file: File): Promise<v
 }
 
 export async function fetchIncomeProof(incomeId: string): Promise<Blob> {
-  const token = tokenStore.get();
-  const res = await fetch(`${API_URL}/incomes/${incomeId}/proof`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  const res = await authFetch(`/incomes/${incomeId}/proof`);
   if (!res.ok) throw new ApiError(res.status, `Erro ${res.status}`);
   return res.blob();
 }

@@ -1,13 +1,16 @@
 import { createApiClient } from '@coxia/ui/lib/api-client';
 
-export { ApiBodyError, ApiError } from '@coxia/ui/lib/api-client';
+export { ApiBodyError, ApiError, type SessionTokens } from '@coxia/ui/lib/api-client';
 
 export const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? 'http://localhost:3000';
 export const UNAUTHORIZED_EVENT = 'kaju-resident:unauthorized';
 
-/** Sessão no localStorage: o residente continua logado ao escanear o QR da sala no celular. */
-export const client = createApiClient({ baseUrl: API_URL, tokenKey: 'kaju-resident-token', storage: 'local', unauthorizedEvent: UNAUTHORIZED_EVENT });
-export const { api, apiSend, apiBlob, tokenStore } = client;
+/**
+ * Sessão no localStorage: o residente continua logado ao escanear o QR da sala no celular.
+ * Access token curto, renovado sozinho; a sessão acaba 7 dias depois do login.
+ */
+export const client = createApiClient({ baseUrl: API_URL, tokenKey: 'kaju-resident-token', storage: 'local', unauthorizedEvent: UNAUTHORIZED_EVENT, refreshPath: '/auth/refresh' });
+export const { api, apiSend, apiBlob, authFetch, tokenStore } = client;
 
 // ───────────── tipos (espelham a api /me) ─────────────
 
