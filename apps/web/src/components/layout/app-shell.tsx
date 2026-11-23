@@ -10,7 +10,8 @@ import { useLiveUpdates } from '@/lib/use-live-updates';
 import { useAuth } from '@/providers/auth-provider';
 
 export const NAV_ITEMS = [
-  // Ordem de uso da casa: o dia (calendário e reservas), as pessoas, e depois o resto.
+  // Visão geral primeiro; depois a ordem de uso da casa: o dia (calendário e reservas), as pessoas, e o resto.
+  { to: '/', label: 'Visão geral', short: 'Início', icon: House, mobile: true },
   { to: '/calendario', label: 'Calendário', short: 'Calendário', icon: CalendarClock, mobile: true },
   { to: '/agenda', label: 'Reservas', short: 'Reservas', icon: CalendarDays, mobile: true },
   // Telefones são dado pessoal: perfil leitura não vê Contatos.
@@ -20,7 +21,6 @@ export const NAV_ITEMS = [
   { to: '/projetos', label: 'Projetos', short: 'Projetos', icon: FolderKanban, mobile: true },
   // No celular, Tarefas abre pelo botão no topo de Projetos.
   { to: '/tarefas', label: 'Tarefas', short: 'Tarefas', icon: ListChecks, mobile: false },
-  { to: '/', label: 'Visão geral', short: 'Início', icon: House, mobile: true },
   // No celular, Salas abre pelo botão no topo das Reservas.
   { to: '/salas', label: 'Salas', short: 'Salas', icon: DoorOpen, mobile: false },
   { to: '/contas', label: 'Financeiro', short: 'Finanças', icon: ReceiptText, mobile: true },

@@ -29,7 +29,7 @@ describe('AppShell', () => {
     renderAt('/');
     const bottom = screen.getByRole('navigation', { name: 'Navegação' });
     const links = within(bottom).getAllByRole('link');
-    expect(links.map((l) => l.textContent)).toEqual(['Calendário', 'Reservas', 'Projetos', 'Início', 'Finanças']);
+    expect(links.map((l) => l.textContent)).toEqual(['Início', 'Calendário', 'Reservas', 'Projetos', 'Finanças']);
     for (const l of links) expect(l.className).toContain('min-h-16');
   });
 
