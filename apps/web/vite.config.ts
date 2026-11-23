@@ -23,5 +23,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Node 25+ cria um localStorage global (vazio sem --localstorage-file) que esconde o do jsdom.
+    poolOptions: { forks: { execArgv: process.allowedNodeEnvironmentFlags.has('--experimental-webstorage') ? ['--no-experimental-webstorage'] : [] } },
   },
 });

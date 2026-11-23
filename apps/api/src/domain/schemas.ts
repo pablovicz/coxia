@@ -174,7 +174,7 @@ export const projectPatchSchema = z.object({
 });
 
 export const taskSchema = z.object({
-  title: z.string().min(1).max(200),
+  title: z.string().min(1).max(500),
   assigneeName: z.string().max(120).nullish(),
   dueDate: isoDate.nullish(),
 });
@@ -237,3 +237,34 @@ export const receiveIncomeSchema = z.object({
   amountCents: z.number().int().positive().optional(),
   receivedOn: isoDate.optional(),
 });
+
+// ───────────── Tarefas ─────────────
+
+const teamTaskComplexity = z.enum(['low', 'medium', 'high']);
+
+export const teamTaskSchema = z.object({
+  title: z.string().min(1).max(500),
+  description: z.string().max(4000).nullish(),
+  complexity: teamTaskComplexity,
+  status: z.enum(['pending', 'in_progress']).optional(),
+  projectId: z.string().nullish(),
+  residentIds: z.array(z.string().min(1)).max(50).optional(),
+});
+
+export const teamTasksQuery = z.object({
+  status: z.enum(['pending', 'in_progress', 'done']).optional(),
+  projectId: z.string().min(1).optional(),
+  residentId: z.string().min(1).optional(),
+  complexity: teamTaskComplexity.optional(),
+  completedBy: z.string().min(1).optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  q: z.string().max(120).optional(),
+});
+
+export const completeTeamTaskSchema = z.object({
+  completedOn: isoDate.nullish(),
+  memberIds: z.array(z.string().min(1)).max(50).optional(),
+});
+
+export const teamTaskNoteSchema = z.object({ body: z.string().min(1).max(4000) });

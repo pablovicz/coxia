@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, FolderKanban, Plus, Users } from 'lucide-react';
+import { ChevronRight, FolderKanban, ListChecks, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { DateTime } from 'luxon';
 import { Link, useSearchParams } from 'react-router';
@@ -53,11 +53,18 @@ export function ProjectsPage() {
         title="Projetos em movimento."
         description="Grupos do WhatsApp transformados em planejamento organizado."
         action={
-          admin ? (
-            <Button onClick={() => setCreating(true)}>
-              <Plus aria-hidden /> Novo projeto
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/tarefas">
+                <ListChecks aria-hidden /> Tarefas
+              </Link>
             </Button>
-          ) : null
+            {admin ? (
+              <Button onClick={() => setCreating(true)}>
+                <Plus aria-hidden /> Novo projeto
+              </Button>
+            ) : null}
+          </div>
         }
       />
 

@@ -16,7 +16,7 @@ export const WEEKDAY_SHORT: Record<string, string> = { MO: 'seg', TU: 'ter', WE:
 export const instagramUrl = (handle: string) => `https://instagram.com/${handle}`;
 
 /** Foto enviada pela equipe; senão, a do WhatsApp; senão, as iniciais. */
-export function ResidentPhoto({ resident, className }: { resident: Pick<Resident, 'id' | 'name' | 'photoUpdatedAt' | 'contact'>; className?: string }) {
+export function ResidentPhoto({ resident, className }: { resident: Pick<Resident, 'id' | 'name' | 'photoUpdatedAt'> & { contact: Pick<Resident['contact'], 'photoUrl'> }; className?: string }) {
   const uploaded = useQuery({
     queryKey: ['resident-photo', resident.id, resident.photoUpdatedAt],
     queryFn: () => fetchResidentFile(resident.id, 'photo', resident.photoUpdatedAt!),

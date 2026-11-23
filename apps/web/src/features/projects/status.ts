@@ -1,4 +1,4 @@
-import type { ExpenseStatus, ProjectStatus, TaskStatus } from '@/lib/api';
+import type { ExpenseStatus, ProjectStatus, ProjectTaskStatus } from '@/lib/api';
 
 type Variant = 'active' | 'pending' | 'late' | 'archived' | 'neutral' | 'info';
 
@@ -10,7 +10,7 @@ export const PROJECT_STATUS: Record<ProjectStatus, { label: string; variant: Var
   closed: { label: 'Encerrado', variant: 'archived' },
 };
 
-export const TASK_STATUS: Record<TaskStatus, { label: string; variant: Variant }> = {
+export const TASK_STATUS: Record<ProjectTaskStatus, { label: string; variant: Variant }> = {
   proposed: { label: '? Proposta', variant: 'info' },
   open: { label: '◷ Aberta', variant: 'neutral' },
   done: { label: '✓ Feita', variant: 'active' },

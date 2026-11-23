@@ -1,5 +1,5 @@
 import { BrandMark } from '@coxia/ui/components/brand-mark';
-import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, Inbox, LogOut, MessageCircle, ReceiptText, Settings, Users } from 'lucide-react';
+import { Bell, CalendarClock, CalendarDays, DoorOpen, UserCheck, FolderKanban, House, Inbox, ListChecks, LogOut, MessageCircle, ReceiptText, Settings, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { ThemeSwitch } from '@coxia/ui/components/theme-switch';
 import { UserAvatar } from '@/components/user-avatar';
@@ -18,6 +18,8 @@ export const NAV_ITEMS = [
   // Orçamentos pedidos no site casakaju.com (dado pessoal, como Contatos). No celular, pelo topo de Contatos.
   { to: '/orcamentos', label: 'Orçamentos', short: 'Orçamentos', icon: Inbox, mobile: false, team: true },
   { to: '/projetos', label: 'Projetos', short: 'Projetos', icon: FolderKanban, mobile: true },
+  // No celular, Tarefas abre pelo botão no topo de Projetos.
+  { to: '/tarefas', label: 'Tarefas', short: 'Tarefas', icon: ListChecks, mobile: false },
   { to: '/', label: 'Visão geral', short: 'Início', icon: House, mobile: true },
   // No celular, Salas abre pelo botão no topo das Reservas.
   { to: '/salas', label: 'Salas', short: 'Salas', icon: DoorOpen, mobile: false },
