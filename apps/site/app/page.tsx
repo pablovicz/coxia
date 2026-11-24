@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { InstagramIcon } from '@/components/chrome';
-import { COURSES, quoteHref, SITE, SPACES } from '@/lib/content';
+import { quoteHref, SITE, SPACES } from '@/lib/content';
 import { fetchSpaces, photoUrl, summary } from '@/lib/spaces';
 
 // Salas cadastradas na Coxia: a home é regerada a cada 5 minutos.
@@ -58,7 +58,7 @@ export default async function HomePage() {
             Serviços Casa Kaju
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-center text-kaju-cream/85">
-            Salas, ateliê e estúdio para alugar, café e coworking e cursos. Escolha um e peça o orçamento.
+            Salas, ateliê e estúdio para alugar, café e coworking. Escolha um e peça o orçamento.
           </p>
           <ul className="mt-10 flex flex-wrap justify-center gap-5 sm:gap-8">
             {SPACES.map((s) => (
@@ -144,30 +144,6 @@ export default async function HomePage() {
               <p>Juntas, formam a essência da Kaju: uma empresa que entende o design cênico como encontro, investigação e poesia visual.</p>
             </div>
           </div>
-        </div>
-      </section>
-
-      <div className="dots bg-kaju-green" aria-hidden />
-
-      {/* Cursos */}
-      <section id="cursos" aria-labelledby="cursos-titulo" className="scroll-mt-16 bg-kaju-green px-4 py-16 sm:px-6">
-        <div className="mx-auto max-w-6xl">
-          <h2 id="cursos-titulo" className="section-title text-center text-kaju-pink">
-            Nossos cursos
-          </h2>
-          <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {COURSES.map((c) => (
-              <li key={c.title} className="flex flex-col rounded-2xl bg-kaju-rose p-6 text-white shadow-lg">
-                <h3 className="font-display text-xl font-extrabold leading-snug">{c.title}</h3>
-                <p className="mt-2 text-sm text-white/90">
-                  {c.when} · Casa Kaju
-                </p>
-                <Link href={quoteHref('course', c.title)} className="btn mt-6 self-start bg-kaju-cream text-kaju-rose-deep hover:bg-white">
-                  Quero participar
-                </Link>
-              </li>
-            ))}
-          </ul>
         </div>
       </section>
 

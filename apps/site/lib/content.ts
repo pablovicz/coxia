@@ -45,15 +45,6 @@ export const SPACES: Array<{ slug: string; image: string; alt: string; service: 
   { slug: 'estudio-fotografico', image: '/img/servicos/estudio-fotografico.webp', alt: 'Aluguel: estúdio fotográfico', service: 'space_rental', interest: 'Estúdio fotográfico' },
   { slug: 'casa-inteira', image: '/img/servicos/casa-inteira.webp', alt: 'Aluguel: casa inteira', service: 'space_rental', interest: 'Casa inteira' },
   { slug: 'cafe-coworking', image: '/img/servicos/cafe-coworking.webp', alt: 'Café e coworking', service: 'space_rental', interest: 'Café e coworking' },
-  { slug: 'cursos', image: '/img/servicos/cursos.webp', alt: 'Cursos Kaju', service: 'course', interest: 'Cursos' },
-];
-
-export const COURSES: Array<{ title: string; when: string }> = [
-  { title: 'Curso de Adereços Cênicos', when: 'Data e horário a definir' },
-  { title: 'Curso de Cerâmica Criativa', when: 'Data e horário a definir' },
-  { title: 'Curso de Upcycling', when: 'Data e horário a definir' },
-  { title: 'Curso de Crochê', when: 'Data e horário a definir' },
-  { title: 'Curso de Costura Iniciante', when: 'Data e horário a definir' },
 ];
 
 /** Link para o formulário de orçamento já com o serviço (e o interesse) escolhidos. */

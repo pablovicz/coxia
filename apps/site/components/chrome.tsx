@@ -4,7 +4,6 @@ import { SITE } from '@/lib/content';
 const NAV = [
   { href: '/#espacos', label: 'Espaços' },
   { href: '/#sobre', label: 'Sobre' },
-  { href: '/#cursos', label: 'Cursos' },
   { href: '/#design-cenico', label: 'Design cênico' },
 ];
 
