@@ -4,7 +4,7 @@ import { QuoteForm } from '@/components/quote-form';
 export const metadata: Metadata = {
   title: 'Solicite um orçamento',
   description:
-    'Peça um orçamento à Casa Kaju: figurino, cenografia, iluminação, adereços, bonecos, aluguel de sala de ensaio, sala de reunião, ateliê e estúdio fotográfico, e cursos.',
+    'Peça um orçamento à Casa Kaju: figurino, cenografia, iluminação, adereços, bonecos, aluguel de sala de ensaio, sala de reunião, ateliê e estúdio fotográfico.',
   alternates: { canonical: '/orcamento' },
   openGraph: { url: '/orcamento', title: 'Solicite um orçamento · Casa Kaju' },
 };

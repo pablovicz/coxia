@@ -5,7 +5,7 @@ export const SITE = {
   url: 'https://casakaju.com',
   tagline: 'Onde a cena encontra sua melhor forma.',
   description:
-    'Casa Kaju: design cênico (figurino, cenografia, iluminação, adereços e bonecos), aluguel de sala de ensaio, sala de reunião, ateliê e estúdio fotográfico, e cursos.',
+    'Casa Kaju: design cênico (figurino, cenografia, iluminação, adereços e bonecos), aluguel de sala de ensaio, sala de reunião, ateliê e estúdio fotográfico.',
   instagram: 'https://www.instagram.com/kaju.cena/',
   instagramHandle: '@kaju.cena',
   whatsapp: '5541999071145',
@@ -15,7 +15,7 @@ export const SITE = {
   team: 'https://coxia.casakaju.com',
 } as const;
 
-export type ServiceKey = 'costume' | 'set_design' | 'lighting' | 'props' | 'puppets' | 'space_rental' | 'course' | 'other';
+export type ServiceKey = 'costume' | 'set_design' | 'lighting' | 'props' | 'puppets' | 'space_rental' | 'other';
 export type SegmentKey = 'theater' | 'audiovisual' | 'large_event' | 'private_event' | 'other';
 
 export const SEGMENTS: Array<{ key: SegmentKey; label: string }> = [
@@ -33,7 +33,6 @@ export const SERVICES: Array<{ key: ServiceKey; label: string }> = [
   { key: 'props', label: 'Adereços' },
   { key: 'puppets', label: 'Bonecos' },
   { key: 'space_rental', label: 'Aluguel de espaço' },
-  { key: 'course', label: 'Cursos' },
   { key: 'other', label: 'Outro' },
 ];
 
